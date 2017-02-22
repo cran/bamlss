@@ -1,0 +1,199 @@
+## import("ffbase")
+## importFrom("ff", "read.table.ffdf", "ff", "ffdf", "fforder", "as.ff")
+
+import("coda")
+import("mgcv")
+import("Formula")
+import("colorspace")
+
+importFrom("parallel", "mclapply")
+importFrom("sp", "bbox", "point.in.polygon", "polygons",
+  "coordinates", "Polygon", "Polygons", "SpatialPolygons", "SpatialPoints",
+  "CRS", "proj4string", "coordinates<-", "proj4string<-")
+importFrom("splines", "splineDesign", "bs")
+importFrom("MBA", "mba.points")
+importFrom("survival", "Surv")
+importFrom("mvtnorm", "rmvnorm", "dmvnorm")
+importFrom("stats", "AIC", "BIC", "family")
+importFrom("grDevices", "chull", "dev.interactive", "devAskNewPage",
+  "gray", "gray.colors", "n2mfrow", "trans3d", "rgb")
+importFrom("graphics", "abline", "axis", "box", "contour", "hist",
+  "layout", "lcm", "lines", "matplot", "mtext", "par",
+  "points", "rect", "text", "plot.default")
+importFrom("methods", "is", "as", "slot")
+importFrom("stats", "acf", "as.formula", "coef", "complete.cases",
+  "contrasts<-", "dbeta", "dbinom", "delete.response",
+  "density", "dgamma", "dist", "dlnorm", "dlogis", "dnbinom",
+  "dnorm", "dpois", "drop.terms", "dt", "dweibull", "end",
+  "fitted", "formula", "gaussian", "integrate", "lm.wfit",
+  "lowess", "make.link", "model.frame", "model.matrix",
+  "model.offset", "model.response", "model.weights",
+  "na.fail", "na.omit", "optim", "optimHess", "optimize",
+  "pbeta", "pbinom", "pgamma", "plnorm", "plogis", "pnbinom",
+  "pnorm", "ppois", "predict", "printCoefmat", "pt", "qnorm",
+  "qqline", "qqnorm", "quantile", "rexp", "rgamma",
+  "rmultinom", "rnorm", "runif", "rweibull", "sd", "start",
+  "terms", "terms.formula", "time", "uniroot", "update",
+  "var", "window", "median")
+importFrom("utils", "download.file", "flush.console", "getS3method",
+  "head", "read.csv2", "read.table", "tail", "unzip",
+  "write.table", "combn")
+
+import("spam")
+import("Matrix")
+
+export(
+  ## main user interface
+  "bamlss",               
+  "bamlss.frame",
+  "bamlss.formula",
+  "bamlss.family",
+  "bfit",
+  "bfit_iwls",
+  "bfit_iwls_Matrix",
+  "bfit_iwls_spam",
+  "bfit_lm",
+  "bfit_optim",
+  "GMCMC",
+  "GMCMC_iwls",
+  "GMCMC_iwlsC",
+  "GMCMC_iwlsC_gp",
+  "GMCMC_slice",
+  "JAGS",
+  "BayesX",
+  "BayesX.control",
+  "get_BayesXsrc",
+  "MVNORM",
+  "surv.transform",
+  "cox.mode",
+  "cox.mcmc",
+  "cox.predict",
+
+  ## engine setup functions
+  "randomize",
+  "set.starting.values",
+  "bamlss.engine.setup",
+  "get.state",
+  "get.par",
+  "set.par",
+
+  ## families,
+  "beta_bamlss",
+  "binomial_bamlss",
+  "cnorm_bamlss",
+  "cox_bamlss",
+  "gaussian_bamlss",
+  "gaussian2_bamlss",
+  "Gaussian_bamlss",
+  "gamma_bamlss",
+  "multinomial_bamlss",
+  "mvnorm_bamlss",
+  "poisson_bamlss",
+  "quant_bamlss",
+  "gpareto_bamlss",
+  "gF",
+
+  ## extractor functions
+  "DIC",
+  "samples",
+  "samplestats",
+  "results.bamlss.default",
+  "parameters",
+
+  ## vis functions
+  "plot2d",
+  "plot3d",
+  "plotmap",
+  "plotblock",
+  "sliceplot",
+  "colorlegend",
+
+  ## JM
+  "jm_bamlss",
+  "jm.mode",
+  "jm.mcmc",
+  "simJM",
+  "rJM",
+  "jm.survplot",
+  "jm.predict",
+
+  ## others
+  "GAMart",
+  "Volcano",
+  "Surv2",
+  "c95",
+  "s2",
+  "sx",
+  "rSurvTime2",
+  "simSurv",
+  "scale2",
+  "continue",
+  "homstart_data",
+  "tx",
+  "tx2",
+  "rmf",
+  "smooth.construct",
+  "smooth.construct.tensorX.smooth.spec",
+  "Predict.matrix.tensorX.smooth",
+  "BUGSeta",
+  "BUGSmodel",
+  "neighbormatrix",
+  "plotneighbors",
+  "bamlss.model.frame",
+  
+  ## Boosting/Lasso
+  "boost",
+  "boost.summary",
+  "boost.plot",
+  "la",
+  "lasso",
+  "lasso.plot",
+  "lasso.stop",
+  "lasso.coef",
+  "lasso.transform"
+)
+
+S3method("plot", "bamlss")
+S3method("plot", "bnd")
+S3method("plot", "bamlss.results")
+S3method("plot", "bamlss.residuals")
+S3method("summary", "bamlss")
+S3method("family", "bamlss")
+S3method("family", "bamlss.frame")
+S3method("print", "summary.bamlss")
+S3method("print", "family.bamlss")
+S3method("print", "bamlss.frame")
+S3method("print", "boost.summary")
+S3method("plot", "boost.summary")
+S3method("predict", "bamlss")
+S3method("fitted", "bamlss")
+S3method("logLik", "bamlss")
+S3method("DIC", "bamlss")
+S3method("coef", "bamlss")
+S3method("confint", "bamlss")
+S3method("residuals", "bamlss")
+S3method("model.matrix", "bamlss.frame")
+S3method("model.matrix", "bamlss.terms")
+S3method("model.matrix", "bamlss.formula")
+S3method("smooth.construct", "bamlss.frame")
+S3method("smooth.construct", "bamlss.formula")
+S3method("smooth.construct", "bamlss.terms")
+S3method("smooth.construct", "kr.smooth.spec")
+S3method("smooth.construct", "tensorX.smooth.spec")
+S3method("smooth.construct", "la.smooth.spec")
+S3method("Predict.matrix", "kriging.smooth")
+S3method("Predict.matrix", "deriv.smooth")
+S3method("Predict.matrix", "tensorX.smooth")
+S3method("Predict.matrix", "lasso.smooth")
+S3method("bamlss.engine.setup.smooth", "default")
+S3method("sx.construct", "tensorX.smooth")
+S3method("terms", "bamlss")
+S3method("terms", "bamlss.frame")
+S3method("terms", "bamlss.formula")
+S3method("samples", "bamlss")
+S3method("samples", "bamlss.frame")
+S3method("model.frame", "bamlss")
+S3method("model.frame", "bamlss.frame")
+
+useDynLib(bamlss, .registration = TRUE)
+
