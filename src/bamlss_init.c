@@ -2,6 +2,7 @@
 #include <Rinternals.h>
 #include <R_ext/Rdynload.h>
 
+SEXP block_inverse(SEXP, SEXP);
 SEXP bivnorm_loglik(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP boost_fit(SEXP, SEXP, SEXP, SEXP);
 SEXP cnorm_hess_mu(SEXP, SEXP, SEXP, SEXP);
@@ -37,7 +38,13 @@ SEXP survint(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP survint_index(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP xbin_fun(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 
+SEXP log_dmvnormAR1(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP mu_score_mvnormAR1(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP sigma_score_mvnormAR1(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP rho_score_mvnormAR1(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+
 static R_CallMethodDef callMethods[] = {
+  {"block_inverse", (DL_FUNC) &block_inverse, 2},
   {"bivnorm_loglik", (DL_FUNC) &bivnorm_loglik, 7},
   {"boost_fit", (DL_FUNC) &boost_fit, 4},
   {"cnorm_hess_mu", (DL_FUNC) &cnorm_hess_mu, 4},
@@ -72,6 +79,10 @@ static R_CallMethodDef callMethods[] = {
   {"survint", (DL_FUNC) &survint, 6},
   {"survint_index", (DL_FUNC) &survint_index, 7},
   {"xbin_fun", (DL_FUNC) &xbin_fun, 6},
+  {"log_dmvnormAR1", (DL_FUNC) &log_dmvnormAR1, 7},
+  {"mu_score_mvnormAR1", (DL_FUNC) &mu_score_mvnormAR1, 8},
+  {"sigma_score_mvnormAR1", (DL_FUNC) &sigma_score_mvnormAR1, 8},
+  {"rho_score_mvnormAR1", (DL_FUNC) &rho_score_mvnormAR1, 7},
   {NULL, NULL, 0}
 };
 

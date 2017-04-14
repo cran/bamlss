@@ -25,10 +25,10 @@ SEXP getListElement(SEXP list, const char *str)
   PROTECT(names = getAttrib(list, R_NamesSymbol));
 
   for(int i = 0; i < length(list); i++) {
-	  if(strcmp(CHAR(STRING_ELT(names, i)), str) == 0) {
-	    elmt = VECTOR_ELT(list, i);
-	    break;
-	  }
+    if(strcmp(CHAR(STRING_ELT(names, i)), str) == 0) {
+      elmt = VECTOR_ELT(list, i);
+      break;
+    }
   }
 
   UNPROTECT(2);
@@ -63,6 +63,15 @@ void pvec(SEXP vec)
   double *vecptr = REAL(vec);
   for(i = 0; i < n; i++, vecptr++)
     Rprintf(" %g", *vecptr);
+  Rprintf("\n");
+}
+
+void pveci(SEXP vec)
+{
+  int i, n = length(vec);
+  int *vecptr = INTEGER(vec);
+  for(i = 0; i < n; i++, vecptr++)
+    Rprintf(" %d", *vecptr);
   Rprintf("\n");
 }
     
@@ -351,6 +360,8 @@ void xbin_fun(SEXP ind, SEXP weights, SEXP e, SEXP xweights, SEXP xrres, SEXP or
       weightsptr[k] = 1.490116e-08;
     if(weightsptr[k] < 1e-10)
       weightsptr[k] = 1e-10;
+    if(weightsptr[k] == 0.0)
+      weightsptr[k] = 1.490116e-08;
     if(weightsptr[k] < 0.0)
       weightsptr[k] = -1.0 * weightsptr[k];
     if(weightsptr[k] > 1e+10)
@@ -381,6 +392,8 @@ SEXP process_derivs(SEXP x, SEXP w)
     if(xptr[i] > 1e+10)
       rvalptr[i] = 1e+10;
     if(LOGICAL(w)[0]) {
+      if(xptr[i] == 0.0)
+        rvalptr[i] = 1.490116e-08;
       if(xptr[i] < 0.0)
         rvalptr[i] = -1.0 * xptr[i];
     } else {
@@ -444,6 +457,76 @@ SEXP sum_diag2(SEXP x, SEXP y)
   UNPROTECT(1);
 
   return rval;
+}
+
+
+/* Block diagonal inverse. */
+SEXP block_inverse(SEXP X, SEXP IND, SEXP DIAGONAL)
+{
+  int i;
+  int nr = nrows(X);
+  double *Xptr = REAL(X);
+  SEXP Xout;
+  PROTECT(Xout = duplicate(X));
+  double *Xoutptr = REAL(Xout);
+
+  if(LOGICAL(DIAGONAL)[0]) {
+    for(i = 0; i < nr; i++)
+      Xoutptr[i + nr * i] = 1.0 / Xptr[i + nr * i];
+  } else {
+    int j, jj, ni, n = length(IND);
+
+    SEXP Xi;
+    double *Xiptr = 0;
+    double det = 0.0;
+    double tmp = 0.0;
+
+    int info;
+
+    for(i = 0; i < n; i++) {
+      ni = length(VECTOR_ELT(IND, i));
+      int *iptr = INTEGER(VECTOR_ELT(IND, i));
+      if(ni < 2) {
+        Xoutptr[iptr[0] + (iptr[0] - 1) * nr - 1] = 1.0 / Xptr[iptr[0] + (iptr[0] - 1) * nr - 1];
+      } else {
+        if(ni == 2) {
+          det = 1.0 / (Xptr[iptr[0] + (iptr[0] - 1) * nr - 1] * Xptr[iptr[1] + (iptr[1] - 1) * nr - 1] -
+            Xptr[iptr[0] + (iptr[1] - 1) * nr - 1] * Xptr[iptr[1] + (iptr[0] - 1) * nr - 1]);
+          tmp = Xoutptr[iptr[1] + (iptr[1] - 1) * nr - 1] * det;
+          Xoutptr[iptr[1] + (iptr[1] - 1) * nr - 1] = Xoutptr[iptr[0] + (iptr[0] - 1) * nr - 1] * det;
+          Xoutptr[iptr[0] + (iptr[0] - 1) * nr - 1] = tmp;
+          Xoutptr[iptr[1] + (iptr[0] - 1) * nr - 1] = Xoutptr[iptr[1] + (iptr[0] - 1) * nr - 1] * det * -1.0;
+          Xoutptr[iptr[0] + (iptr[1] - 1) * nr - 1] = Xoutptr[iptr[0] + (iptr[1] - 1) * nr - 1] * det * -1.0;
+        } else {
+          PROTECT(Xi = allocMatrix(REALSXP, ni, ni));
+          Xiptr = REAL(Xi);
+          for(j = 0; j < ni; j++) {
+            for(jj = 0; jj < ni; jj++) {
+              if(jj >= j)
+                Xiptr[j + ni * jj] = Xptr[iptr[j] + (iptr[jj] - 1) * nr - 1];
+              else
+                Xiptr[j + ni * jj] = 0.0;
+            }
+          }
+
+          F77_CALL(dpotrf)("Upper", &ni, Xiptr, &ni, &info);
+          F77_CALL(dpotri)("Upper", &ni, Xiptr, &ni, &info);
+
+          for(j = 0; j < ni; j++) {
+            for(jj = j; jj < ni; jj++) {
+              Xoutptr[iptr[j] + (iptr[jj] - 1) * nr - 1] = Xiptr[j + ni * jj];
+              Xoutptr[iptr[jj] + (iptr[j] - 1) * nr - 1] = Xoutptr[iptr[j] + (iptr[jj] - 1) * nr - 1];
+            }
+          }
+          UNPROTECT(1);
+        }
+      }
+    }
+  }
+
+  UNPROTECT(1);
+
+  return Xout;
 }
 
 
@@ -560,6 +643,8 @@ SEXP gmcmc_iwls(SEXP family, SEXP theta, SEXP id,
     k = orderptr[i] - 1;
 
     if(ISNA(weightsptr[k]))
+      weightsptr[k] = 1.490116e-08;
+    if(weightsptr[k] == 0.0)
       weightsptr[k] = 1.490116e-08;
     if(weightsptr[k] < 1e-10)
       weightsptr[k] = 1e-10;
@@ -764,18 +849,20 @@ SEXP gmcmc_iwls(SEXP family, SEXP theta, SEXP id,
   }
 
   /* Evaluate loglik, weights and score vector. */
-  peta = map2par(getListElement(family, "map2par"), eta2, rho);
-  double pibetaprop = REAL(iwls_eval(VECTOR_ELT(family, ll_ind), response, peta, id2, rho))[0];
+  SEXP peta2;
+  PROTECT(peta2 = map2par(getListElement(family, "map2par"), eta2, rho));
+  ++nProtected;
+  double pibetaprop = REAL(iwls_eval(VECTOR_ELT(family, ll_ind), response, peta2, id2, rho))[0];
 
   SEXP weights2;
   PROTECT(weights2 = iwls_eval(getListElement(getListElement(family, "hess"),
-    CHAR(STRING_ELT(id, 0))), response, peta, id2, rho));
+    CHAR(STRING_ELT(id, 0))), response, peta2, id2, rho));
   double *weights2ptr = REAL(weights2);
   ++nProtected;
 
   SEXP score2;
   PROTECT(score2 = iwls_eval(getListElement(getListElement(family, "score"),
-    CHAR(STRING_ELT(id, 0))), response, peta, id2, rho));
+    CHAR(STRING_ELT(id, 0))), response, peta2, id2, rho));
   double *score2ptr = REAL(score2);
   ++nProtected;
 
@@ -795,6 +882,8 @@ SEXP gmcmc_iwls(SEXP family, SEXP theta, SEXP id,
     k = orderptr[i] - 1;
 
     if(ISNA(weights2ptr[k]))
+      weights2ptr[k] = 1.490116e-08;
+    if(weights2ptr[k] == 0.0)
       weights2ptr[k] = 1.490116e-08;
     if(weights2ptr[k] < 1e-10)
       weights2ptr[k] = 1e-10;
@@ -860,7 +949,6 @@ SEXP gmcmc_iwls(SEXP family, SEXP theta, SEXP id,
   ++nProtected;
 
   F77_CALL(dpotri)("Upper", &nc, PINVptr, &nc, &info);
-  F77_CALL(dpotrf)("Upper", &nc, PINVLptr, &nc, &info);
 
   sdiag0 = 0.0;
   for(j = 0; j < nc; j++) {
@@ -991,7 +1079,8 @@ SEXP gmcmc_iwls(SEXP family, SEXP theta, SEXP id,
 
 
 SEXP gmcmc_iwls_gp(SEXP family, SEXP theta, SEXP id,
-  SEXP eta, SEXP response, SEXP x, SEXP z, SEXP e, SEXP id2, SEXP W, SEXP rho)
+  SEXP eta, SEXP response, SEXP x, SEXP z, SEXP e, SEXP id2, SEXP W,
+  SEXP BLOCKS, SEXP DIAGONAL, SEXP rho)
 {
   int i, j, k, nProtected = 0;
   int n = INTEGER(getListElement(x, "nobs"))[0];
@@ -1104,6 +1193,8 @@ SEXP gmcmc_iwls_gp(SEXP family, SEXP theta, SEXP id,
 
     if(ISNA(weightsptr[k]))
       weightsptr[k] = 1.490116e-08;
+    if(weightsptr[k] == 0.0)
+      weightsptr[k] = 1.490116e-08;
     if(weightsptr[k] < 0.0)
       weightsptr[k] = -1.0 * weightsptr[k];
     if(weightsptr[k] > 1e+10)
@@ -1159,39 +1250,60 @@ SEXP gmcmc_iwls_gp(SEXP family, SEXP theta, SEXP id,
   }
 
   /* Cholesky decompostion of XWX. */
-  SEXP L;
-  PROTECT(L = duplicate(getListElement(x, "XWX")));
-  double *Lptr = REAL(L);
-  ++nProtected;
-
-  for(j = 0; j < nc; j++) { 	/* Zero the lower triangle. */
-    for(i = j + 1; i < nc; i++) {
-      Lptr[i + nc * j] = 0.0;
-    }
-  }
-
+  SEXP PINV, PINVL, L;
+  double *PINVptr = 0;
+  double *PINVLptr = 0;
+  double *Lptr = 0;
   int info;
-  F77_CALL(dpotrf)("Upper", &nc, Lptr, &nc, &info);
 
-  /* Compute the inverse precision matrix. */
-  SEXP PINV;
-  PROTECT(PINV = duplicate(L));
-  double *PINVptr = REAL(PINV);
-  ++nProtected;
+  if(!isNull(BLOCKS)) {
+    PROTECT(PINV = block_inverse(getListElement(x, "XWX"), BLOCKS, DIAGONAL));
+    PINVptr = REAL(PINV);
+    ++nProtected;
 
-  F77_CALL(dpotri)("Upper", &nc, PINVptr, &nc, &info);
+    PROTECT(PINVL = duplicate(PINV));
+    PINVLptr = REAL(PINVL);
+    ++nProtected;
 
-  SEXP PINVL;
-  PROTECT(PINVL = duplicate(PINV));
-  double *PINVLptr = REAL(PINVL);
-  ++nProtected;
-  F77_CALL(dpotrf)("Upper", &nc, PINVLptr, &nc, &info);
+    if(!LOGICAL(DIAGONAL)[0]) {
+      for(j = 0; j < nc; j++) {
+        for(i = j + 1; i < nc; i++) {
+          PINVLptr[i + nc * j] = 0.0;
+        }
+      }
+    }
+  } else {
+    PROTECT(L = duplicate(getListElement(x, "XWX")));
+    Lptr = REAL(L);
+    ++nProtected;
 
-  for(j = 0; j < nc; j++) {
-    for(i = j + 1; i < nc; i++) {
-      PINVptr[i + j * nc] = PINVptr[j + i * nc];
+    for(j = 0; j < nc; j++) { 	/* Zero the lower triangle. */
+      for(i = j + 1; i < nc; i++) {
+        Lptr[i + nc * j] = 0.0;
+      }
+    }
+
+    F77_CALL(dpotrf)("Upper", &nc, Lptr, &nc, &info);
+
+    /* Compute the inverse precision matrix. */
+    PROTECT(PINV = duplicate(L));
+    PINVptr = REAL(PINV);
+    ++nProtected;
+
+    F77_CALL(dpotri)("Upper", &nc, PINVptr, &nc, &info);
+
+    PROTECT(PINVL = duplicate(PINV));
+    PINVLptr = REAL(PINVL);
+    ++nProtected;
+
+    for(j = 0; j < nc; j++) {
+      for(i = j + 1; i < nc; i++) {
+        PINVptr[i + j * nc] = PINVptr[j + i * nc];
+      }
     }
   }
+
+  F77_CALL(dpotrf)("Upper", &nc, PINVLptr, &nc, &info);
 
   /* Compute mu. */
   SEXP mu0;
@@ -1263,18 +1375,20 @@ SEXP gmcmc_iwls_gp(SEXP family, SEXP theta, SEXP id,
   }
 
   /* Evaluate loglik, weights and score vector. */
-  peta = map2par(getListElement(family, "map2par"), eta2, rho);
-  double pibetaprop = REAL(iwls_eval(VECTOR_ELT(family, ll_ind), response, peta, id2, rho))[0];
+  SEXP peta2;
+  PROTECT(peta2 = map2par(getListElement(family, "map2par"), eta2, rho));
+  ++nProtected;
+  double pibetaprop = REAL(iwls_eval(VECTOR_ELT(family, ll_ind), response, peta2, id2, rho))[0];
 
   SEXP weights2;
   PROTECT(weights2 = iwls_eval(getListElement(getListElement(family, "hess"),
-    CHAR(STRING_ELT(id, 0))), response, peta, id2, rho));
+    CHAR(STRING_ELT(id, 0))), response, peta2, id2, rho));
   double *weights2ptr = REAL(weights2);
   ++nProtected;
 
   SEXP score2;
   PROTECT(score2 = iwls_eval(getListElement(getListElement(family, "score"),
-    CHAR(STRING_ELT(id, 0))), response, peta, id2, rho));
+    CHAR(STRING_ELT(id, 0))), response, peta2, id2, rho));
   double *score2ptr = REAL(score2);
   ++nProtected;
 
@@ -1294,6 +1408,8 @@ SEXP gmcmc_iwls_gp(SEXP family, SEXP theta, SEXP id,
     k = orderptr[i] - 1;
 
     if(ISNA(weights2ptr[k]))
+      weights2ptr[k] = 1.490116e-08;
+    if(weights2ptr[k] == 0.0)
       weights2ptr[k] = 1.490116e-08;
     if(weights2ptr[k] < 0.0)
       weights2ptr[k] = -1.0 * weights2ptr[k];
@@ -1341,31 +1457,35 @@ SEXP gmcmc_iwls_gp(SEXP family, SEXP theta, SEXP id,
   }
 
   /* Cholesky decompostion of XWX. */
-  SEXP L2;
-  PROTECT(L2 = duplicate(getListElement(x, "XWX")));
-  Lptr = REAL(L2);
-  ++nProtected;
+  SEXP L2, PINV2;
+  if(!isNull(BLOCKS)) {
+    PROTECT(PINV2 = block_inverse(getListElement(x, "XWX"), BLOCKS, DIAGONAL));
+    PINVptr = REAL(PINV2);
+    ++nProtected;
+  } else {
+    PROTECT(L2 = duplicate(getListElement(x, "XWX")));
+    Lptr = REAL(L2);
+    ++nProtected;
 
-  for(j = 0; j < nc; j++) { 	/* Zero the lower triangle. */
-    for(i = j + 1; i < nc; i++) {
-      Lptr[i + nc * j] = 0.0;
+    for(j = 0; j < nc; j++) { 	/* Zero the lower triangle. */
+      for(i = j + 1; i < nc; i++) {
+        Lptr[i + nc * j] = 0.0;
+      }
     }
-  }
 
-  F77_CALL(dpotrf)("Upper", &nc, Lptr, &nc, &info);
+    F77_CALL(dpotrf)("Upper", &nc, Lptr, &nc, &info);
 
-  /* Compute the inverse precision matrix. */
-  SEXP PINV2;
-  PROTECT(PINV2 = duplicate(L2));
-  PINVptr = REAL(PINV2);
-  ++nProtected;
+    /* Compute the inverse precision matrix. */
+    PROTECT(PINV2 = duplicate(L2));
+    PINVptr = REAL(PINV2);
+    ++nProtected;
 
-  F77_CALL(dpotri)("Upper", &nc, PINVptr, &nc, &info);
-  F77_CALL(dpotrf)("Upper", &nc, PINVLptr, &nc, &info);
+    F77_CALL(dpotri)("Upper", &nc, PINVptr, &nc, &info);
 
-  for(j = 0; j < nc; j++) {
-    for(i = j + 1; i < nc; i++) {
-      PINVptr[i + j * nc] = PINVptr[j + i * nc];
+    for(j = 0; j < nc; j++) {
+      for(i = j + 1; i < nc; i++) {
+        PINVptr[i + j * nc] = PINVptr[j + i * nc];
+      }
     }
   }
 
@@ -1563,6 +1683,8 @@ SEXP gmcmc_iwls_gp_diag_lasso(SEXP family, SEXP theta, SEXP id,
 
     if(ISNA(weightsptr[k]))
       weightsptr[k] = 1.490116e-08;
+    if(weightsptr[k] == 0.0)
+      weightsptr[k] = 1.490116e-08;
     if(weightsptr[k] < 0.0)
       weightsptr[k] = -1.0 * weightsptr[k];
     if(weightsptr[k] > 1e+10)
@@ -1649,18 +1771,20 @@ SEXP gmcmc_iwls_gp_diag_lasso(SEXP family, SEXP theta, SEXP id,
     etaptr[i] += fitptr[i];
   }
 
-  peta = map2par(getListElement(family, "map2par"), eta2, rho);
-  double pibetaprop = REAL(iwls_eval(VECTOR_ELT(family, ll_ind), response, peta, id2, rho))[0];
+  SEXP peta2;
+  PROTECT(peta2 = map2par(getListElement(family, "map2par"), eta2, rho));
+  ++nProtected;
+  double pibetaprop = REAL(iwls_eval(VECTOR_ELT(family, ll_ind), response, peta2, id2, rho))[0];
 
   SEXP weights2;
   PROTECT(weights2 = iwls_eval(getListElement(getListElement(family, "hess"),
-    CHAR(STRING_ELT(id, 0))), response, peta, id2, rho));
+    CHAR(STRING_ELT(id, 0))), response, peta2, id2, rho));
   double *weights2ptr = REAL(weights2);
   ++nProtected;
 
   SEXP score2;
   PROTECT(score2 = iwls_eval(getListElement(getListElement(family, "score"),
-    CHAR(STRING_ELT(id, 0))), response, peta, id2, rho));
+    CHAR(STRING_ELT(id, 0))), response, peta2, id2, rho));
   double *score2ptr = REAL(score2);
   ++nProtected;
 
@@ -1695,6 +1819,8 @@ SEXP gmcmc_iwls_gp_diag_lasso(SEXP family, SEXP theta, SEXP id,
     k = orderptr[i] - 1;
 
     if(ISNA(weights2ptr[k]))
+      weights2ptr[k] = 1.490116e-08;
+    if(weights2ptr[k] == 0.0)
       weights2ptr[k] = 1.490116e-08;
     if(weights2ptr[k] < 0.0)
       weights2ptr[k] = -1.0 * weights2ptr[k];
@@ -3392,5 +3518,235 @@ SEXP gpareto_hess_sigma(SEXP y, SEXP xi, SEXP sigma)
 
   UNPROTECT(1);
   return rval;
+}
+
+
+/* Multivariate Normal with AR1-cov */
+SEXP log_dmvnormAR1(SEXP Y, SEXP PAR, SEXP N, SEXP K, SEXP MJ, SEXP SJ, SEXP RJ)
+{
+  int i, j;
+  int n = INTEGER(N)[0];
+  int k = INTEGER(K)[0];
+
+  double *Pptr = REAL(PAR);
+
+  int *MJptr = INTEGER(MJ);
+  int *SJptr = INTEGER(SJ);
+  int rj = INTEGER(RJ)[0];
+
+  SEXP ymu;
+  PROTECT(ymu = allocVector(REALSXP, k));
+  double *ymuptr = REAL(ymu);
+  double *Yptr = REAL(Y);
+
+  SEXP d;
+  PROTECT(d = allocVector(REALSXP, n));
+  double *dptr = REAL(d);
+
+  double lpi = - 0.5 * k * log(2.0 * 3.14159265358979323846);
+  double detsig = 0.0;
+  double detrho = 0.0;
+  double subdet = 0.0;
+  double sum1 = 0.0;
+  double sum2 = 0.0;
+  double sum3 = 0.0;
+
+  for(i = 0; i < n; i++) {
+    detsig = 0.0;
+    for(j = 0; j < k; j++) {
+      detsig += log( Pptr[i + n * (SJptr[j] - 1)] );
+      ymuptr[j] = ( Yptr[i + n * j] - Pptr[i + n * (MJptr[j] - 1)] ) / Pptr[i + n * (SJptr[j] - 1)];
+    }
+
+    sum1 = 0.0;
+    for(j = 0; j < k; j++) {
+        sum1 += pow(ymuptr[j], 2.0);        
+    }
+    sum2 = 0.0;
+    for(j = 1; j < k; j++) {
+        sum2 += ymuptr[j] * ymuptr[j-1];        
+    }
+    sum3 = sum1 - pow(ymuptr[0], 2.0) - pow(ymuptr[k-1], 2.0);
+    
+    subdet = 1 - pow(Pptr[i + n * (rj - 1)], 2.0);
+    detrho = 0.5 * (k-1) * log( subdet );
+
+    dptr[i] = lpi - detsig - detrho - 0.5 * ( sum1 - 2 * Pptr[i + n * (rj - 1)] * sum2 + pow(Pptr[i + n * (rj - 1)], 2.0) * sum3 ) / subdet;
+  }
+
+  UNPROTECT(2);
+  return d;
+}
+
+SEXP mu_score_mvnormAR1(SEXP Y, SEXP PAR, SEXP N, SEXP K, SEXP MJ, SEXP SJ, SEXP RJ, SEXP KJ)
+{
+  int i, j;
+  int n = INTEGER(N)[0];
+  int k = INTEGER(K)[0];
+  int kj = INTEGER(KJ)[0];
+
+  double *Pptr = REAL(PAR);
+
+  int *MJptr = INTEGER(MJ);
+  int *SJptr = INTEGER(SJ);
+  int rj = INTEGER(RJ)[0];
+
+  SEXP ymu;
+  PROTECT(ymu = allocVector(REALSXP, k));
+  double *ymuptr = REAL(ymu);
+  double *Yptr = REAL(Y);
+
+  SEXP d;
+  PROTECT(d = allocVector(REALSXP, n));
+  double *dptr = REAL(d);
+
+  double sum1 = 0.0;
+  double sum2 = 0.0;
+  double sum3 = 0.0;
+
+  for(i = 0; i < n; i++) {
+    for(j = 0; j < k; j++) {
+      ymuptr[j] = ( Yptr[i + n * j] - Pptr[i + n * (MJptr[j] - 1)] ) / Pptr[i + n * (SJptr[j] - 1)];
+    }
+
+    sum1 = 0.0;
+    if( kj != 0 ) {
+      sum1 = - Pptr[i + n * (rj - 1)] * ymuptr[kj-1];
+    }
+    sum2 = 0.0;
+    if( kj != (k-1) ) {
+      sum2 = - Pptr[i + n * (rj - 1)] * ymuptr[kj+1];
+    }
+    sum3 = 0.0;
+    if( (kj != 0) && (kj != (k-1)) ) {
+      sum3 = pow(Pptr[i + n * (rj - 1)], 2.0) * ymuptr[kj];
+    }
+
+    dptr[i] = ( ymuptr[kj] + sum1 + sum2 + sum3 ) / ( 1 - pow(Pptr[i + n * (rj - 1)], 2.0) ) / Pptr[i + n * (SJptr[kj] - 1)];
+  }
+
+  UNPROTECT(2);
+  return d;
+}
+
+SEXP sigma_score_mvnormAR1(SEXP Y, SEXP PAR, SEXP N, SEXP K, SEXP MJ, SEXP SJ, SEXP RJ, SEXP KJ)
+{
+  int i, j;
+  int n = INTEGER(N)[0];
+  int k = INTEGER(K)[0];
+  int kj = INTEGER(KJ)[0];
+
+  double *Pptr = REAL(PAR);
+
+  int *MJptr = INTEGER(MJ);
+  int *SJptr = INTEGER(SJ);
+  int rj = INTEGER(RJ)[0];
+
+  SEXP ymu;
+  PROTECT(ymu = allocVector(REALSXP, k));
+  double *ymuptr = REAL(ymu);
+  double *Yptr = REAL(Y);
+
+  SEXP d;
+  PROTECT(d = allocVector(REALSXP, n));
+  double *dptr = REAL(d);
+
+  double sum1 = 0.0;
+  double sum2 = 0.0;
+  double sum3 = 0.0;
+
+  for(i = 0; i < n; i++) {
+    for(j = 0; j < k; j++) {
+      ymuptr[j] = ( Yptr[i + n * j] - Pptr[i + n * (MJptr[j] - 1)] ) / Pptr[i + n * (SJptr[j] - 1)];
+    }
+
+    sum1 = 0.0;
+    if( kj != 0 ) {
+      sum1 = - Pptr[i + n * (rj - 1)] * ymuptr[kj-1];
+    }
+    sum2 = 0.0;
+    if( kj != (k-1) ) {
+      sum2 = - Pptr[i + n * (rj - 1)] * ymuptr[kj+1];
+    }
+    sum3 = 0.0;
+    if( (kj != 0) && (kj != (k-1)) ) {
+      sum3 = pow(Pptr[i + n * (rj - 1)], 2.0) * ymuptr[kj];
+    }
+
+    dptr[i] = -1 + ymuptr[kj] * ( ymuptr[kj] + sum1 + sum2 + sum3 ) / ( 1 - pow(Pptr[i + n * (rj - 1)], 2.0) );
+  }
+
+  UNPROTECT(2);
+  return d;
+}
+
+SEXP rho_score_mvnormAR1(SEXP Y, SEXP PAR, SEXP N, SEXP K, SEXP MJ, SEXP SJ, SEXP RJ)
+{
+  int i, j;
+  int n = INTEGER(N)[0];
+  int k = INTEGER(K)[0];
+
+  double *Pptr = REAL(PAR);
+
+  int *MJptr = INTEGER(MJ);
+  int *SJptr = INTEGER(SJ);
+  int rj = INTEGER(RJ)[0];
+
+  SEXP ymu;
+  PROTECT(ymu = allocVector(REALSXP, k));
+  double *ymuptr = REAL(ymu);
+  double *Yptr = REAL(Y);
+
+  SEXP d;
+  PROTECT(d = allocVector(REALSXP, n));
+  double *dptr = REAL(d);
+
+  double subdet = 0.0;
+  double sum1 = 0.0;
+  double sum2 = 0.0;
+  double sum3 = 0.0;
+  double term1 = 0.0;
+  double term2 = 0.0;
+  double term3 = 0.0;
+
+  double eta = 0.0;
+  double eta2 = 0.0;
+  double base = 0.0;
+  double deriv = 0.0;
+
+  for(i = 0; i < n; i++) {
+    for(j = 0; j < k; j++) {
+      ymuptr[j] = ( Yptr[i + n * j] - Pptr[i + n * (MJptr[j] - 1)] ) / Pptr[i + n * (SJptr[j] - 1)];
+    }
+
+    sum1 = 0.0;
+    for(j = 0; j < k; j++) {
+        sum1 += pow(ymuptr[j], 2.0);        
+    }
+    sum2 = 0.0;
+    for(j = 1; j < k; j++) {
+        sum2 += ymuptr[j] * ymuptr[j-1];        
+    }
+    sum3 = sum1 - pow(ymuptr[0], 2.0) - pow(ymuptr[k-1], 2.0);
+    
+    subdet = 1 - pow(Pptr[i + n * (rj - 1)], 2.0);
+
+    term1 = (k-1)*Pptr[i + n * (rj - 1)] / subdet;
+
+    term2 = ( sum2 - Pptr[i + n * (rj - 1)] * sum3 ) / subdet;
+
+    term3 = -Pptr[i + n * (rj - 1)] * ( sum1 - 2 * Pptr[i + n * (rj - 1)] * sum2 + pow(Pptr[i + n * (rj - 1)], 2.0) * sum3 ) / pow(subdet, 2.0);
+
+    /*compute deriv*/
+    eta = Pptr[i + n * (rj - 1)] / pow(subdet, 0.5);
+    eta2 = pow(eta, 2.0);
+    base = 1.0 + eta2;
+    deriv = 1.0 / pow(base, 1.5);
+
+    dptr[i] = ( term1 + term2 + term3 ) * deriv;
+  }
+
+  UNPROTECT(2);
+  return d;
 }
 

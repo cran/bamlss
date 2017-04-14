@@ -326,6 +326,8 @@ plotneighbors <- function(x, add = FALSE, ...)
   nb <- neighbormatrix(x, nb = TRUE, ...)
   if(!add)
     plot(x, col = "lightgray")
+  if(inherits(x, "bnd") | inherits(x, "list"))
+    x <- list2sp(x)
   plot(nb, coordinates(x), add = TRUE, pch = 16)
   invisible(NULL)
 }

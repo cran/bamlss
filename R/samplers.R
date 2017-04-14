@@ -69,6 +69,9 @@ GMCMC <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
         attr(p, "fitted.values")
       }
       x[[i]][[j]]$penaltyFunction <- as.integer(sapply(x[[i]][[j]]$S, is.function))
+#      if(!is.null(x[[i]][[j]]$sparse.setup$block.index)) {
+#        propose2[[i]][[j]] <- GMCMC_iwls
+#      }
     }
     names(theta[[i]]) <- names(propose2[[i]]) <- names(fitfun[[i]]) <- names(x[[i]]) <- nt
   }
@@ -746,7 +749,7 @@ GMCMC_iwlsC_gp <- function(family, theta, id, eta, y, data,
 
   W <- if(is.null(weights[[id[1]]])) 1.0 else weights[[id[1]]]
   rval <- .Call("gmcmc_iwls_gp", family, theta, id, eta, y, data,
-    zworking, resids, id[1], W, rho, PACKAGE = "bamlss")
+    zworking, resids, id[1], W, data$sparse.setup$block.index, data$sparse.setup$is.diagonal, rho)
 
   ## Sample variance parameter.
   if(!data$fixed & !data$fxsp & length(data$S)) {
@@ -885,12 +888,12 @@ GMCMC_iwls <- function(family, theta, id, eta, y, data, weights = NULL, offset =
   P <- if(data$fixed) {
     if((k <- ncol(data$X)) < 2) {
       1 / XWX
-    } else matrix_inv(XWX, data$sparse.setup, all_diagonal = data$all_diagonal)
+    } else matrix_inv(XWX, data$sparse.setup)
   } else {
     tau2 <- get.par(theta, "tau2")
     for(j in seq_along(data$S))
       S <- S + 1 / tau2[j] * if(is.function(data$S[[j]])) data$S[[j]](c(theta, data$fixed.hyper)) else data$S[[j]]
-    matrix_inv(XWX + S, data$sparse.setup, all_diagonal = data$all_diagonal)
+    matrix_inv(XWX + S, data$sparse.setup)
   }
   P[P == Inf] <- 0
   M <- P %*% crossprod(data$X, data$rres)
@@ -958,9 +961,9 @@ GMCMC_iwls <- function(family, theta, id, eta, y, data, weights = NULL, offset =
   P2 <- if(data$fixed) {
     if(k < 2) {
       1 / (XWX)
-    } else matrix_inv(XWX, data$sparse.setup, all_diagonal = data$all_diagonal)
+    } else matrix_inv(XWX, data$sparse.setup)
   } else {
-    matrix_inv(XWX + S, data$sparse.setup, all_diagonal = data$all_diagonal)
+    matrix_inv(XWX + S, data$sparse.setup)
   }
   P2[P2 == Inf] <- 0
   M2 <- P2 %*% crossprod(data$X, data$rres)

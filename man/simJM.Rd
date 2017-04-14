@@ -122,7 +122,6 @@ rJM(hazard, censoring, x, r,
 \dontrun{## Simulate survival data
 ## with functional random intercepts and a nonlinear effect 
 ## of time, time-varying association alpha.
-library("splines")
 d <- simJM(nsub = 300)
 head(d)
 

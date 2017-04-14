@@ -43,7 +43,7 @@ bamlss.engine.setup <- function(x, update = "iwls", propose = "iwlsC_gp",
   do.optim = NULL, df = NULL, parametric2smooth = TRUE, ...)
 {
   if(!is.null(attr(x, "bamlss.engine.setup"))) return(x)
-
+  
   foo <- function(x, id = NULL) {
     if(!any(c("formula", "fake.formula") %in% names(x))) {
       for(j in names(x))
@@ -73,7 +73,7 @@ bamlss.engine.setup <- function(x, update = "iwls", propose = "iwlsC_gp",
             x$smooth.construct[["model.matrix"]]$xt$binning <- TRUE
           }
           class(x$smooth.construct[["model.matrix"]]) <- c(class(x$smooth.construct[["model.matrix"]]),
-            "no.mgcv", "model.matrix")
+                                                           "no.mgcv", "model.matrix")
           x$model.matrix <- NULL
         }
       }
@@ -114,7 +114,7 @@ bamlss.engine.setup <- function(x, update = "iwls", propose = "iwlsC_gp",
             x$smooth.construct[[j]]$rank <- as.numeric(x$smooth.construct[[j]]$rank)
           if(!is.null(x$smooth.construct[[j]]$Xf)) {
             x$smooth.construct[[j]]$Xfcn <- paste(paste(paste(x$smooth.construct[[j]]$term, collapse = "."),
-              "Xf", sep = "."), 1:ncol(x$smooth.construct[[j]]$Xf), sep = ".")
+                                                        "Xf", sep = "."), 1:ncol(x$smooth.construct[[j]]$Xf), sep = ".")
             colnames(x$smooth.construct[[j]]$Xf) <- x$smooth.construct[[j]]$Xfcn
             if(is.null(x$smooth.construct[["model.matrix"]])) {
               label <- paste(x$smooth.construct[[j]]$Xfcn, collapse = "+")
@@ -146,13 +146,18 @@ bamlss.engine.setup <- function(x, update = "iwls", propose = "iwlsC_gp",
           x$smooth.construct <- x$smooth.construct[nsc]
         }
       }
+      if(any(is.nnet <- sapply(x$smooth.construct, function(z) inherits(z, "nnet.smooth")))) {
+        nsc <- names(x$smooth.construct)
+        nsc <- c(nsc[-which(is.nnet)], nsc[which(is.nnet)])
+        x$smooth.construct <- x$smooth.construct[nsc]
+      }
     }
     x
   }
-
+  
   x <- foo(x)
   attr(x, "bamlss.engine.setup") <- TRUE
-
+  
   x
 }
 
@@ -212,6 +217,10 @@ bamlss.engine.setup.smooth.default <- function(x, spam = FALSE, Matrix = FALSE, 
 {
   if(inherits(x, "special"))
     return(x)
+  if(!is.null(x$margin)) {
+    x$xt <- c(x$xt, x$margin[[1]]$xt)
+    x$xt <- x$xt[unique(names(x$xt))]
+  }
   if(is.null(x$binning) & !is.null(x$xt[["binning"]])) {
     x$binning <- match.index(x$X)
     x$binning$order <- order(x$binning$match.index)
@@ -255,14 +264,14 @@ bamlss.engine.setup.smooth.default <- function(x, spam = FALSE, Matrix = FALSE, 
     x$sp <- x$xt[["sp"]]
     for(j in seq_along(x$sp))
       if(x$sp[j] == 0) x$sp[j] <- .Machine$double.eps^0.5
-    x$xt[["tau2"]] <- 1 / x$sp
+      x$xt[["tau2"]] <- 1 / x$sp
   }
   if(!is.null(x$sp)) {
     if(all(is.numeric(x$sp))) {
       x$sp <- rep(x$sp, length.out = ntau2)
       for(j in seq_along(x$sp))
         if(x$sp[j] == 0) x$sp[j] <- .Machine$double.eps^0.5
-      x$fxsp <- TRUE
+        x$fxsp <- TRUE
     } else x$fxsp <- FALSE
   } else x$fxsp <- FALSE
   if(is.null(state$parameters)) {
@@ -321,13 +330,13 @@ bamlss.engine.setup.smooth.default <- function(x, spam = FALSE, Matrix = FALSE, 
   }
   ng <- length(get.par(state$parameters, "b"))
   x$lower <- c(rep(-Inf, ng),
-    if(is.list(state$interval)) {
-      unlist(sapply(state$interval, function(x) { x[1] }))
-    } else state$interval[1])
+               if(is.list(state$interval)) {
+                 unlist(sapply(state$interval, function(x) { x[1] }))
+               } else state$interval[1])
   x$upper <- c(rep(Inf, ng),
-    if(is.list(state$interval)) {
-      unlist(sapply(state$interval, function(x) { x[2] }))
-    } else state$interval[2])
+               if(is.list(state$interval)) {
+                 unlist(sapply(state$interval, function(x) { x[2] }))
+               } else state$interval[2])
   names(x$lower) <- names(x$upper) <- names(state$parameters)[1:length(x$upper)]
   if(!is.null(x$sp)) {
     if(length(x$sp) < 1)
@@ -342,10 +351,12 @@ bamlss.engine.setup.smooth.default <- function(x, spam = FALSE, Matrix = FALSE, 
   x$sparse.setup <- sparse.setup(x$X, S = x$S)
   x$added <- c("nobs", "weights", "rres", "state", "a", "b", "prior", "edf",
     "grad", "hess", "lower", "upper")
-
+  
   args <- list(...)
-
+  
   force.spam <- if(is.null(args$force.spam)) FALSE else args$force.spam
+  if(!is.null(x$xt$force.spam))
+    force.spam <- x$xt$force.spam
   if(!is.null(x$sparse.setup$crossprod)) {
     if((ncol(x$sparse.setup$crossprod) < ncol(x$X) * 0.5) & force.spam)
       spam <- TRUE
@@ -362,8 +373,10 @@ bamlss.engine.setup.smooth.default <- function(x, spam = FALSE, Matrix = FALSE, 
       }
     }
   }
-
+  
   force.Matrix <- if(is.null(args$force.Matrix)) FALSE else args$force.Matrix
+  if(!is.null(x$xt$force.Matrix))
+    force.Matrix <- x$xt$force.Matrix
   if(!is.null(x$sparse.setup$crossprod)) {
     if((ncol(x$sparse.setup$crossprod) < ncol(x$X) * 0.5) & force.Matrix)
       Matrix <- TRUE
@@ -379,7 +392,7 @@ bamlss.engine.setup.smooth.default <- function(x, spam = FALSE, Matrix = FALSE, 
       x$hess <- priors$hess
     }
   }
-
+  
   if(ntau2 > 0) {
     tau2 <- NULL
     if(length(x$margin)) {
@@ -412,24 +425,11 @@ bamlss.engine.setup.smooth.default <- function(x, spam = FALSE, Matrix = FALSE, 
       x$hess <- priors$hess
     }
   }
-
+  
   x$fit.fun <- make.fit.fun(x)
   x$state$fitted.values <- x$fit.fun(x$X, get.par(x$state$parameters, "b"))
   x$state$edf <- x$edf(x)
-
-  if(is.null(x$all_diagonal)) {
-    XX <- crossprod(x$X)
-    XX_is_diagonal <- all(XX[!diag(nrow(XX))] == 0)
-
-    b <- runif(length(get.par(x$state$parameters, "b")))
-    tau2 <- get.par(x$state$parameters, "tau2")
-    S <- 0
-    for(j in seq_along(tau2))
-       S <- S + 1 / tau2[j] * if(is.function(x$S[[j]])) x$S[[j]](c("b" = b, "tau2" = tau2)) else x$S[[j]]
-    S_is_diagonal <- all(S[!diag(nrow(S))] == 0)
-    x$all_diagonal <- XX_is_diagonal & (if(x$fixed) TRUE else S_is_diagonal)
-  }
-
+  
   x
 }
 
@@ -494,8 +494,8 @@ assign.df <- function(x, df)
   } else {
     objfun <- function(tau2) {
       edf <- sum_diag(XX %*% matrix_inv(XX + 1 / tau2 * (if(is.function(x$S[[1]])) {
-          x$S[[1]](c("b" = rep(0, attr(x$S[[1]], "npar"))))
-        } else x$S[[1]]), index = x$sparse.setup))
+        x$S[[1]](c("b" = rep(0, attr(x$S[[1]], "npar"))))
+      } else x$S[[1]]), index = x$sparse.setup))
       return((df - edf)^2)
     }
     tau2 <- try(optimize(objfun, int)$minimum, silent = TRUE)
@@ -531,46 +531,46 @@ get.eta <- function(x, expand = TRUE)
 
 ffdf_eval <- function(x, FUN)
 {
-#  res <- NULL
-#  for(i in bit::chunk(x)) {
-#    res <- ffappend(res, FUN(x[i, ]))
-#  }
-#  res
-## FIXME: ff support!
+  #  res <- NULL
+  #  for(i in bit::chunk(x)) {
+  #    res <- ffappend(res, FUN(x[i, ]))
+  #  }
+  #  res
+  ## FIXME: ff support!
   FUN(x)
 }
 
 ffdf_eval_sh <- function(y, par, FUN)
 {
-#  res <- NULL
-#  for(i in bit::chunk(y)) {
-#    tpar <- list()
-#    for(j in names(par))
-#      tpar[[j]] <- par[[j]][i]
-#    res <- ffappend(res, FUN(y[i, ], tpar))
-#  }
-#  res
-## FIXME: ff support!
+  #  res <- NULL
+  #  for(i in bit::chunk(y)) {
+  #    tpar <- list()
+  #    for(j in names(par))
+  #      tpar[[j]] <- par[[j]][i]
+  #    res <- ffappend(res, FUN(y[i, ], tpar))
+  #  }
+  #  res
+  ## FIXME: ff support!
   FUN(y, par)
 }
 
 ff_eval <- function(x, FUN, lower = NULL, upper = NULL)
 {
-#  res <- NULL
-#  for(i in bit::chunk(x)) {
-#    tres <- FUN(x[i])
-#    if(!is.null(lower)) {
-#      if(any(jj <- tres == lower[1]))
-#        tres[jj] <- lower[2]
-#    }
-#    if(!is.null(upper)) {
-#      if(any(jj <- tres == upper[1]))
-#        tres[jj] <- upper[2]
-#    }
-#    res <- ffappend(res, tres)
-#  }
-#  res
-## FIXME: ff support!
+  #  res <- NULL
+  #  for(i in bit::chunk(x)) {
+  #    tres <- FUN(x[i])
+  #    if(!is.null(lower)) {
+  #      if(any(jj <- tres == lower[1]))
+  #        tres[jj] <- lower[2]
+  #    }
+  #    if(!is.null(upper)) {
+  #      if(any(jj <- tres == upper[1]))
+  #        tres[jj] <- upper[2]
+  #    }
+  #    res <- ffappend(res, tres)
+  #  }
+  #  res
+  ## FIXME: ff support!
   FUN(x)
 }
 
@@ -702,14 +702,14 @@ get.hessian <- function(x)
 
 
 ## Formatting for printing.
-fmt <- function(x, width = 8, digits = 2) {
-  txt <- formatC(round(x, digits), format = "f", digits = digits , width = width)
+fmt <- Vectorize(function(x, width = 8, digits = 2) {
+  txt <- formatC(round(x, digits), format = "f", digits = digits, width = width)
   if(nchar(txt) > width) {
     txt <- strsplit(txt, "")[[1]]
     txt <- paste(txt[1:width], collapse = "", sep = "")
   }
   txt
-}
+})
 
 bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
   update = "iwls", criterion = c("AICc", "BIC", "AIC"),
@@ -720,32 +720,32 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
   nx <- family$names
   if(!all(nx %in% names(x)))
     stop("design construct names mismatch with family names!")
-
+  
   if(is.null(attr(x, "bamlss.engine.setup")))
     x <- bamlss.engine.setup(x, update = update, ...)
-
+  
   criterion <- match.arg(criterion)
   np <- length(nx)
-
+  
   if(!is.null(nu)) {
     if(nu < 0)
       nu <- NULL
   }
-
+  
   no_ff <- !inherits(y, "ffdf")
-
+  
   nobs <- nrow(y)
   if(is.data.frame(y)) {
     if(ncol(y) < 2)
       y <- y[[1]]
   }
-
+  
   if(!is.null(start))
     x <- set.starting.values(x, start)
   eta <- get.eta(x)
   if(is.null(start))
     eta <- init.eta(eta, y, family, nobs)
- 
+  
   if(!is.null(weights))
     weights <- as.data.frame(weights)
   if(!is.null(offset)) {
@@ -755,14 +755,14 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
         eta[[j]] <- eta[[j]] + offset[[j]]
     }
   }
-
+  
   ia <- if(flush) interactive() else FALSE
-
+  
   if(mgcv) {
     outer <- TRUE
     inner <- TRUE
   }
-
+  
   inner_bf <- if(!mgcv) {
     function(x, y, eta, family, edf, id, nu, logprior, ...) {
       eps0 <- eps + 1; iter <- 1
@@ -771,30 +771,30 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
         for(sj in seq_along(x)) {
           ## Get updated parameters.
           p.state <- x[[sj]]$update(x[[sj]], family, y, eta, id, edf = edf, ...)
-
+          
           if(!is.null(nu)) {
             lpost0 <- family$loglik(y, family$map2par(eta)) + logprior
             lp <- logprior - x[[sj]]$prior(x[[sj]]$state$parameters)
-
+            
             eta2 <- eta
             eta2[[id]] <- eta2[[id]] - x[[sj]]$state$fitted.values
-
+            
             b0 <- get.par(x[[sj]]$state$parameters, "b")
             b1 <- get.par(p.state$parameters, "b")
-
+            
             objfun <- function(nu, diff = TRUE) {
               p.state$parameters <- set.par(p.state$parameters, nu * b1 + (1 - nu) * b0, "b")
               eta2[[id]] <- eta2[[id]] + x[[sj]]$fit.fun(x[[sj]]$X,
-                get.par(p.state$parameters, "b"))
+                                                         get.par(p.state$parameters, "b"))
               lp2 <- family$loglik(y, family$map2par(eta2)) + lp + x[[sj]]$prior(p.state$parameters)
               if(diff) {
                 return(-1 * (lp2 - lpost0))
               } else
                 return(lp2)
             }
-
+            
             lpost1 <- objfun(1, diff = FALSE)
-
+            
             if(lpost1 < lpost0) {
               if(!is.numeric(nu)) {
                 nuo <- optimize(f = objfun, interval = c(0, 1))$minimum
@@ -804,10 +804,10 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
                   nuo <- nuo / 2
                 }
               }
-
+              
               p.state$parameters <- set.par(p.state$parameters, nuo * b1 + (1 - nuo) * b0, "b")
               p.state$fitted.values <- x[[sj]]$fit.fun(x[[sj]]$X,
-                get.par(p.state$parameters, "b"))
+                                                       get.par(p.state$parameters, "b"))
               eta2[[id]] <- eta2[[id]] + p.state$fitted.values
               lpost1 <- family$loglik(y, family$map2par(eta2)) + lp + x[[sj]]$prior(p.state$parameters)
               if(lpost1 < lpost0) {
@@ -816,16 +816,16 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
               }
             }
           }
-
+          
           ## Compute equivalent degrees of freedom.
           edf <- edf - x[[sj]]$state$edf + p.state$edf
-
+          
           ## Update log priors.
           logprior <- logprior - x[[sj]]$prior(x[[sj]]$state$parameters) + x[[sj]]$prior(p.state$parameters)
-
+          
           ## Update predictor and smooth fit.
           eta[[id]] <- eta[[id]] - fitted(x[[sj]]$state) + fitted(p.state)
-
+          
           x[[sj]]$state <- p.state
         }
         eps0 <- do.call("cbind", eta)
@@ -884,7 +884,7 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
       return(list("x" = x, "eta" = eta, "edf" = edf))
     }
   }
-
+  
   ## Backfitting main function.
   backfit <- function(verbose = TRUE) {
     eps0 <- eps + 1; iter <- 0
@@ -896,11 +896,11 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
       for(j in 1:np) {
         if(outer | iter < 2) {
           peta <- family$map2par(eta)
-
+          
           if(no_ff) {
             ## Compute weights.
             hess <- process.derivs(family$hess[[nx[j]]](y, peta, id = nx[j]), is.weight = TRUE)
-
+            
             ## Score.
             score <- process.derivs(family$score[[nx[j]]](y, peta, id = nx[j]), is.weight = FALSE)
           } else {
@@ -908,19 +908,19 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
             hess <- ffdf_eval_sh(y, peta, FUN = function(y, par) {
               process.derivs(family$hess[[nx[j]]](y, par, id = nx[j]), is.weight = TRUE)
             })
-
+            
             score <- ffdf_eval_sh(y, peta, FUN = function(y, par) {
               process.derivs(family$score[[nx[j]]](y, par, id = nx[j]), is.weight = FALSE)
             })
           }
-
+          
           ## Compute working observations.
           z <- eta[[nx[j]]] + 1 / hess * score
         } else z <- hess <- score <- NULL
-
+        
         if(iter < 2)
           eta[[nx[j]]] <- get.eta(x)[[nx[j]]]
-
+        
         ## And all terms.
         if(inner) {
           tbf <- inner_bf(x[[nx[j]]]$smooth.construct, y, eta, family,
@@ -937,32 +937,32 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
             p.state <- x[[nx[j]]]$smooth.construct[[sj]]$update(x[[nx[j]]]$smooth.construct[[sj]],
               family, y, eta, nx[j], edf = edf, z = z, hess = hess, weights = weights[[nx[j]]],
               iteration = iter, criterion = criterion, score = score)
-
+            
             ## Update predictor and smooth fit.
             if(!is.null(nu)) {
               lp0 <- get.log.prior(x)
               lpost0 <- family$loglik(y, family$map2par(eta)) + lp0
               lp <- lp0 - x[[nx[j]]]$smooth.construct[[sj]]$prior(x[[nx[j]]]$smooth.construct[[sj]]$state$parameters)
-
+              
               eta2 <- eta
               eta2[[nx[j]]] <- eta2[[nx[j]]] - x[[nx[j]]]$smooth.construct[[sj]]$state$fitted.values
-
+              
               b0 <- get.par(x[[nx[j]]]$smooth.construct[[sj]]$state$parameters, "b")
               b1 <- get.par(p.state$parameters, "b")
-
+              
               objfun <- function(nu, diff = TRUE) {
                 p.state$parameters <- set.par(p.state$parameters, nu * b1 + (1 - nu) * b0, "b")
                 eta2[[nx[j]]] <- eta2[[nx[j]]] + x[[nx[j]]]$smooth.construct[[sj]]$fit.fun(x[[nx[j]]]$smooth.construct[[sj]]$X,
-                  get.par(p.state$parameters, "b"))
+                                                                                           get.par(p.state$parameters, "b"))
                 lp2 <- family$loglik(y, family$map2par(eta2)) + lp + x[[nx[j]]]$smooth.construct[[sj]]$prior(p.state$parameters)
                 if(diff) {
                   return(-1 * (lp2 - lpost0))
                 } else
                   return(lp2)
               }
-
+              
               lpost1 <- objfun(1, diff = FALSE)
-
+              
               if(lpost1 < lpost0) {
                 if(!is.numeric(nu)) {
                   nuo <- optimize(f = objfun, interval = c(0, 1))$minimum
@@ -972,10 +972,10 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
                     nuo <- nuo / 2
                   }
                 }
-
+                
                 p.state$parameters <- set.par(p.state$parameters, nuo * b1 + (1 - nuo) * b0, "b")
                 p.state$fitted.values <- x[[nx[j]]]$smooth.construct[[sj]]$fit.fun(x[[nx[j]]]$smooth.construct[[sj]]$X,
-                  get.par(p.state$parameters, "b"))
+                                                                                   get.par(p.state$parameters, "b"))
                 eta2[[nx[j]]] <- eta2[[nx[j]]] + p.state$fitted.values
                 lpost1 <- family$loglik(y, family$map2par(eta2)) + lp + x[[nx[j]]]$smooth.construct[[sj]]$prior(p.state$parameters)
                 if(lpost1 < lpost0) {
@@ -984,60 +984,60 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
                 }
               }
             }
-
+            
             ## Compute equivalent degrees of freedom.
             edf <- edf - x[[nx[j]]]$smooth.construct[[sj]]$state$edf + p.state$edf
-
+            
             eta[[nx[j]]] <- eta[[nx[j]]] - fitted(x[[nx[j]]]$smooth.construct[[sj]]$state) + fitted(p.state)
-
+            
             x[[nx[j]]]$smooth.construct[[sj]]$state <- p.state
           }
         }
       }
-
+      
       if(!is.null(stop.nu)) {
         if(iter > stop.nu)
           nu <- NULL
       }
-
+      
       eps0 <- do.call("cbind", eta)
       eps0 <- mean(abs((eps0 - do.call("cbind", eta0)) / eps0), na.rm = TRUE)
       if(is.na(eps0) | !is.finite(eps0)) eps0 <- eps + 1
-
+      
       peta <- family$map2par(eta)
-
+      
       IC <- get.ic(family, y, peta, edf, nobs, criterion)
-
+      
       iter <- iter + 1
-
+      
       if(verbose) {
         cat(if(ia) "\r" else if(iter > 1) "\n" else NULL)
         vtxt <- paste(criterion, " ", fmt(IC, width = 8, digits = digits),
-          " logPost ", fmt(family$loglik(y, peta) + get.log.prior(x), width = 8, digits = digits),
-          " logLik ", fmt(family$loglik(y, peta), width = 8, digits = digits),
-          " edf ", fmt(edf, width = 6, digits = digits),
-          " eps ", fmt(eps0, width = 6, digits = digits + 2),
-          " iteration ", formatC(iter, width = nchar(maxit)), sep = "")
+                      " logPost ", fmt(family$loglik(y, peta) + get.log.prior(x), width = 8, digits = digits),
+                      " logLik ", fmt(family$loglik(y, peta), width = 8, digits = digits),
+                      " edf ", fmt(edf, width = 6, digits = digits),
+                      " eps ", fmt(eps0, width = 6, digits = digits + 2),
+                      " iteration ", formatC(iter, width = nchar(maxit)), sep = "")
         cat(vtxt)
-
+        
         if(.Platform$OS.type != "unix" & ia) flush.console()
       }
     }
-
+    
     elapsed <- c(proc.time() - ptm)[3]
-
+    
     IC <- get.ic(family, y, peta, edf, nobs, criterion)
     logLik <- family$loglik(y, peta)
     logPost <- as.numeric(logLik + get.log.prior(x))
-
+    
     if(verbose) {
       cat(if(ia) "\r" else "\n")
       vtxt <- paste(criterion, " ", fmt(IC, width = 8, digits = digits),
-        " logPost ", fmt(logPost, width = 8, digits = digits),
-        " logLik ", fmt(family$loglik(y, peta), width = 8, digits = digits),
-        " edf ", fmt(edf, width = 6, digits = digits),
-        " eps ", fmt(eps0, width = 6, digits = digits + 2),
-        " iteration ", formatC(iter, width = nchar(maxit)), sep = "")
+                    " logPost ", fmt(logPost, width = 8, digits = digits),
+                    " logLik ", fmt(family$loglik(y, peta), width = 8, digits = digits),
+                    " edf ", fmt(edf, width = 6, digits = digits),
+                    " eps ", fmt(eps0, width = 6, digits = digits + 2),
+                    " iteration ", formatC(iter, width = nchar(maxit)), sep = "")
       cat(vtxt)
       if(.Platform$OS.type != "unix" & ia) flush.console()
       et <- if(elapsed > 60) {
@@ -1045,19 +1045,19 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
       } else paste(formatC(format(round(elapsed, 2), nsmall = 2), width = 5), "sec", sep = "")
       cat("\nelapsed time: ", et, "\n", sep = "")
     }
-
+    
     if(iter == maxit)
       warning("the backfitting algorithm did not converge!")
-
+    
     names(IC) <- criterion
-
+    
     rval <- list("fitted.values" = eta, "parameters" = get.all.par(x), "edf" = edf,
-      "logLik" = logLik, "logPost" = logPost, "nobs" = nobs,
-      "converged" = iter < maxit, "runtime" = elapsed)
+                 "logLik" = logLik, "logPost" = logPost, "nobs" = nobs,
+                 "converged" = iter < maxit, "runtime" = elapsed)
     rval[[names(IC)]] <- IC
     rval
   }
-
+  
   backfit(verbose = verbose)
 }
 
@@ -1068,10 +1068,10 @@ get.ic <- function(family, y, par, edf, n, type = c("AIC", "BIC", "AICc", "MP"),
   type <- match.arg(type)
   ll <- family$loglik(y, par)
   pen <- switch(type,
-    "AIC" = -2 * ll + 2 * edf,
-    "BIC" = -2 * ll + edf * log(n),
-    "AICc" = -2 * ll + 2 * edf + (2 * edf * (edf + 1)) / (n - edf - 1),
-    "MP" = -1 * (ll + edf)
+                "AIC" = -2 * ll + 2 * edf,
+                "BIC" = -2 * ll + edf * log(n),
+                "AICc" = -2 * ll + 2 * edf + (2 * edf * (edf + 1)) / (n - edf - 1),
+                "MP" = -1 * (ll + edf)
   )
   return(pen)
 }
@@ -1080,10 +1080,10 @@ get.ic2 <- function(logLik, edf, n, type = c("AIC", "BIC", "AICc", "MP"), ...)
 {
   type <- match.arg(type)
   pen <- switch(type,
-    "AIC" = -2 * logLik + 2 * edf,
-    "BIC" = -2 * logLik + edf * log(n),
-    "AICc" = -2 * logLik + 2 * edf + (2 * edf * (edf + 1)) / (n - edf - 1),
-    "MP" = -1 * (logLik + edf)
+                "AIC" = -2 * logLik + 2 * edf,
+                "BIC" = -2 * logLik + edf * log(n),
+                "AICc" = -2 * logLik + 2 * edf + (2 * edf * (edf + 1)) / (n - edf - 1),
+                "MP" = -1 * (logLik + edf)
   )
   return(pen)
 }
@@ -1109,7 +1109,7 @@ cround <- function(x, digits = 2)
       else return(n + 1)
     } else return(n + 1)
   })
-
+  
   round(x, digits = cdigits(x) + digits)
 }
 
@@ -1121,10 +1121,10 @@ tau2.optim <- function(f, start, ..., scale = 10, eps = 0.0001, maxit = 1)
     start[k] <- cround(par)
     return(f(start, ...))
   }
-
+  
   start <- cround(start)
   ic0 <- f(start)
-
+  
   iter <- 0; eps0 <- eps + 1
   while((eps0 > eps) & (iter < maxit)) {
     start0 <- start
@@ -1140,11 +1140,11 @@ tau2.optim <- function(f, start, ..., scale = 10, eps = 0.0001, maxit = 1)
     }
     if(length(start) < 2)
       break
-
+    
     eps0 <- mean(abs((start - start0) / start0))
     iter <- iter + 1
   }
-
+  
   return(start)
 }
 
@@ -1171,7 +1171,7 @@ make_par <- function(x, type = 1, add.tau2 = FALSE) {
       npar <- paste(paste(nx[j], "h1", x[[nx[j]]]$smooth.construct[[sj]]$label, sep = ":"), 1:length(g), sep = ".")
       if(length(tau2 <- get.par(tpar, "tau2"))) {
         npar <- c(npar, paste(nx[j], "h1", paste(x[[nx[j]]]$smooth.construct[[sj]]$label,
-          paste("tau2", 1:length(tau2), sep = ""), sep = "."), sep = ":"))
+                                                 paste("tau2", 1:length(tau2), sep = ""), sep = "."), sep = ":"))
       }
       names(tpar) <- names(tlower) <- names(tupper) <- if(type < 2) {
         paste("p", j, ".t", sj, ".", names(tpar), sep = "")
@@ -1189,16 +1189,16 @@ make_par <- function(x, type = 1, add.tau2 = FALSE) {
 bfit_newton <- function(x, family, y, eta, id, ...)
 {
   args <- list(...)
-
+  
   eta[[id]] <- eta[[id]] - fitted(x$state)
-
+  
   tau2 <- if(!x$fixed) get.par(x$state$parameters, "tau2") else NULL
-
+  
   lp <- function(g) {
     eta[[id]] <- eta[[id]] + x$fit.fun(x$X, g)
     family$loglik(y, family$map2par(eta)) + x$prior(c(g, tau2))
   }
-
+  
   if(is.null(family$gradient[[id]])) {
     gfun <- NULL
   } else {
@@ -1211,7 +1211,7 @@ bfit_newton <- function(x, family, y, eta, id, ...)
       drop(gg)
     }
   }
-
+  
   if(is.null(family$hessian[[id]])) {
     hfun <- NULL
   } else {
@@ -1224,24 +1224,24 @@ bfit_newton <- function(x, family, y, eta, id, ...)
       hg
     }
   }
-
+  
   g <- get.par(x$state$parameters, "b")
   nu <- if(is.null(x$nu)) 0.1 else x$nu
-
+  
   g.grad <- grad(fun = lp, theta = g, id = id, prior = NULL,
-    args = list("gradient" = gfun, "x" = x, "y" = y, "eta" = eta))
-
+                 args = list("gradient" = gfun, "x" = x, "y" = y, "eta" = eta))
+  
   g.hess <- hess(fun = lp, theta = g, id = id, prior = NULL,
-    args = list("gradient" = gfun, "hessian" = hfun, "x" = x, "y" = y, "eta" = eta))
-
+                 args = list("gradient" = gfun, "hessian" = hfun, "x" = x, "y" = y, "eta" = eta))
+  
   Sigma <- matrix_inv(g.hess, index = x$sparse.setup)
-
+  
   g <- drop(g + nu * Sigma %*% g.grad)
-
+  
   x$state$parameters <- set.par(x$state$parameters, g, "b")
   x$state$fitted.values <- x$fit.fun(x$X, get.state(x, "b"))
   x$state$hessian <- Sigma
-
+  
   return(x$state)
 }
 
@@ -1249,20 +1249,20 @@ bfit_newton <- function(x, family, y, eta, id, ...)
 bfit_lm <- function(x, family, y, eta, id, weights, criterion, ...)
 {
   args <- list(...)
-
+  
   peta <- family$map2par(eta)
-
+  
   hess <- family$hess[[id]](y, peta, id = id, ...)
-
+  
   ## Score.
   score <- family$score[[id]](y, peta, id = id, ...)
-
+  
   ## Compute working observations.
   z <- eta[[id]] + 1 / hess * score
-
+  
   ## Compute reduced residuals.
   e <- z - eta[[id]] + fitted(x$state)
-
+  
   if(!is.null(weights))
     hess <- hess * weights
   if(x$fixed | x$fxsp) {
@@ -1277,10 +1277,10 @@ bfit_lm <- function(x, family, y, eta, id, weights, criterion, ...)
     e <- c(e, rep(1, n))
     b <- lm.wfit(rbind(x$X, S), e, w)
   }
-
+  
   x$state$parameters <- set.par(x$state$parameters, coef(b), "b")
   x$state$fitted.values <- x$X %*% coef(b)
-
+  
   x$state
 }
 
@@ -1288,10 +1288,10 @@ bfit_lm <- function(x, family, y, eta, id, weights, criterion, ...)
 bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
 {
   args <- list(...)
-
+  
   no_ff <- !inherits(y, "ff")
   peta <- family$map2par(eta)
-
+  
   if(is.null(args$hess)) {
     ## Compute weights.
     if(no_ff) {
@@ -1302,10 +1302,10 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
       })
     }
   } else hess <- args$hess
-
+  
   if(!is.null(weights))
     hess <- hess * weights
-
+  
   if(is.null(args$z)) {
     ## Score.
     if(no_ff) {
@@ -1315,47 +1315,47 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
         process.derivs(family$score[[id]](y, par, id = id), is.weight = FALSE)
       })
     }
-
+    
     ## Compute working observations.
     z <- eta[[id]] + 1 / hess * score
   } else z <- args$z
-
+  
   ## Compute partial predictor.
   eta[[id]] <- eta[[id]] - fitted(x$state)
-
+  
   ## Compute reduced residuals.
   e <- z - eta[[id]]
   xbin.fun(x$binning$sorted.index, hess, e, x$weights, x$rres, x$binning$order, x$binning$uind)
-
+  
   ## Old parameters.
   g0 <- get.state(x, "b")
-
+  
   ## Compute mean and precision.
   XWX <- do.XWX(x$X, 1 / x$weights, x$sparse.setup$matrix)
-
+  
   if(!x$state$do.optim | x$fixed | x$fxsp) {
     if(x$fixed) {
-      P <- matrix_inv(XWX, index = x$sparse.setup, all_diagonal = x$all_diagonal)
+      P <- matrix_inv(XWX, index = x$sparse.setup)
     } else {
       S <- 0
       tau2 <- get.state(x, "tau2")
       for(j in seq_along(x$S))
         S <- S + 1 / tau2[j] * if(is.function(x$S[[j]])) x$S[[j]](c(g0, x$fixed.hyper)) else x$S[[j]]
-      P <- matrix_inv(XWX + S, index = x$sparse.setup, all_diagonal = x$all_diagonal)
+      P <- matrix_inv(XWX + S, index = x$sparse.setup)
     }
     x$state$parameters <- set.par(x$state$parameters, drop(P %*% crossprod(x$X, x$rres)), "b")
   } else {
     args <- list(...)
     edf0 <- args$edf - x$state$edf
     eta2 <- eta
-
+    
     env <- new.env()
-
+    
     objfun <- function(tau2, ...) {
       S <- 0
       for(j in seq_along(x$S))
         S <- S + 1 / tau2[j] * if(is.function(x$S[[j]])) x$S[[j]](c(g0, x$fixed.hyper)) else x$S[[j]]
-      P <- matrix_inv(XWX + S, index = x$sparse.setup, all_diagonal = x$all_diagonal)
+      P <- matrix_inv(XWX + S, index = x$sparse.setup)
       if(inherits(P, "try-error")) return(NA)
       g <- drop(P %*% crossprod(x$X, x$rres))
       if(any(is.na(g)) | any(g %in% c(-Inf, Inf))) g <- rep(0, length(g))
@@ -1380,22 +1380,22 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
       } else assign("ic_val", ic, envir = env)
       return(ic)
     }
-
+    
     assign("ic00_val", objfun(get.state(x, "tau2")), envir = env)
-
+    
     tau2 <- tau2.optim(objfun, start = get.state(x, "tau2"))
-
-    if(!is.null(env$state))
-      return(env$state)
-
+    
+    #if(!is.null(env$state))
+    #  return(env$state)
+    
     x$state$parameters <- set.par(x$state$parameters, tau2, "tau2")
     S <- 0
     for(j in seq_along(x$S))
       S <- S + 1 / tau2[j] * if(is.function(x$S[[j]])) x$S[[j]](c(x$state$parameters, x$fixed.hyper)) else x$S[[j]]
-    P <- matrix_inv(XWX + S, index = x$sparse.setup, all_diagonal = x$all_diagonal)
+    P <- matrix_inv(XWX + S, index = x$sparse.setup)
     x$state$parameters <- set.par(x$state$parameters, drop(P %*% crossprod(x$X, x$rres)), "b")
   }
-
+  
   ## Compute fitted values.
   g <- get.state(x, "b")
   if(any(is.na(g)) | any(g %in% c(-Inf, Inf))) {
@@ -1403,12 +1403,12 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
   }
   x$state$fitted.values <- x$fit.fun(x$X, get.state(x, "b"))
   x$state$edf <- sum_diag(XWX %*% P)
-
+  
   if(!is.null(x$prior)) {
     if(is.function(x$prior))
       x$state$log.prior <- x$prior(x$state$parameters)
   }
-
+  
   return(x$state)
 }
 
@@ -1416,37 +1416,37 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
 bfit_iwls_spam <- function(x, family, y, eta, id, weights, criterion, ...)
 {
   args <- list(...)
-
+  
   peta <- family$map2par(eta)
   if(is.null(args$hess)) {
     ## Compute weights.
     hess <- family$hess[[id]](y, peta, id = id, ...)
   } else hess <- args$hess
-
+  
   if(!is.null(weights))
     hess <- hess * weights
-
+  
   hess <- process.derivs(hess, is.weight = TRUE)
-
+  
   if(is.null(args$z)) {
     ## Score.
     score <- process.derivs(family$score[[id]](y, peta, id = id, ...), is.weight = FALSE)
-
+    
     ## Compute working observations.
     z <- eta[[id]] + 1 / hess * score
   } else z <- args$z
-
+  
   ## Compute partial predictor.
   eta[[id]] <- eta[[id]] - fitted(x$state)
-
+  
   ## Compute reduced residuals.
   e <- z - eta[[id]]
   xbin.fun(x$binning$sorted.index, hess, e, x$weights, x$rres, x$binning$order)
-
+  
   ## Compute mean and precision.
   XWX <- (t(diag.spam(x$weights) %*% x$X)) %*% x$X
   Xr <- crossprod.spam(x$X, x$rres)
-
+  
   if(!x$state$do.optim | x$fixed | x$fxsp) {
     if(!x$fixed) {
       tau2 <- get.state(x, "tau2")
@@ -1464,9 +1464,9 @@ bfit_iwls_spam <- function(x, family, y, eta, id, weights, criterion, ...)
     args <- list(...)
     edf0 <- args$edf - x$state$edf
     eta2 <- eta
-
+    
     env <- new.env()
-
+    
     objfun <- function(tau2, ...) {
       S <- 0
       for(j in seq_along(x$S))
@@ -1495,13 +1495,13 @@ bfit_iwls_spam <- function(x, family, y, eta, id, weights, criterion, ...)
       } else assign("ic_val", ic, envir = env)
       return(ic)
     }
-
+    
     assign("ic00_val", objfun(get.state(x, "tau2")), envir = env)
     tau2 <- tau2.optim(objfun, start = get.state(x, "tau2"))
-
+    
     if(!is.null(env$state))
       return(env$state)
-
+    
     S <- 0
     for(j in seq_along(x$S))
       S <- S + 1 / tau2[j] * x$S[[j]]
@@ -1511,7 +1511,7 @@ bfit_iwls_spam <- function(x, family, y, eta, id, weights, criterion, ...)
     x$state$parameters <- set.par(x$state$parameters, b, "b")
     x$state$parameters <- set.par(x$state$parameters, tau2, "tau2")
   }
-
+  
   ## Compute fitted values.
   x$state$fitted.values <- x$fit.fun(x$X, get.state(x, "b"))
   x$state$edf <- sum_diag(XWX %*% P)
@@ -1519,7 +1519,7 @@ bfit_iwls_spam <- function(x, family, y, eta, id, weights, criterion, ...)
     if(is.function(x$prior))
       x$state$log.prior <- x$prior(x$state$parameters)
   }
-
+  
   return(x$state)
 }
 
@@ -1527,33 +1527,33 @@ bfit_iwls_spam <- function(x, family, y, eta, id, weights, criterion, ...)
 bfit_iwls_Matrix <- function(x, family, y, eta, id, weights, criterion, ...)
 {
   args <- list(...)
-
+  
   peta <- family$map2par(eta)
   if(is.null(args$hess)) {
     ## Compute weights.
     hess <- family$hess[[id]](y, peta, id = id, ...)
   } else hess <- args$hess
-
+  
   if(!is.null(weights))
     hess <- hess * weights
-
+  
   hess <- process.derivs(hess, is.weight = TRUE)
-
+  
   if(is.null(args$z)) {
     ## Score.
     score <- process.derivs(family$score[[id]](y, peta, id = id, ...), is.weight = FALSE)
-
+    
     ## Compute working observations.
     z <- eta[[id]] + 1 / hess * score
   } else z <- args$z
-
+  
   ## Compute partial predictor.
   eta[[id]] <- eta[[id]] - fitted(x$state)
-
+  
   ## Compute reduced residuals.
   e <- z - eta[[id]]
   xbin.fun(x$binning$sorted.index, hess, e, x$weights, x$rres, x$binning$order)
-
+  
   ## Compute mean and precision.
   XWX <- crossprod(Diagonal(x = x$weights) %*% x$X, x$X)
   Xr <- crossprod(x$X, x$rres)
@@ -1574,9 +1574,9 @@ bfit_iwls_Matrix <- function(x, family, y, eta, id, weights, criterion, ...)
     args <- list(...)
     edf0 <- args$edf - x$state$edf
     eta2 <- eta
-
+    
     env <- new.env()
-
+    
     objfun <- function(tau2, ...) {
       S <- Matrix(0, ncol(x$X), ncol(x$X))
       for(j in seq_along(x$S))
@@ -1605,13 +1605,13 @@ bfit_iwls_Matrix <- function(x, family, y, eta, id, weights, criterion, ...)
       } else assign("ic_val", ic, envir = env)
       return(ic)
     }
-
+    
     assign("ic00_val", objfun(get.state(x, "tau2")), envir = env)
     tau2 <- tau2.optim(objfun, start = get.state(x, "tau2"))
-
+    
     if(!is.null(env$state))
       return(env$state)
-
+    
     S <- Matrix(0, ncol(x$X), ncol(x$X))
     for(j in seq_along(x$S))
       S <- S + 1 / tau2[j] * x$S[[j]]
@@ -1621,7 +1621,7 @@ bfit_iwls_Matrix <- function(x, family, y, eta, id, weights, criterion, ...)
     x$state$parameters <- set.par(x$state$parameters, as.numeric(b), "b")
     x$state$parameters <- set.par(x$state$parameters, tau2, "tau2")
   }
-
+  
   ## Compute fitted values.
   x$state$fitted.values <- x$fit.fun(x$X, get.state(x, "b"))
   x$state$edf <- sum_diag(XWX %*% P)
@@ -1629,7 +1629,7 @@ bfit_iwls_Matrix <- function(x, family, y, eta, id, weights, criterion, ...)
     if(is.function(x$prior))
       x$state$log.prior <- x$prior(x$state$parameters)
   }
-
+  
   return(x$state)
 }
 
@@ -1641,9 +1641,9 @@ bfit_optim <- function(x, family, y, eta, id, weights, criterion, ...)
   ## Compute partial predictor.
   eta[[id]] <- eta[[id]] - fitted(x$state)
   eta2 <- eta
-
+  
   tpar <- x$state$parameters
-
+  
   ## Objective for regression coefficients.
   objfun <- function(b, tau2 = NULL) {
     tpar <- set.par(tpar, b, "b")
@@ -1661,7 +1661,7 @@ bfit_optim <- function(x, family, y, eta, id, weights, criterion, ...)
     if(!is.finite(val)) val <- NA
     val
   }
-
+  
   ## Gradient function.
   grad <- if(!is.null(family$score[[id]]) & is.function(x$grad)) {
     function(gamma, tau2 = NULL) {
@@ -1675,18 +1675,18 @@ bfit_optim <- function(x, family, y, eta, id, weights, criterion, ...)
       return(drop(-1 * grad))
     }
   } else NULL
-
+  
   suppressWarnings(opt <- try(optim(get.par(tpar, "b"), fn = objfun, gr = grad,
     method = "BFGS", control = list(), tau2 = get.par(tpar, "tau2"), hessian = TRUE),
     silent = TRUE))
-
+  
   if(!inherits(opt, "try-error")) {
     tpar <- set.par(tpar, opt$par, "b")
     x$state$fitted.values <- x$fit.fun(x$X, tpar)
     x$state$parameters <- tpar
     x$state$hessian <- opt$hessian
   }
-
+  
   return(x$state)
 }
 
@@ -1708,7 +1708,7 @@ get.eta.par <- function(par, x)
       tpar <- par[grep2(xl, names(par), fixed = TRUE)]
       x[[j]]$smooth.construct[[sj]]$state$parameters <- set.par(x[[j]]$smooth.construct[[sj]]$state$parameters, tpar, "b")
       x[[j]]$smooth.construct[[sj]]$state$fitted.values <- x[[j]]$smooth.construct[[sj]]$fit.fun(x[[j]]$smooth.construct[[sj]]$X,
-        get.par(tpar, "b"))
+                                                                                                 get.par(tpar, "b"))
       eta[[j]] <- eta[[j]] + fitted(x[[j]]$smooth.construct[[sj]]$state)
     }
     if(!is.null(x[[j]]$model.matrix)) {
@@ -1742,28 +1742,28 @@ log_posterior <- function(par, x, y, family, verbose = TRUE, digits = 3, scale =
       }
       x[[j]]$smooth.construct[[sj]]$state$parameters <- set.par(x[[j]]$smooth.construct[[sj]]$state$parameters, tpar, "b")
       x[[j]]$smooth.construct[[sj]]$state$fitted.values <- x[[j]]$smooth.construct[[sj]]$fit.fun(x[[j]]$smooth.construct[[sj]]$X,
-        get.par(tpar, "b"))
+                                                                                                 get.par(tpar, "b"))
       eta[[j]] <- eta[[j]] + fitted(x[[j]]$smooth.construct[[sj]]$state)
       lprior <- lprior + x[[j]]$smooth.construct[[sj]]$prior(c(tpar, get.state(x[[j]]$smooth.construct[[sj]], "tau2"), x[[j]]$smooth.construct[[sj]]$fixed.hyper))
     }
   }
   ll <- family$loglik(y, family$map2par(eta))
   lp <- as.numeric(ll + lprior)
-
+  
   if(verbose) {
     cat(if(interactive()) "\r" else "\n")
     vtxt <- paste("logLik ", fmt(ll, width = 8, digits = digits),
-      " logPost ", fmt(lp, width = 8, digits = digits),
-      " iteration ", formatC(ienv$bamlss_log_posterior_iteration, width = 4), sep = "")
+                  " logPost ", fmt(lp, width = 8, digits = digits),
+                  " iteration ", formatC(ienv$bamlss_log_posterior_iteration, width = 4), sep = "")
     cat(vtxt)
     if(.Platform$OS.type != "unix" & interactive()) flush.console()
     bamlss_log_posterior_iteration <- ienv$bamlss_log_posterior_iteration + 1
     assign("bamlss_log_posterior_iteration", bamlss_log_posterior_iteration, envir = ienv)
   }
-
+  
   if(!is.null(scale))
     lp <- lp * scale
-
+  
   return(lp)
 }
 
@@ -1789,7 +1789,7 @@ grad_posterior <- function(par, x, y, family, ...)
       }
       x[[j]]$smooth.construct[[sj]]$state$parameters <- set.par(x[[j]]$smooth.construct[[sj]]$state$parameters, tpar, "b")
       x[[j]]$smooth.construct[[sj]]$state$fitted.values <- x[[j]]$smooth.construct[[sj]]$fit.fun(x[[j]]$smooth.construct[[sj]]$X,
-        get.par(tpar, "b"))
+                                                                                                 get.par(tpar, "b"))
       eta[[j]] <- eta[[j]] + fitted(x[[j]]$smooth.construct[[sj]]$state)
     }
   }
@@ -1806,24 +1806,24 @@ grad_posterior <- function(par, x, y, family, ...)
 
 ## Optimizer based on optim().
 opt <- function(x, y, family, start = NULL, verbose = TRUE, digits = 3,
-  gradient = TRUE, hessian = FALSE, eps = .Machine$double.eps^0.5, maxit = 100, ...)
+                gradient = TRUE, hessian = FALSE, eps = .Machine$double.eps^0.5, maxit = 100, ...)
 {
   nx <- family$names
   if(!all(nx %in% names(x)))
     stop("design construct names mismatch with family names!")
-
+  
   if(is.null(attr(x, "bamlss.engine.setup")))
     x <- bamlss.engine.setup(x, ...)
-
+  
   if(!is.null(start))
     x <- set.starting.values(x, start)
-
+  
   nobs <- nrow(y)
   if(is.data.frame(y)) {
     if(ncol(y) < 2)
       y <- y[[1]]
   }
-
+  
   for(i in names(x)) {
     for(j in seq_along(x[[i]]$smooth.construct)) {
       if(is.null(x[[i]]$smooth.construct[[j]]$grad)) {
@@ -1834,47 +1834,47 @@ opt <- function(x, y, family, start = NULL, verbose = TRUE, digits = 3,
       }
     }
   }
-
+  
   par <- get.all.par(x, list = FALSE, drop = TRUE)
-
+  
   ienv <- NULL
   if(verbose) {
     ienv <- new.env()
     bamlss_log_posterior_iteration <- 1
     assign("bamlss_log_posterior_iteration", bamlss_log_posterior_iteration, envir = ienv)
   }
-
+  
   if(!hessian) {
     opt <- optim(par, fn = log_posterior,
-      gr = if(!is.null(family$score) & gradient) grad_posterior else NULL,
-      x = x, y = y, family = family, method = "BFGS", verbose = verbose,
-      digits = digits, ienv = ienv, control = list(fnscale = -1, reltol = eps, maxit = maxit),
-      hessian = TRUE)
- 
+                 gr = if(!is.null(family$score) & gradient) grad_posterior else NULL,
+                 x = x, y = y, family = family, method = "BFGS", verbose = verbose,
+                 digits = digits, ienv = ienv, control = list(fnscale = -1, reltol = eps, maxit = maxit),
+                 hessian = TRUE)
+    
     if(verbose) {
       cat("\n")
       rm(ienv)
     }
-
+    
     eta <- get.eta.par(opt$par, x)
-
+    
     return(list("parameters" = opt$par, "fitted.values" = eta,
-      "logPost" = opt$value, "logLik" = family$loglik(y, family$map2par(eta)),
-      "nobs" = nobs, "hessian" = opt$hessian, "converged" = opt$convergence < 1))
+                "logPost" = opt$value, "logLik" = family$loglik(y, family$map2par(eta)),
+                "nobs" = nobs, "hessian" = opt$hessian, "converged" = opt$convergence < 1))
   } else {
     fn <- if(is.null(family$p2d)) {
       log_posterior
     } else function(par, ...) { sum(family$p2d(par, log = TRUE), na.rm = TRUE) }
     opt <- optimHess(par, fn = fn,
-      gr = if(!is.null(family$score) & gradient & is.null(family$p2d)) grad_posterior else NULL,
-      x = x, y = y, family = family, verbose = verbose, digits = digits, ienv = ienv,
-      control = list(fnscale = -1, reltol = eps, maxit = maxit))
-
+                     gr = if(!is.null(family$score) & gradient & is.null(family$p2d)) grad_posterior else NULL,
+                     x = x, y = y, family = family, verbose = verbose, digits = digits, ienv = ienv,
+                     control = list(fnscale = -1, reltol = eps, maxit = maxit))
+    
     if(verbose) {
       cat("\n")
       rm(ienv)
     }
-
+    
     return(opt)
   }
 }
@@ -1887,8 +1887,8 @@ xbin.fun <- function(ind, weights, e, xweights, xrres, oind, uind = NULL)
     stop("ff support stops here!")
   } else {
     .Call("xbin_fun", as.integer(ind), as.numeric(weights), 
-      as.numeric(e), as.numeric(xweights), as.numeric(xrres),
-      as.integer(oind))
+          as.numeric(e), as.numeric(xweights), as.numeric(xrres),
+          as.integer(oind))
   }
   invisible(NULL)
 }
@@ -2054,62 +2054,62 @@ boost <- function(x, y, family,
 {
   ## FIXME: hard coded.
   weights <- offset <- NULL
-
+  
   nx <- family$names
   if(!all(nx %in% names(x)))
     stop("parameter names mismatch with family names!")
-
+  
   if(!is.null(mstop))
     maxit <- mstop
-
+  
   if(!is.null(nback)) {
     if(is.null(maxit))
       maxit <- 10000
   }
-
+  
   if(is.null(maxit))
     stop("please set either argument 'maxit' or 'mstop'!")
-
+  
   if(is.null(attr(x, "bamlss.engine.setup")))
     x <- bamlss.engine.setup(x, df = df, ...)
-
+  
   np <- length(nx)
   nobs <- nrow(y)
   if(is.data.frame(y)) {
     if(ncol(y) < 2)
       y <- y[[1]]
   }
-
+  
   ## Setup boosting structure, i.e, all parametric
   ## terms get an entry in $smooth.construct object.
   ## Intercepts are initalized.
   x <- boost.transform(x = x, y = y, df = NULL, family = family,
     maxit = maxit, eps = eps, initialize = initialize, ...)
-
+  
   ## Create a list() that saves the states for
   ## all parameters and model terms.
   states <- make.state.list(x)
-
+  
   ## Matrix of all parameters.
   parm <- make.par.list(x, iter = maxit)
-
+  
   ## Term selector help vectors.
   select <- rep(NA, length = length(nx))
   names(select) <- nx
   loglik <- select
-
+  
   ## Save rss in list().
   rss <- make.state.list(x, type = 2)
-
+  
   ## Extract actual predictor.
   eta <- get.eta(x)
-
+  
   ## Print stuff.
   ia <- if(flush) interactive() else FALSE
-
+  
   ## Env for C.
   rho <- new.env()
-
+  
   ## Start boosting.
   eps0 <- 1; iter <- if(initialize) 2 else 1
   save.ll <- NULL
@@ -2117,14 +2117,14 @@ boost <- function(x, y, family,
   ptm <- proc.time()
   while(iter <= maxit) {
     eta0 <- eta
-
+    
     ## Cycle through all parameters
     for(i in nx) {
       peta <- family$map2par(eta)
-
+      
       ## Actual gradient.
       grad <- process.derivs(family$score[[i]](y, peta, id = i), is.weight = FALSE)
-
+      
       ## Fit to gradient.
       for(j in names(x[[i]]$smooth.construct)) {
         ## Get updated parameters.
@@ -2133,51 +2133,46 @@ boost <- function(x, y, family,
         } else {
           x[[i]]$smooth.construct[[j]][["boost.fit"]](x[[i]]$smooth.construct[[j]], grad, nu, rho)
         }
-
+        
         ## Get rss.
         rss[[i]][j] <- states[[i]][[j]]$rss
       }
-
+      
       ## Which one is best?
       select[i] <- which.min(rss[[i]])
-
+      
       ## Compute likelihood contribution.
       eta[[i]] <- eta[[i]] + fitted(states[[i]][[select[i]]])
       llf <- family$loglik(y, family$map2par(eta))
       loglik[i] <- -1 * (ll - llf)
-
-      if(loglik[i] > 40000) {
-        print(as.character(c(ll, llf)))
-        stop()
-      }
-
+      
       eta[[i]] <- eta0[[i]]
     }
-
+    
     i <- which.max(loglik)
-
+    
     ## Which term to update.
     take <- c(nx[i], names(rss[[i]])[select[i]])
-
+    
     ## Update selected base learner.
     eta[[take[1]]] <- eta[[take[1]]] + states[[take[1]]][[take[2]]]$fitted.values
-
+    
     ## Write to x.
     x[[take[1]]]$smooth.construct[[take[2]]]$state <- increase(x[[take[1]]]$smooth.construct[[take[2]]]$state, states[[take[1]]][[take[2]]])
     x[[take[1]]]$smooth.construct[[take[2]]]$selected[iter] <- 1
     x[[take[1]]]$smooth.construct[[take[2]]]$loglik[iter] <- loglik[i]
-
+    
     ## Save parameters.
     parm[[take[1]]][[take[2]]][iter, ] <- get.par(states[[take[1]]][[take[2]]]$parameters, "b")
     eps0 <- do.call("cbind", eta)
     eps0 <- mean(abs((eps0 - do.call("cbind", eta0)) / eps0), na.rm = TRUE)
     if(is.na(eps0) | !is.finite(eps0)) eps0 <- eps + 1
-
+    
     peta <- family$map2par(eta)
     ll <- family$loglik(y, peta)
-
+    
     save.ll <- c(save.ll, ll)
-
+    
     if(verbose) {
       cat(if(ia) "\r" else "\n")
       vtxt <- paste(
@@ -2185,12 +2180,12 @@ boost <- function(x, y, family,
         " eps ", fmt(eps0, width = 6, digits = digits + 2),
         " iteration ", formatC(iter, width = nchar(maxit)), sep = "")
       cat(vtxt)
-
+      
       if(.Platform$OS.type != "unix" & ia) flush.console()
     }
-
+    
     iter <- iter + 1
-
+    
     if(!is.null(nback)) {
       if(iter > nback) {
         dll <- abs(diff(tail(save.ll, nback)))
@@ -2201,9 +2196,9 @@ boost <- function(x, y, family,
       }
     }
   }
-
+  
   elapsed <- c(proc.time() - ptm)[3]
-
+  
   if(verbose) {
     cat("\n")
     et <- if(elapsed > 60) {
@@ -2211,11 +2206,11 @@ boost <- function(x, y, family,
     } else paste(formatC(format(round(elapsed, 2), nsmall = 2), width = 5), "sec", sep = "")
     cat("\n elapsed time: ", et, "\n", sep = "")
   }
-
+  
   bsum <- make.boost.summary(x, if(is.null(nback)) maxit else (iter - 1), save.ll)
   if(plot)
     plot.boost.summary(bsum)
-
+  
   return(list("parameters" = parm2mat(parm, if(is.null(nback)) maxit else (iter - 1)),
     "fitted.values" = get.eta(x), "nobs" = nobs, "boost.summary" = bsum, "runtime" = elapsed))
 }
@@ -2228,16 +2223,18 @@ boost.transform <- function(x, y, df = NULL, family,
 {
   np <- length(x)
   nx <- names(x)
-
+  
   ## Initialize select indicator and intercepts.
   for(j in 1:np) {
     for(sj in seq_along(x[[nx[j]]]$smooth.construct)) {
       if(!is.null(df))
         x[[nx[j]]]$smooth.construct[[sj]] <- assign.df(x[[nx[j]]]$smooth.construct[[sj]], df)
-      if(!x[[nx[j]]]$smooth.construct[[sj]]$fxsp & !x[[nx[j]]]$smooth.construct[[sj]]$fixed) {
-        x[[nx[j]]]$smooth.construct[[sj]]$old.optimize <- x[[nx[j]]]$smooth.construct[[sj]]$state$do.optim
-        x[[nx[j]]]$smooth.construct[[sj]]$state$do.optim <- FALSE
-        x[[nx[j]]]$smooth.construct[[sj]]$do.optim <- FALSE
+      if(!is.null(x[[nx[j]]]$smooth.construct[[sj]]$fxsp)) {
+        if(!x[[nx[j]]]$smooth.construct[[sj]]$fxsp & !x[[nx[j]]]$smooth.construct[[sj]]$fixed) {
+          x[[nx[j]]]$smooth.construct[[sj]]$old.optimize <- x[[nx[j]]]$smooth.construct[[sj]]$state$do.optim
+          x[[nx[j]]]$smooth.construct[[sj]]$state$do.optim <- FALSE
+          x[[nx[j]]]$smooth.construct[[sj]]$do.optim <- FALSE
+        }
       }
     }
     if(has_pterms(x[[nx[j]]]$terms)) {
@@ -2278,31 +2275,33 @@ boost.transform <- function(x, y, df = NULL, family,
       x[[nx[j]]]$smooth.construct <- c(model.matrix, x[[nx[j]]]$smooth.construct)
     }
   }
-
+  
   ## Save more info.
   for(j in 1:np) {
     for(sj in seq_along(x[[nx[j]]]$smooth.construct)) {
+      if(!inherits(x[[nx[j]]]$smooth.construct[[sj]], "nnet.smooth")) {
+        x[[nx[j]]]$smooth.construct[[sj]]$state$edf <- 0
+        nc <- ncol(x[[nx[j]]]$smooth.construct[[sj]]$X)
+        nr <- nrow(x[[nx[j]]]$smooth.construct[[sj]]$X)
+        x[[nx[j]]]$smooth.construct[[sj]]$XWX <- matrix(0, nc, nc)
+        x[[nx[j]]]$smooth.construct[[sj]]$XW <- matrix(0, nc, nr)
+      }
       x[[nx[j]]]$smooth.construct[[sj]]$selected <- rep(0, length = maxit)
       x[[nx[j]]]$smooth.construct[[sj]]$loglik <- rep(0, length = maxit)
-      x[[nx[j]]]$smooth.construct[[sj]]$state$edf <- 0
       x[[nx[j]]]$smooth.construct[[sj]]$state$rss <- 0
-      nc <- ncol(x[[nx[j]]]$smooth.construct[[sj]]$X)
-      nr <- nrow(x[[nx[j]]]$smooth.construct[[sj]]$X)
-      x[[nx[j]]]$smooth.construct[[sj]]$XWX <- matrix(0, nc, nc)
-      x[[nx[j]]]$smooth.construct[[sj]]$XW <- matrix(0, nc, nr)
       if(!is.null(x[[nx[j]]]$smooth.construct[[sj]]$S))
         x[[nx[j]]]$smooth.construct[[sj]]$penaltyFunction <- as.integer(sapply(x[[nx[j]]]$smooth.construct[[sj]]$S, is.function))
       else
         x[[nx[j]]]$smooth.construct[[sj]]$penaltyFunction <- 0L
     }
   }
-
+  
   if(initialize) {
     eta <- get.eta(x)
     eta <- init.eta(eta, y, family, nobs)
     nobs <- length(eta[[1]])
     start <- unlist(lapply(eta, mean, na.rm = TRUE))
-
+    
     objfun <- function(par) {
       eta <- list()
       for(i in seq_along(nx))
@@ -2310,7 +2309,7 @@ boost.transform <- function(x, y, df = NULL, family,
       ll <- family$loglik(y, family$map2par(eta))
       return(ll)
     }
-
+    
     gradfun <- function(par) {
       eta <- list()
       for(i in seq_along(nx))
@@ -2323,9 +2322,9 @@ boost.transform <- function(x, y, df = NULL, family,
       }
       return(grad)
     }
-
+    
     opt <- optim(start, fn = objfun, gr = gradfun, method = "BFGS", control = list(fnscale = -1))
-
+    
     for(i in nx) {
       if(!is.null(x[[i]]$smooth.construct[["(Intercept)"]])) {
         x[[i]]$smooth.construct[["(Intercept)"]]$state$parameters[1] <- opt$par[i]
@@ -2333,7 +2332,7 @@ boost.transform <- function(x, y, df = NULL, family,
       }
     }
   }
-
+  
   return(x)
 }
 
@@ -2374,7 +2373,11 @@ make.par.list <- function(x, iter)
     rval <- list()
     if(!is.null(x$smooth.construct)) {
       for(j in names(x$smooth.construct)) {
-        rval[[j]] <- matrix(0, nrow = iter, ncol = ncol(x$smooth.construct[[j]]$X))
+        rval[[j]] <- if(is.null(x$smooth.construct[[j]]$special.npar)) {
+          matrix(0, nrow = iter, ncol = ncol(x$smooth.construct[[j]]$X))
+        } else {
+          matrix(0, nrow = iter, ncol = x$smooth.construct[[j]]$special.npar)
+        }
         colnames(rval[[j]]) <- names(get.par(x$smooth.construct[[j]]$state$parameters, "b"))
         rval[[j]][1, ] <- get.par(x$smooth.construct[[j]]$state$parameters, "b")
         if(!is.null(x$smooth.construct[[j]]$is.model.matrix))
@@ -2508,10 +2511,10 @@ boost_iwls <- function(x, hess, resids, nu)
   ## Initial parameters and fit.
   g0 <- get.par(x$state$parameters, "b")
   fit0 <- fitted(x$state)
-
+  
   ## Compute reduced residuals.
   xbin.fun(x$binning$sorted.index, hess, resids, x$weights, x$rres, x$binning$order)
-
+  
   ## Compute mean and precision.
   XWX <- do.XWX(x$X, 1 / x$weights, x$sparse.setup$matrix)
   if(x$fixed) {
@@ -2523,23 +2526,23 @@ boost_iwls <- function(x, hess, resids, nu)
       S <- S + 1 / tau2[j] * x$S[[j]]
     P <- matrix_inv(XWX + S, index = x$sparse.setup)
   }
-
+  
   ## New parameters.
   g <- nu * drop(P %*% crossprod(x$X, x$rres))
-
+  
   ## Finalize.
   x$state$parameters <- set.par(x$state$parameters, g, "b")
   x$state$fitted.values <- x$fit.fun(x$X, get.state(x, "b"))
-
+  
   ## Find edf.
   xbin.fun(x$binning$sorted.index, hess, resids + fit0 + fitted(x$state), x$weights, x$rres, x$binning$order)
-
+  
   XWX <- do.XWX(x$X, 1 / x$weights, x$sparse.setup$matrix)
   if(x$fixed) {
     P <- matrix_inv(XWX, index = x$sparse.setup)
   } else {
     g0 <- g0 + g
-
+    
     objfun <- function(tau2) {
       S <- 0
       for(j in seq_along(x$S))
@@ -2548,32 +2551,32 @@ boost_iwls <- function(x, hess, resids, nu)
       g1 <- drop(P %*% crossprod(x$X, x$rres))
       sum((g1 - g0)^2)
     }
-
+    
     if(length(get.state(x, "tau2")) < 2) {
       tau2 <- optimize(objfun, interval = x$state$interval)$minimum
     } else {
       i <- grep("tau2", names(x$lower))
       tau2 <- if(!is.null(x$state$true.tau2)) x$state$true.tau2 else get.state(x, "tau2")
       opt <- try(optim(tau2, fn = objfun, method = "L-BFGS-B",
-        lower = x$lower[i], upper = x$upper[i]), silent = TRUE)
+                       lower = x$lower[i], upper = x$upper[i]), silent = TRUE)
       if(!inherits(opt, "try-error"))
         tau2 <- opt$par
     }
     if(inherits(tau2, "try-error"))
       stop(paste("problem in finding optimum smoothing parameter for term ", x$label, "!", sep = ""))
-
+    
     attr(x$state$parameters, "true.tau2") <- tau2
-
+    
     S <- 0
     for(j in seq_along(x$S))
       S <- S + 1 / tau2[j] * x$S[[j]]
     P <- matrix_inv(XWX + S, index = x$sparse.setup)
   }
-
+  
   ## Assign degrees of freedom.
   x$state$edf <- sum_diag(XWX %*% P)
   attr(x$state$parameters, "edf") <- x$state$edf
-
+  
   return(x$state)
 }
 
@@ -2583,7 +2586,7 @@ boost_fit <- function(x, y, nu)
 {
   ## Compute reduced residuals.
   xbin.fun(x$binning$sorted.index, rep(1, length = length(y)), y, x$weights, x$rres, x$binning$order)
-
+  
   ## Compute mean and precision.
   XWX <- do.XWX(x$X, 1 / x$weights, x$sparse.setup$matrix)
   if(x$fixed) {
@@ -2595,15 +2598,15 @@ boost_fit <- function(x, y, nu)
       S <- S + 1 / tau2[j] * x$S[[j]]
     P <- matrix_inv(XWX + S, index = x$sparse.setup)
   }
-
+  
   ## New parameters.
   g <- nu * drop(P %*% crossprod(x$X, x$rres))
-
+  
   ## Finalize.
   x$state$parameters <- set.par(x$state$parameters, g, "b")
   x$state$fitted.values <- x$fit.fun(x$X, get.state(x, "b"))
   x$state$rss <- sum((x$state$fitted.values - y)^2)
-
+  
   return(x$state)
 }
 
@@ -2615,8 +2618,10 @@ increase <- function(state0, state1)
   state0$fitted.values <- fitted(state0) + fitted(state1)
   state0$parameters <- set.par(state0$parameters, g, "b")
   state0$edf <- state1$edf
+  state0$parameters <- set.par(state0$parameters, get.par(state1$parameters, "tau2"), "tau2")
   attr(state0$parameters, "true.tau2") <- attr(state1$parameters, "true.tau2")
   attr(state0$parameters, "edf") <- attr(state1$parameters, "edf")
+  state0$special <- state1$special
   state0
 }
 
@@ -2647,7 +2652,7 @@ make.boost.summary <- function(x, mstop, save.ic)
   colnames(ll.contrib) <- labels
   names(bsum) <- nx
   bsum <- list("summary" = bsum, "mstop" = mstop,
-    "ic" = save.ic[1:mstop], "loglik" = ll.contrib)
+               "ic" = save.ic[1:mstop], "loglik" = ll.contrib)
   class(bsum) <- "boost.summary"
   return(bsum)
 }
@@ -2663,8 +2668,8 @@ boost.summary <- function(object, ...)
 
 ## Smallish print function for boost summaries.
 print.boost.summary <- function(x, summary = TRUE, plot = TRUE,
-  which = c("loglik", "loglik.contrib"), intercept = TRUE,
-  spar = TRUE, ...)
+                                which = c("loglik", "loglik.contrib"), intercept = TRUE,
+                                spar = TRUE, ...)
 {
   if(inherits(x, "bamlss"))
     x <- x$model.stats$optimizer$boost.summary
@@ -2683,7 +2688,7 @@ print.boost.summary <- function(x, summary = TRUE, plot = TRUE,
     }
     cat("\n")
   }
-
+  
   if(plot) {
     if(!is.character(which)) {
       which <- c("loglik", "loglik.contrib", "parameters")[as.integer(which)]
@@ -2691,13 +2696,13 @@ print.boost.summary <- function(x, summary = TRUE, plot = TRUE,
       which <- tolower(which)
       which <- match.arg(which, several.ok = TRUE)
     }
-
+    
     if(spar) {
       op <- par(no.readonly = TRUE)
       on.exit(par(op))
       par(mfrow = c(1, length(which)))
     }
-
+    
     for(w in which) {
       if(w == "loglik") {
         if(spar)
@@ -2716,14 +2721,14 @@ print.boost.summary <- function(x, summary = TRUE, plot = TRUE,
         xn <- sapply(strsplit(colnames(x$loglik), ".", fixed = TRUE), function(x) { x[length(x)] })
         cols <- rainbow_hcl(length(unique(xn)))
         matplot(x$loglik, type = "l", lty = 1,
-          xlab = "Iteration", ylab = "LogLik contribution", col = cols[as.factor(xn)], ...)
+                xlab = "Iteration", ylab = "LogLik contribution", col = cols[as.factor(xn)], ...)
         abline(v = x$mstop, lwd = 3, col = "lightgray")
         axis(4, at = x$loglik[nrow(x$loglik), ], labels = colnames(x$loglik), las = 1)
         axis(3, at = x$mstop, labels = paste("mstop =", x$mstop))
       }
     }
   }
-
+  
   return(invisible(x))
 }
 
@@ -2734,7 +2739,7 @@ plot.boost.summary <- function(x, ...)
 }
 
 boost.plot <- function(x, which = c("loglik", "loglik.contrib", "parameters"),
-  intercept = TRUE, spar = TRUE, mstop = NULL, name = NULL, labels = NULL, color = NULL, ...)
+                       intercept = TRUE, spar = TRUE, mstop = NULL, name = NULL, labels = NULL, color = NULL, ...)
 {
   if(!is.character(which)) {
     which <- c("loglik", "loglik.contrib", "parameters")[as.integer(which)]
@@ -2742,19 +2747,19 @@ boost.plot <- function(x, which = c("loglik", "loglik.contrib", "parameters"),
     which <- tolower(which)
     which <- match.arg(which, several.ok = TRUE)
   }
-
+  
   if(spar) {
     op <- par(no.readonly = TRUE)
     on.exit(par(op))
     par(mfrow = c(1, length(which)))
   }
-
+  
   if(is.null(mstop))
     mstop <- x$model.stats$optimizer$boost.summary$mstop
   x$model.stats$optimizer$boost.summary$mstop <- mstop
   x$model.stats$optimizer$boost.summary$ic <- x$model.stats$optimizer$boost.summary$ic[1:mstop]
   x$model.stats$optimizer$boost.summary$loglik <- x$model.stats$optimizer$boost.summary$loglik[1:mstop, , drop = FALSE]
-
+  
   for(w in which) {
     if(w %in% c("loglik", "loglik.contrib")) {
       if((w == "loglik") & spar)
@@ -2769,15 +2774,15 @@ boost.plot <- function(x, which = c("loglik", "loglik.contrib", "parameters"),
       if(!is.null(name)) {
         x$parameters <- x$parameters[, grep2(name, colnames(x$parameters), fixed = TRUE), drop = FALSE]
       }
-
+      
       p <- x$parameters[1:mstop, , drop = FALSE]
       if(!intercept)
         p <- p[, -grep("(Intercept)", colnames(p), fixed = TRUE), drop = FALSE]
-
+      
       xn <- sapply(strsplit(colnames(x$parameters), ".", fixed = TRUE), function(x) { x[1] })
       if(length(unique(xn)) < 2)
         xn <- sapply(strsplit(colnames(x$parameters), ".", fixed = TRUE), function(x) { x[3] })
-
+      
       cols <- if(is.null(color)) {
         if(length(unique(xn)) < 2) "black" else rainbow_hcl(length(unique(xn)))
       } else {
@@ -2787,7 +2792,7 @@ boost.plot <- function(x, which = c("loglik", "loglik.contrib", "parameters"),
           rep(color, length.out = length(unique(xn)))
         }
       }
-
+      
       if(is.null(labels)) {
         labs <- colnames(x$parameters)
         if(!is.null(name)) {
@@ -2795,9 +2800,9 @@ boost.plot <- function(x, which = c("loglik", "loglik.contrib", "parameters"),
             labs <- gsub(name[j], "", labs, fixed = TRUE)
         }
       } else labs <- rep(labels, length.out = ncol(x$parameters))
-
+      
       matplot(p, type = "l", lty = 1, col = cols[as.factor(xn)], xlab = "Iteration",
-        ylab = "Value", ...)
+              ylab = "Value", ...)
       abline(v = mstop, lwd = 3, col = "lightgray")
       axis(4, at = p[nrow(p), ], labels = labs, las = 1)
       axis(3, at = mstop, labels = paste("mstop =", mstop))
@@ -2849,7 +2854,7 @@ set.starting.values <- function(x, start)
         for(j in seq_along(x[[id]]$smooth.construct)) {
           tl <- x[[id]]$smooth.construct[[j]]$label
           take <- grep(tl <- paste(id, "s", tl, sep = "."),
-            nstart[tns %in% id], fixed = TRUE, value = TRUE)
+                       nstart[tns %in% id], fixed = TRUE, value = TRUE)
           if(x[[id]]$smooth.construct[[j]]$by == "NA") {
             take <- take[!grepl(paste(tl, ":", sep = ""), take, fixed = TRUE)]
           }
@@ -2871,41 +2876,46 @@ set.starting.values <- function(x, start)
       }
     }
   }
-
+  
   return(x)
 }
 
 
 lasso <- function(x, y, start = NULL, adaptive = TRUE,
-  lower = 0.001, upper = 1000,  nlambda = 100, lambda = NULL,
+  lower = 0.001, upper = 1000,  nlambda = 100, lambda = NULL, multiple = FALSE,
   verbose = TRUE, digits = 4, flush = TRUE,
-  nu = NULL, stop.nu = NULL, ridge = .Machine$double.eps^0.25,
+  nu = NULL, stop.nu = NULL, ridge = .Machine$double.eps^0.5,
   zeromodel = NULL, ...)
 {
   method <- list(...)$method
   if(is.null(method))
     method <- 1
-
+  
   if(is.null(attr(x, "bamlss.engine.setup")))
     x <- bamlss.engine.setup(x, update = bfit_iwls, ...)
-
+  
   start2 <- start
-
+  
   lambdas <- if(is.null(lambda)) {
     exp(seq(log(upper), log(lower), length = nlambda))
   } else lambda
 
+  lambdas <- rep(list(lambdas), length = length(x))
+  names(lambdas) <- names(x)
+
+  lambdas <- as.matrix(do.call(if(multiple) "expand.grid" else "cbind", lambdas))
+  
   if(length(verbose) < 2)
     verbose <- c(verbose, FALSE)
-
+  
   ia <- if(flush) interactive() else FALSE
-
+  
   par <- list(); ic <- NULL
-
+  
   ptm <- proc.time()
-
+  
   fuse <- NULL
-
+  
   for(i in names(x)) {
     for(j in names(x[[i]]$smooth.construct)) {
       if(inherits(x[[i]]$smooth.construct[[j]], "lasso.smooth")) {
@@ -2922,14 +2932,14 @@ lasso <- function(x, y, start = NULL, adaptive = TRUE,
       }
     }
   }
-
+  
   fuse <- if(is.null(fuse)) FALSE else any(fuse)
-
+  
   if(!is.null(nu))
     nu <- rep(nu, length.out = 2)
   if(!is.null(stop.nu))
     stop.nu <- rep(stop.nu, length.out = 2)
-
+  
   if(adaptive & fuse) {
     if(verbose[1] & is.null(zeromodel))
       cat("Estimating adaptive weights\n---\n")
@@ -2942,8 +2952,8 @@ lasso <- function(x, y, start = NULL, adaptive = TRUE,
     }
     x <- lasso.transform(x, zeromodel, nobs = nrow(y))
   }
-
-  for(l in seq_along(lambdas)) {
+  
+  for(l in 1:nrow(lambdas)) {
     if(l > 1)
       start <- unlist(par[[l - 1]])
     tau2 <- NULL
@@ -2952,7 +2962,7 @@ lasso <- function(x, y, start = NULL, adaptive = TRUE,
         if(inherits(x[[i]]$smooth.construct[[j]], "lasso.smooth")) {
           tau2 <- get.par(x[[i]]$smooth.construct[[j]]$state$parameters, "tau2")
           nt <- names(tau2)
-          tau2 <- rep(1 / lambdas[l], length.out = length(tau2))
+          tau2 <- rep(1 / lambdas[l, i], length.out = length(tau2))
           names(tau2) <- paste(i, "s", x[[i]]$smooth.construct[[j]]$label, nt, sep = ".")
           if(!is.null(start) & (l > 1)) {
             if(all(names(tau2) %in% names(start))) {
@@ -2966,18 +2976,18 @@ lasso <- function(x, y, start = NULL, adaptive = TRUE,
         }
       }
     }
-
+    
     if((l < 2) & !is.null(start2)) {
       start <- c(start, start2)
       start <- start[!duplicated(names(start))]
     }
-
+    
     if(method == 1) {
       b <- bfit(x = x, y = y, start = start, verbose = verbose[2], nu = nu[2], stop.nu = stop.nu[2], ...)
     } else {
       b <- opt(x = x, y = y, start = start, verbose = verbose[2], ...)
     }
-
+    
     nic <- grep("ic", names(b), value = TRUE, ignore.case = TRUE)
     if(!length(nic)) {
       b$edf <- sum(abs(unlist(b$parameters)) > .Machine$double.eps^0.25)
@@ -2988,30 +2998,30 @@ lasso <- function(x, y, start = NULL, adaptive = TRUE,
     mstats <- c(b$logLik, b$logPost, b[[nic]], b[["edf"]])
     names(mstats) <- c("logLik", "logPost", nic, "edf")
     ic <- rbind(ic, mstats)
-
+    
     if(!is.null(list(...)$track)) {
       plot(ic[, nic] ~ c(1:l), type = "l", xlab = "Iteration", ylab = nic)
     }
-
+    
     if(!is.null(stop.nu)) {
       if(l > stop.nu)
         nu <- NULL
     }
-
+    
     if(verbose[1]) {
       cat(if(ia) "\r" else if(l > 1) "\n" else NULL)
       vtxt <- paste(nic, " ", fmt(b[[nic]], width = 8, digits = digits),
-        " edf ", fmt(mstats["edf"], width = 6, digits = digits),
-        " lambda ", fmt(lambdas[l], width = 6, digits = digits),
-        " iteration ", formatC(l, width = nchar(nlambda)), sep = "")
+                    " edf ", fmt(mstats["edf"], width = 6, digits = digits),
+                    " lambda ", paste(fmt(if(!multiple) lambdas[l, 1] else lambdas[l, ], width = 6, digits = digits), collapse = ","),
+                    " iteration ", formatC(l, width = nchar(nlambda)), sep = "")
       cat(vtxt)
-
+      
       if(.Platform$OS.type != "unix" & ia) flush.console()
     }
   }
-
+  
   elapsed <- c(proc.time() - ptm)[3]
-
+  
   if(verbose[1]) {
     et <- if(elapsed > 60) {
       paste(formatC(format(round(elapsed / 60, 2), nsmall = 2), width = 5), "min", sep = "")
@@ -3019,10 +3029,12 @@ lasso <- function(x, y, start = NULL, adaptive = TRUE,
     cat("\nelapsed time: ", et, "\n", sep = "")
   }
 
+  colnames(lambdas) <- paste("lambda", names(x), sep = ".")
   ic <- cbind(ic, "lambda" = lambdas)
   rownames(ic) <- NULL
+  attr(ic, "multiple") <- multiple
   class(ic) <- c("lasso.stats", "matrix")
-
+  
   list("parameters" = do.call("rbind", par), "lasso.stats" = ic, "nobs" = nrow(y))
 }
 
@@ -3083,7 +3095,7 @@ lasso.transform <- function(x, zeromodel, nobs = NULL, ...)
       }
     }
   }
-
+  
   if(bframe) {
     return(list("x" = x))
   } else {
@@ -3095,8 +3107,8 @@ print.lasso.stats <- function(x, digits = 4, ...)
 {
   ls <- attr(lasso.stop(x), "stats")
   ic <- grep("ic", names(ls), ignore.case = TRUE, value = TRUE)
-  cat(ic, "=", ls[ic], "-> at lambda =", ls["lambda"], "\n")
-  ls <- ls[!(names(ls) %in% c("lambda", ic))]
+  cat(ic, "=", ls[ic], "-> at lambda =", ls[grep("lambda", names(ls))], "\n")
+  ls <- ls[!grepl("lambda", names(ls))]
   ls <- paste(names(ls), "=", round(ls, digits = digits), collapse = " ")
   cat(ls, "\n---\n")
   return(invisible(NULL))
@@ -3113,7 +3125,7 @@ lasso.coef <- function(x, ...) {
       if(inherits(x$x[[i]]$smooth.construct[[j]], "lasso.smooth")) {
         for(jj in names(x$x[[i]]$smooth.construct[[j]]$lasso$trans)) {
           cid <- paste(i, ".s.", x$x[[i]]$smooth.construct[[j]]$label, ".",
-            x$x[[i]]$smooth.construct[[j]]$lasso$trans[[jj]]$colnames, sep = "")
+                       x$x[[i]]$smooth.construct[[j]]$lasso$trans[[jj]]$colnames, sep = "")
           if(is.null(x$x[[i]]$smooth.construct[[j]]$lasso$trans[[jj]]$blockscale)) {
             if(is.null(dim(cx))) {
               cx[cid] <- cx[cid] / x$x[[i]]$smooth.construct[[j]]$lasso$trans[[jj]]$scale
@@ -3137,10 +3149,13 @@ lasso.coef <- function(x, ...) {
 }
 
 
-lasso.plot <- function(x, which = c("criterion", "parameters"), spar = TRUE, name = NULL,
+lasso.plot <- function(x, which = c("criterion", "parameters"), spar = TRUE, model = NULL, name = NULL,
   mstop = NULL, retrans = FALSE, color = NULL, show.lambda = TRUE, labels = NULL,
   digits = 2, ...)
 {
+  if(is.null(model))
+    model <- x$family$names
+  model <- x$family$names[pmatch(model, x$family$names)]
   if(!is.character(which)) {
     which <- c("criterion", "parameters")[as.integer(which)]
   } else {
@@ -3151,89 +3166,181 @@ lasso.plot <- function(x, which = c("criterion", "parameters"), spar = TRUE, nam
     mstop <- 1:nrow(x$parameters)
   if(retrans)
     x$parameters <- lasso.coef(x, mstop = mstop)
-  par <- x$parameters[mstop, , drop = FALSE]
-  npar <- colnames(par)
+  npar <- colnames(x$parameters)
   for(j in c("Intercept", ".edf", ".lambda", ".tau"))
     npar <- npar[!grepl(j, npar, fixed = TRUE)]
   x$parameters <- x$parameters[mstop, npar, drop = FALSE]
   ic <- x$model.stats$optimizer$lasso.stats
-  log_lambda <- log(ic[, "lambda"])
+  multiple <- attr(ic, "multiple")
+  log_lambda <- log(ic[, grep("lambda", colnames(ic))])
   nic <- grep("ic", colnames(ic), value = TRUE, ignore.case = TRUE)
-
+  
   if(spar) {
     op <- par(no.readonly = TRUE)
     on.exit(par(op))
-    par(mfrow = c(1, length(which)), mar = c(5.1, 5.1, 4.1, 1.1))
+    n <- if("criterion" %in% which) {
+      if(multiple) length(model) else 1
+    } else 0
+    if("parameters" %in% which)
+      n <- n + length(model)
+    par(mfrow = n2mfrow(n), mar = c(5.1, 5.1, 4.1, 1.1))
   }
-
+  
   at <- pretty(1:nrow(ic))
   at[at == 0] <- 1
-
-  fmt2 <- Vectorize(fmt)
-
+  
   if("criterion" %in% which) {
-    plot(ic[mstop, nic], type = "l",
-      xlab = expression(log(lambda)), ylab = nic, axes = FALSE)
-    at <- pretty(mstop)
-    at[at == 0] <- 1
-    axis(1, at = at, labels = fmt2(log_lambda[mstop][at], digits))
-    axis(2)
-    if(show.lambda) {
-      i <- which.min(ic[, nic])
-      abline(v = i, col = "lightgray", lwd = 2, lty = 2)
-      val <- round(ic[i, "lambda"], 4)
-      axis(3, at = i, labels = substitute(paste(lambda, '=', val)))
-    }
-    box()
-  }
-
-  if("parameters" %in% which) {
-    if(spar)
-      par(mar = c(5.1, 5.1, 4.1, 10.1))
-
-    if(!is.null(name)) {
-      x$parameters <- x$parameters[, grep2(name, colnames(x$parameters), fixed = TRUE), drop = FALSE]
-    }
-    xn <- sapply(strsplit(colnames(x$parameters), ".", fixed = TRUE), function(x) { x[1] })
-    if(length(unique(xn)) < 2)
-      xn <- sapply(strsplit(colnames(x$parameters), ".", fixed = TRUE), function(x) { x[3] })
-
-    cols <- if(is.null(color)) {
-      if(length(unique(xn)) < 2) "black" else rainbow_hcl(length(unique(xn)))
+    if(!multiple) {
+      plot(ic[, nic], type = "l",
+        xlab = expression(log(lambda[, 1])), ylab = nic, axes = FALSE)
+      at <- pretty(mstop)
+      at[at == 0] <- 1
+      axis(1, at = at, labels = as.numeric(fmt(log_lambda[, 1][mstop][at], digits)))
+      axis(2)
+      if(show.lambda) {
+        i <- which.min(ic[, nic])
+        abline(v = i, col = "lightgray", lwd = 2, lty = 2)
+        val <- round(ic[i, grep("lambda", colnames(ic))[1]], 4)
+        axis(3, at = i, labels = substitute(paste(lambda, '=', val)))
+      }
+      if(!is.null(main <- list(...)$main))
+        mtext(main, side = 3, line = 2.5, cex = 1.2, font = 2)
+      box()
     } else {
-      if(is.function(color)) {
-        color(length(unique(xn)))
-      } else {
-        rep(color, length.out = length(unique(xn)))
+      main <- list(...)$main
+      if(is.null(main))
+        main <- model
+      main <- rep(main, length.out = length(model))
+      k <- 1
+      for(m in model) {
+        imin <- which.min(ic[, nic])
+        lambda_min <- ic[imin, grep("lambda", colnames(ic))]
+        tlambda <- names(lambda_min)
+        tlambda <- tlambda[!grepl(m, tlambda)]
+        take <- NULL
+        for(j in tlambda)
+          take <- cbind(take, ic[, j] == lambda_min[j])
+        take <- apply(take, 1, all)
+        tic <- ic[take, nic]
+        plot(tic, type = "l", xlab = expression(log(lambda[, 1])), ylab = nic, axes = FALSE)
+        at <- pretty(1:length(tic))
+        at[at == 0] <- 1
+        axis(1, at = at, labels = as.numeric(fmt(log_lambda[take, paste("lambda", m, sep = ".")][at], digits)))
+        axis(2)
+        if(show.lambda) {
+          i <- which.min(tic)
+          abline(v = i, col = "lightgray", lwd = 2, lty = 2)
+          val <- lambda_min[paste("lambda", m, sep = ".")]
+          axis(3, at = i, labels = substitute(paste(lambda, '=', val)))
+        }
+        box()
+        if(!is.expression(main[k])) {
+          if(main[k] != "")
+            mtext(main[k], side = 3, line = 2.5, cex = 1.2, font = 2)
+        } else {
+          mtext(main[k], side = 3, line = 2.5, cex = 1.2, font = 2)
+        }
+        k <- k + 1
       }
     }
-
-    matplot(x$parameters, type = "l", lty = 1, col = cols[as.factor(xn)],
-      xlab = expression(log(lambda)), ylab = expression(beta[j]), axes = FALSE, ...)
-    if(is.null(labels)) {
-      labs <- colnames(x$parameters)
-      if(!is.null(name)) {
-        for(j in seq_along(name))
-          labs <- gsub(name[j], "", labs, fixed = TRUE)
-      }
-    } else labs <- rep(labels, length.out = ncol(x$parameters))
-    axis(4, at = x$parameters[nrow(x$parameters), ],
-      labels = labs, las = 1)
-    at <- pretty(mstop)
-    at[at == 0] <- 1
-    axis(1, at = at, labels = fmt2(log_lambda[mstop][at], digits))
-    axis(2)
-    if(show.lambda) {
-      i <- which.min(ic[, nic])
-      abline(v = i, col = "lightgray", lwd = 2, lty = 2)
-      val <- round(ic[i, "lambda"], 4)
-      axis(3, at = i, labels = substitute(paste(lambda, '=', val)))
-    }
-    box()
   }
+  
+  if("parameters" %in% which) {
+    main <- list(...)$main
+    if(is.null(main))
+      main <- model
+    main <- rep(main, length.out = length(model))
+    imin <- which.min(ic[, nic])
+    lambda_min <- ic[imin, grep("lambda", colnames(ic))]
+    k <- 1
+    for(m in model) {
+      if(spar)
+        par(mar = c(5.1, 5.1, 4.1, 10.1))
 
+      tpar <- x$parameters[, grep(paste(m, ".", sep = ""), colnames(x$parameters), fixed = TRUE), drop = FALSE]
+
+      if(multiple) {
+        tlambda <- names(lambda_min)
+        tlambda <- tlambda[!grepl(m, tlambda)]
+        take <- NULL
+        for(j in tlambda)
+          take <- cbind(take, ic[, j] == lambda_min[j])
+        take <- apply(take, 1, all)
+        tpar <- tpar[take, , drop = FALSE]
+      } else {
+        take <- 1:nrow(tpar)
+      }
+      if(!is.null(name))
+        tpar <- tpar[, grep2(name, colnames(tpar), fixed = TRUE), drop = FALSE]
+      xn <- sapply(strsplit(colnames(tpar), ".", fixed = TRUE), function(x) { x[1] })
+      if(length(unique(xn)) < 2)
+        xn <- sapply(strsplit(colnames(tpar), ".", fixed = TRUE), function(x) { x[3] })
+    
+      cols <- if(is.null(color)) {
+        if(length(unique(xn)) < 2) "black" else rainbow_hcl(length(unique(xn)))
+      } else {
+        if(is.function(color)) {
+          color(length(unique(xn)))
+        } else {
+          rep(color, length.out = length(unique(xn)))
+        }
+      }
+    
+      matplot(tpar, type = "l", lty = 1, col = cols[as.factor(xn)],
+        xlab = expression(log(lambda)), ylab = expression(beta[j]), axes = FALSE)
+      if(is.null(labels)) {
+        labs <- labs0 <- colnames(tpar)
+        plab <- tpar[nrow(tpar), ]
+        o <- order(plab, decreasing = TRUE)
+        labs <- labs[o]
+        plab <- plab[o]
+        rplab <- diff(range(plab))
+        for(i in 1:(length(plab) - 1)) {
+          dp <- abs(plab[i] - plab[i + 1]) / rplab
+          if(dp <= 0.02) {
+            labs[i + 1] <- paste(c(labs[i], labs[i + 1]), collapse = ",")
+            labs[i] <- ""
+          }
+        }
+        labs <- labs[order(o)]
+        if(!is.null(name)) {
+          for(j in seq_along(name))
+            labs <- gsub(name[j], "", labs, fixed = TRUE)
+        }
+      } else labs <- rep(labels, length.out = ncol(tpar))
+      at <- tpar[nrow(tpar), ]
+      at <- at[labs != ""]
+      labs <- labs[labs != ""]
+      axis(4, at = at, labels = labs, las = 1)
+      at <- pretty(1:nrow(tpar))
+      at[at == 0] <- 1
+      axis(1, at = at, labels = as.numeric(fmt(log_lambda[take, paste("lambda", m, sep = ".")][at], digits)))
+      axis(2)
+      if(show.lambda) {
+        i <- which.min(ic[take, nic])
+        abline(v = i, col = "lightgray", lwd = 2, lty = 2)
+        val <- round(lambda_min[paste("lambda", m, sep = ".")], digits)
+        if(multiple) {
+          lval <- parse(text = paste('paste(lambda[', m, '], "=", ', val, ')', sep = ''))
+          axis(3, at = i, labels = lval)
+        } else {
+          axis(3, at = i, labels = substitute(paste(lambda, '=', val)))
+        }
+      }
+      box()
+      if(!is.expression(main[k])) {
+        if(main[k] != "")
+          mtext(main[k], side = 3, line = 2.5, cex = 1.2, font = 2)
+      } else {
+        mtext(main[k], side = 3, line = 2.5, cex = 1.2, font = 2)
+      }
+      k <- k + 1
+    }
+  }
+  
   return(invisible(NULL))
 }
+
 
 lasso.stop <- function(x)
 {

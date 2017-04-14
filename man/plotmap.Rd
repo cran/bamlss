@@ -74,14 +74,7 @@ plotmap(columb.polys, x = a$x, id = a$district,
   pos = "topleft", side.legend = 2, side.ticks = 2,
   col = heat_hcl(5), swap = TRUE, range = c(10, 50),
   lrange = c(0, 60))
-
-\dontrun{## Estimate model.
-xt <- list("polys" = columb.polys)
-b <- bamlss(crime ~ s(district,bs="mrf",xt=xt) + s(income), data = columb)
-
-## Plot effects.
-plot(b, map = columb.polys, pos = "top")
-}}
+}
 
 \keyword{hplot}
 

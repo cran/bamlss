@@ -171,11 +171,11 @@ jm.transform <- function(x, y, data, terms, knots, formula, family,
     }
     ntd <- c(ntd, "dmu")
   }
-  
+
   ## The basic setup.
   if(is.null(attr(x, "bamlss.engine.setup")))
     x <- bamlss.engine.setup(x, ...)
-  
+
   ## Remove intercept from lambda.
   if(!is.null(x$lambda$smooth.construct$model.matrix)) {
     cn <- colnames(x$lambda$smooth.construct$model.matrix$X)
@@ -221,7 +221,7 @@ jm.transform <- function(x, y, data, terms, knots, formula, family,
     x$sigma$smooth.construct$model.matrix$state$parameters[1] <- if(is.null(sigma)) log(sd(y[, "obs"], na.rm = TRUE)) else sigma
     x$sigma$smooth.construct$model.matrix$state$fitted.values <- x$sigma$smooth.construct$model.matrix$X %*% x$sigma$smooth.construct$model.matrix$state$parameters
   }
-
+  
   ## Make fixed effects term the last term in mu.
   if(!is.null(x$mu$smooth.construct$model.matrix) & (length(x$mu$smooth.construct) > 1)) {
     nmu <- names(x$mu$smooth.construct)
@@ -268,7 +268,7 @@ jm.transform <- function(x, y, data, terms, knots, formula, family,
       x[[j]]$smooth.construct[[sj]] <- sparse_Matrix_setup(x[[j]]$smooth.construct[[sj]], sparse = sparse, take = take)
     }
   }
-
+  
   ## Update prior/grad/hess functions
   for(j in names(x)) {
     for(sj in names(x[[j]]$smooth.construct)) {
@@ -351,15 +351,6 @@ sparse_Matrix_setup <- function(x, sparse = TRUE, force = FALSE, take)
   # sparse setup for (block-)diagonal sampling
   if(!is.null(x$sparse.setup$matrix)) {
     x$sparse.setup[["mu.matrix"]] <- x$sparse.setup$matrix[take, , drop = FALSE]
-    index.coeffs <- lapply(1:nrow(x$sparse.setup[["mu.matrix"]]), function(i){
-      tmp <- x$sparse.setup[["mu.matrix"]][i,]
-      tmp <- tmp[tmp > 0]})
-    x$sparse.setup$coeffs <- index.coeffs[lapply(index.coeffs, length) > 0]
-    if(any(duplicated(unlist(x$sparse.setup$coeffs)))){
-      x$sparse.setup$pattern <- "other"
-    } else {
-      x$sparse.setup$pattern <- if(all(lengths(x$sparse.setup$coeffs) == 1)) "diagonal" else "blocks" 
-    }
   }
   return(x)
 }
@@ -520,8 +511,6 @@ jm.mode <- function(x, y, start = NULL, weights = NULL, offset = NULL,
   eps <- rep(eps, length.out = 2)
   if(length(maxit) < 2)
     maxit <- c(maxit, 1)
-  
-  intercept_paths <- NULL
   
   ## Start the backfitting algorithm.
   eps0 <- eps0_surv <- eps0_long <- eps0_alpha <- eps0_dalpha <- eps[1] + 1
@@ -699,20 +688,6 @@ jm.mode <- function(x, y, start = NULL, weights = NULL, offset = NULL,
     eps0 <- mean(c(eps0_surv, eps0_long, eps0_alpha))
     if(is.na(eps0) | !is.finite(eps0)) eps0 <- eps[1] + 1
     
-    itcpts <- nitcpts <- NULL
-    for(i in c("alpha", "gamma", "mu")) {
-      if(!is.null(x[[i]]$smooth.construct$model.matrix)) {
-        if(any(grepl("intercept", colnames(x[[i]]$smooth.construct$model.matrix$X), ignore.case = TRUE))) {
-          itcpts <- c(itcpts, x[[i]]$smooth.construct$model.matrix$state$parameters[1])
-          nitcpts <- c(nitcpts, i)
-        }
-      }
-    }
-    if(!is.null(itcpts)) {
-      names(itcpts) <- nitcpts
-      intercept_paths <- rbind(intercept_paths, itcpts)
-    }
-    
     eeta <- exp(eta_timegrid)
     int0 <- width * (0.5 * (eeta[, 1] + eeta[, sub]) + apply(eeta[, 2:(sub - 1)], 1, sum))
     logLik <- sum((eta_timegrid[,ncol(eta_timegrid)] + eta$gamma) * status, na.rm = TRUE) -
@@ -766,8 +741,7 @@ jm.mode <- function(x, y, start = NULL, weights = NULL, offset = NULL,
   
   return(list("fitted.values" = eta, "parameters" = get.all.par(x),
               "logLik" = logLik, "logPost" = logPost, "hessian" = get.hessian(x),
-              "converged" = iter < maxit[1], "time" = elapsed, "intercept_paths" = intercept_paths,
-              "eta_timegrid" = eta_timegrid))
+              "converged" = iter < maxit[1], "time" = elapsed))
 }
 
 
@@ -2033,7 +2007,7 @@ propose_jm_slice <- function(x, y,
   
   ## Sample variance parameter.
   if(!x$fixed & is.null(x$sp) & length(x$S)) {
-    if(length(x$S) < 2) {
+    if((length(x$S) < 2) & (attr(x$prior, "var_prior") == "ig")) {
       g <- get.par(x$state$parameters, "b")
       a <- x$rank / 2 + x$a
       b <- 0.5 * crossprod(g, x$S[[1]]) %*% g + x$b
@@ -2127,7 +2101,7 @@ propose_jm_lambda <- function(x, y,
   
   ## Sample variance parameter.
   if(!x$fixed & is.null(x$sp) & length(x$S)) {
-    if(length(x$S) < 2) {
+    if((length(x$S) < 2) & (attr(x$prior, "var_prior") == "ig")) {
       g <- get.par(x$state$parameters, "b")
       a <- x$rank / 2 + x$a
       b <- 0.5 * crossprod(g, x$S[[1]]) %*% g + x$b
@@ -2250,7 +2224,7 @@ propose_jm_mu_simple <- function(x, y,
   
   ## Sample variance parameter.
   if(!x$fixed & is.null(x$sp) & length(x$S)) {
-    if(length(x$S) < 2) {
+    if((length(x$S) < 2) & (attr(x$prior, "var_prior") == "ig")) {
       g <- get.par(x$state$parameters, "b")
       a <- x$rank / 2 + x$a
       b <- 0.5 * crossprod(g, x$S[[1]]) %*% g + x$b
@@ -2307,7 +2281,7 @@ propose_jm_mu_Matrix <- function(x, y,
   xhess <- xhess0 - x$hess(score = NULL, x$state$parameters, full = FALSE)
   
   ## Compute the inverse of the hessian.
-  Sigma <- matrix_inv(-1 * xhess)
+  Sigma <- matrix_inv(-1 * xhess, index = x$sparse.setup)
   
   ## Save old coefficients.
   g0 <- get.state(x, "b")
@@ -2315,18 +2289,12 @@ propose_jm_mu_Matrix <- function(x, y,
   ## Get new position.
   mu <- drop(g0 + Sigma %*% xgrad)
   Sigma <- as.matrix(Sigma)
-
+  
   ## Sample new parameters using blockdiagonal structure.
-  if(length(x$sparse.setup$coeffs) < 1){
-    stop("Please check your longitudinal time variable. 
-          In order to use the sparse setup in random slopes, no 0s are allowed in
-          the longitudinal time variable. See ?jm_bamlss for further information.")
-  }
-
-  if(x$sparse.setup$pattern != "other"){
-    lg <- lapply(1:length(x$sparse.setup$coeffs), function(i){
-      tmp <- x$sparse.setup$coeff[[i]]
-      if(x$sparse.setup$pattern == "diagonal"){
+  if(!is.null(x$sparse.setup$block.index)){
+    lg <- lapply(1:length(x$sparse.setup$block.index), function(i){
+      tmp <- x$sparse.setup$block.index[[i]]
+      if(x$sparse.setup$is.diagonal){
         drop(rnorm(n = 1, mean = mu[tmp], sd = sqrt(Sigma[tmp,tmp])))
       } else{
         if(length(tmp) == 1){
@@ -2351,10 +2319,10 @@ propose_jm_mu_Matrix <- function(x, y,
   
   ## Compute log priors using blockdiagonal structure.
   p2 <- x$prior(x$state$parameters)
-  if(x$sparse.setup$pattern != "other"){
-    lqbetaprop <- lapply(1:length(x$sparse.setup$coeffs), function(i){
-      tmp <- x$sparse.setup$coeff[[i]]
-      if(x$sparse.setup$pattern == "diagonal"){
+  if(!is.null(x$sparse.setup$block.index)){
+    lqbetaprop <- lapply(1:length(x$sparse.setup$block.index), function(i){
+      tmp <- x$sparse.setup$block.index[[i]]
+      if(x$sparse.setup$is.diagonal){
         drop(dnorm(g[tmp], mean = mu[tmp], sd = sqrt(Sigma[tmp,tmp]), log = TRUE))
       } else{
         if(length(tmp) == 1){
@@ -2402,14 +2370,14 @@ propose_jm_mu_Matrix <- function(x, y,
   xhess0 <- -1 * XWX - int$hess
   xhess <- xhess0 - x$hess(score = NULL, x$state$parameters, full = FALSE)
   
-  Sigma2 <- matrix_inv(-1 * xhess)
+  Sigma2 <- matrix_inv(-1 * xhess, index = x$sparse.setup)
   mu2 <- drop(g + nu * Sigma2 %*% xgrad)
   Sigma2 <- as.matrix(Sigma2) 
   
-  if(x$sparse.setup$pattern != "other"){
-    lqbeta <- lapply(1:length(x$sparse.setup$coeffs), function(i){
-      tmp <- x$sparse.setup$coeff[[i]]
-      if(x$sparse.setup$pattern == "diagonal"){
+  if(!is.null(x$sparse.setup$block.index)){
+    lqbeta <- lapply(1:length(x$sparse.setup$block.index), function(i){
+      tmp <- x$sparse.setup$block.index[[i]]
+      if(x$sparse.setup$is.diagonal){
         drop(dnorm(g0[tmp], mean = mu2[tmp], sd = sqrt(Sigma2[tmp,tmp]), log = TRUE))
       } else{
         if(length(tmp) == 1){
@@ -2430,7 +2398,7 @@ propose_jm_mu_Matrix <- function(x, y,
   
   ## Sample variance parameter.
   if(!x$fixed & is.null(x$sp) & length(x$S)) {
-    if(length(x$S) < 2) {
+    if((length(x$S) < 2) & (attr(x$prior, "var_prior") == "ig")) {
       g <- get.par(x$state$parameters, "b")
       a <- x$rank / 2 + x$a
       b <- drop(0.5 * crossprod(g, x$S[[1]]) %*% g + x$b)
@@ -2526,7 +2494,7 @@ propose_jm_alpha <- function(x, y,
   
   ## Sample variance parameter.
   if(!x$fixed & is.null(x$sp) & length(x$S)) {
-    if(length(x$S) < 2) {
+    if((length(x$S) < 2) & (attr(x$prior, "var_prior") == "ig")) {
       g <- get.par(x$state$parameters, "b")
       a <- x$rank / 2 + x$a
       b <- 0.5 * crossprod(g, x$S[[1]]) %*% g + x$b
@@ -2621,7 +2589,7 @@ propose_jm_dalpha <- function(x, y,
   
   ## Sample variance parameter.
   if(!x$fixed & is.null(x$sp) & length(x$S)) {
-    if(length(x$S) < 2) {
+    if((length(x$S) < 2) & (attr(x$prior, "var_prior") == "ig")) {
       g <- get.par(x$state$parameters, "b")
       a <- x$rank / 2 + x$a
       b <- 0.5 * crossprod(g, x$S[[1]]) %*% g + x$b
@@ -2713,7 +2681,7 @@ propose_jm_gamma <- function(x, y,
   
   ## Sample variance parameter.
   if(!x$fixed & is.null(x$sp) & length(x$S)) {
-    if(length(x$S) < 2) {
+    if((length(x$S) < 2) & (attr(x$prior, "var_prior") == "ig")) {
       g <- get.par(x$state$parameters, "b")
       a <- x$rank / 2 + x$a
       b <- 0.5 * crossprod(g, x$S[[1]]) %*% g + x$b
@@ -2800,7 +2768,7 @@ propose_jm_sigma <- function(x, y,
   
   ## Sample variance parameter.
   if(!x$fixed & is.null(x$sp) & length(x$S)) {
-    if(length(x$S) < 2) {
+    if((length(x$S) < 2) & (attr(x$prior, "var_prior") == "ig")) {
       g <- get.par(x$state$parameters, "b")
       a <- x$rank / 2 + x$a
       b <- 0.5 * crossprod(g, x$S[[1]]) %*% g + x$b
@@ -3113,7 +3081,7 @@ simJM <- function(nsub = 300, times = seq(0, 120, 1), probmiss = 0.75,
     
     coef <- matrix(rmvnorm(nsub*long_df, sigma = solve(P), method="chol"), ncol = long_df, nrow = nsub)
     colnames(coef) <- paste0("b", 1:long_df)
-    bt <- bs(times, df = long_df, intercept = FALSE)
+    bt <- splines::bs(times, df = long_df, intercept = FALSE)
     b_set <- list(knots = attr(bt, "knots"), Boundary.knots = attr(bt, "Boundary.knots"),
                   degree = attr(bt, "degree"), intercept = attr(bt, "intercept"))
     return(list(coef, b_set))
@@ -3126,8 +3094,8 @@ simJM <- function(nsub = 300, times = seq(0, 120, 1), probmiss = 0.75,
     ex <- pmax(abs(x), 1)
     x1 <- x + eps * ex
     x2 <- x - eps * ex
-    bs.xeps1 <- suppressWarnings(bs(x1, df, knots, degree, intercept, Boundary.knots))
-    bs.xeps2 <- suppressWarnings(bs(x2, df, knots, degree, intercept, Boundary.knots))
+    bs.xeps1 <- suppressWarnings(splines::bs(x1, df, knots, degree, intercept, Boundary.knots))
+    bs.xeps2 <- suppressWarnings(splines::bs(x2, df, knots, degree, intercept, Boundary.knots))
     out <- (bs.xeps1 - bs.xeps2) / c(x1 - x2)
     out
   }
@@ -3152,8 +3120,8 @@ simJM <- function(nsub = 300, times = seq(0, 120, 1), probmiss = 0.75,
            "linear" = (1.25 + r[, 1] + 0.6*sin(x) + (-0.01)*time + r[, 2]*0.02*time),
            "nonlinear" = (0.5 + r[, 1] + 0.6*sin(x) + 0.1*(time+2)*exp(-0.075*time)),
            "functional" = (0.5 + r[, 1] + 0.6*sin(x) + 0.1*(time+2)*exp(-0.075*time) + 
-                             apply(bs(time, long_df, b_set$knots, b_set$degree,
-                                      b_set$intercept, b_set$Boundary.knots) * beta, 1, sum)))
+                             apply(splines::bs(time, long_df, b_set$knots, b_set$degree,
+                                               b_set$intercept, b_set$Boundary.knots) * beta, 1, sum)))
   }
   
   ## derivative of individual longitudinal trajectories
@@ -3420,33 +3388,33 @@ jm.predict <- function(object, newdata, type = c("link", "parameter", "probabili
     
     pred_gamma <- with(pred.setup, .predict.bamlss("gamma",
                                                    object$x$gamma, samps, enames$gamma, intercept,
-                                                   nsamps, dsurv, env))
+                                                   nsamps, dsurv))
     
     pred_lambda <- with(pred.setup, .predict.bamlss.surv.td("lambda",
                                                             object$x$lambda$smooth.construct, samps, enames$lambda, intercept,
-                                                            nsamps, dsurv, env, timevar["lambda"], timegrid,
+                                                            nsamps, dsurv, timevar["lambda"], timegrid,
                                                             drop.terms.bamlss(object$x$lambda$terms, sterms = FALSE, keep.response = FALSE),
                                                             type = 2))
     
     pred_alpha <- with(pred.setup, .predict.bamlss.surv.td("alpha",
                                                            object$x$alpha$smooth.construct, samps, enames$alpha, intercept,
-                                                           nsamps, dsurv, env, timevar["lambda"], timegrid,
+                                                           nsamps, dsurv, timevar["lambda"], timegrid,
                                                            drop.terms.bamlss(object$x$alpha$terms, sterms = FALSE, keep.response = FALSE)))
     
     pred_mu <- with(pred.setup, .predict.bamlss.surv.td("mu",
                                                         object$x$mu$smooth.construct, samps, enames$mu, intercept,
-                                                        nsamps, dsurv, env, timevar["mu"], timegrid,
+                                                        nsamps, dsurv, timevar["mu"], timegrid,
                                                         drop.terms.bamlss(object$x$mu$terms, sterms = FALSE, keep.response = FALSE)))
     
     if(dalpha) {
       pred_dalpha <- with(pred.setup, .predict.bamlss.surv.td("dalpha",
                                                               object$x$dalpha$smooth.construct, samps, enames$dalpha, intercept,
-                                                              nsamps, dsurv, env, timevar["lambda"], timegrid,
+                                                              nsamps, dsurv, timevar["lambda"], timegrid,
                                                               drop.terms.bamlss(object$x$dalpha$terms, sterms = FALSE, keep.response = FALSE)))
       
       pred_dmu <- with(pred.setup, .predict.bamlss.surv.td("dmu",
                                                            object$x$dmu$smooth.construct, samps, enames$dmu, intercept,
-                                                           nsamps, dsurv, env, timevar["mu"], timegrid,
+                                                           nsamps, dsurv, timevar["mu"], timegrid,
                                                            drop.terms.bamlss(object$x$dmu$terms, sterms = FALSE, keep.response = FALSE),
                                                            derivMat = TRUE))
     }
@@ -3663,8 +3631,8 @@ jm.survplot <- function(object, id = 1, dt = NULL, steps = 10,
 
 
 
-.predict.bamlss.jm.td <- function(id, x, samps, enames, intercept, nsamps, newdata, env,
-                                    yname, grid, formula, type = 1, derivMat = FALSE)
+.predict.bamlss.jm.td <- function(id, x, samps, enames, intercept, nsamps, newdata,
+                                  yname, grid, formula, type = 1, derivMat = FALSE)
 {
   snames <- colnames(samps)
   enames <- gsub("p.Intercept", "p.(Intercept)", enames, fixed = TRUE)
@@ -3685,7 +3653,7 @@ jm.survplot <- function(object, id = 1, dt = NULL, steps = 10,
   if(length(i <- grep("p.", ec))) {
     for(j in enames2[i]) {
       if(j != "(Intercept)") {
-        f <- as.formula(paste("~", if(has_intercept) "1" else "-1", "+", j), env = env)
+        f <- as.formula(paste("~", if(has_intercept) "1" else "-1", "+", j))
         X <- param_Xtimegrid(f, newdata, grid, yname, type = type, derivMat = derivMat)
         if(has_intercept)
           X <- X[, colnames(X) != "(Intercept)", drop = FALSE]
@@ -3726,6 +3694,4 @@ jm.survplot <- function(object, id = 1, dt = NULL, steps = 10,
   
   eta
 }
-
-
 

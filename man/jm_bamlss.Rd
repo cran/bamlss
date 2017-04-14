@@ -261,7 +261,7 @@ b_mode <- bamlss(f, data = d, family = "jm",
 ##  with starting values generated from posterior mode 
 b_mean <- bamlss(f, data = d, family = "jm",
   timevar = "obstime", idvar = "id", optimizer = FALSE,
-  start = parameters(b_mode))
+  start = parameters(b_mode), results = FALSE)
 
 ## Plot effects.
 plot(b_mean, model = "alpha")

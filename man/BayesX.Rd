@@ -4,10 +4,13 @@
 \alias{sx}
 \alias{tx}
 \alias{tx2}
+\alias{tx3}
 \alias{get_BayesXsrc}
 \alias{quant_bamlss}
 \alias{smooth.construct.tensorX.smooth.spec}
 \alias{Predict.matrix.tensorX.smooth}
+\alias{smooth.construct.tensorX3.smooth.spec}
+\alias{Predict.matrix.tensorX3.smooth}
 
 \title{
   Markov Chain Monte Carlo for BAMLSS using \pkg{BayesX}
@@ -28,7 +31,7 @@ BayesX(x, y, family, start = NULL, weights = NULL, offset = NULL,
 BayesX.control(n.iter = 1200, thin = 1, burnin = 200,
   seed = NULL, predict = "light", model.name = "bamlss",
   data.name = "d", prg.name = NULL, dir = NULL,
-  verbose = FALSE, show.prg = TRUE, ...)
+  verbose = FALSE, show.prg = TRUE, modeonly = FALSE, ...)
 
 ## Special BayesX smooth term constructor.
 sx(x, z = NULL, bs = "ps", by = NA, ...)
@@ -36,13 +39,18 @@ sx(x, z = NULL, bs = "ps", by = NA, ...)
 ## Special BayesX tensor product smooth term constructor.
 tx(..., bs = "ps", k = -1,
   ctr = c("center", "main", "both", "both1", "both2",
-    "none", "meanf", "meanfd", "meansimple"),
+    "none", "meanf", "meanfd", "meansimple", "nullspace"),
   special = TRUE)
 tx2(...)
+tx3(..., bs = "ps", k = c(10, 5),
+  ctr = c("main", "center"),
+  special = TRUE)
 
-## Smooth constructor and predict matrix.
+## Smooth constructors and predict matrix.
 \method{smooth.construct}{tensorX.smooth.spec}(object, data, knots, ...)
 \method{Predict.matrix}{tensorX.smooth}(object, data) 
+\method{smooth.construct}{tensorX3.smooth.spec}(object, data, knots, ...)
+\method{Predict.matrix}{tensorX3.smooth}(object, data) 
 
 ## Family object for quantile regression with BayesX.
 quant_bamlss(prob = 0.5)
@@ -82,6 +90,8 @@ get_BayesXsrc(dir = NULL, install = TRUE)
     \code{get_BayesXsrc()}, the directory where \pkg{BayesXsrc} should be stored.}
   \item{verbose}{Print information during runtime of the algorithm.}
   \item{show.prg}{Show the \pkg{BayesX} \code{.prg} file.}
+  \item{modeonly}{Should only the posterior mode be compute, note that this is done using
+    fixed smoothing parameters/variances.}
   \item{bs}{A \code{\link{character}} string, specifying the basis/type which is used for
     this model term.}
   \item{by}{A by variable for varying coefficient model terms.}
@@ -112,8 +122,10 @@ get_BayesXsrc(dir = NULL, install = TRUE)
   be used with the \code{BayesX()} sampler. When using \code{\link[mgcv]{te}} note that only
   one smoothing variance is estimated by \pkg{BayesX}.
 
-  For anisotropic penalties use function \code{tx()}, which currently supports smooth functions
-  of two variables, only!
+  For anisotropic penalties use function \code{tx()} and \code{tx3()}, the former currently
+  supports smooth functions of two variables, while \code{tx3()} is supposed to model space-time
+  interactions. Note that in \code{tx3()} the first variable represents time and the 2nd and 3rd
+  variable the coordinates in space.
 }
 
 \value{
@@ -161,11 +173,10 @@ get_BayesXsrc(dir = NULL, install = TRUE)
 }
 
 \examples{
-\dontrun{## Get newest version of BayesXsrc.
+## Get newest version of BayesXsrc.
 ## Note: needs sh, svn and R build tools!
-get_BayesXsrc()
-
-if(require("BayesXsrc")) {
+## get_BayesXsrc()
+\dontrun{if(require("BayesXsrc")) {
   ## Simulate some data
   set.seed(123)
   d <- GAMart()
@@ -199,7 +210,7 @@ if(require("BayesXsrc")) {
   p_0.9 <- predict(b3_0.9, term = "s(x2)")
 
   ## Plot.
-  plot2d(p_0.1 + p_0.9 ~ x2, data = d)
+  plot2d(p_0.1 + p_0.9 ~ x2, data = d)  
 }
 }
 }

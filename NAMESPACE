@@ -34,7 +34,7 @@ importFrom("stats", "acf", "as.formula", "coef", "complete.cases",
   "qqline", "qqnorm", "quantile", "rexp", "rgamma",
   "rmultinom", "rnorm", "runif", "rweibull", "sd", "start",
   "terms", "terms.formula", "time", "uniroot", "update",
-  "var", "window", "median")
+  "var", "window", "median", "asOneSidedFormula")
 importFrom("utils", "download.file", "flush.console", "getS3method",
   "head", "read.csv2", "read.table", "tail", "unzip",
   "write.table", "combn")
@@ -131,10 +131,13 @@ export(
   "homstart_data",
   "tx",
   "tx2",
+  "tx3",
   "rmf",
   "smooth.construct",
   "smooth.construct.tensorX.smooth.spec",
   "Predict.matrix.tensorX.smooth",
+  "smooth.construct.tensorX3.smooth.spec",
+  "Predict.matrix.tensorX3.smooth",
   "BUGSeta",
   "BUGSmodel",
   "neighbormatrix",
@@ -180,10 +183,12 @@ S3method("smooth.construct", "bamlss.formula")
 S3method("smooth.construct", "bamlss.terms")
 S3method("smooth.construct", "kr.smooth.spec")
 S3method("smooth.construct", "tensorX.smooth.spec")
+S3method("smooth.construct", "tensorX3.smooth.spec")
 S3method("smooth.construct", "la.smooth.spec")
 S3method("Predict.matrix", "kriging.smooth")
 S3method("Predict.matrix", "deriv.smooth")
 S3method("Predict.matrix", "tensorX.smooth")
+S3method("Predict.matrix", "tensorX3.smooth")
 S3method("Predict.matrix", "lasso.smooth")
 S3method("bamlss.engine.setup.smooth", "default")
 S3method("sx.construct", "tensorX.smooth")

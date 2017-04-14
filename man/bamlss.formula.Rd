@@ -15,7 +15,7 @@
 }
 
 \usage{
-bamlss.formula(formula, family = NULL, specials = NULL, ...)
+bamlss.formula(formula, family = NULL, specials = NULL, env = NULL, ...)
 }
 
 \arguments{
@@ -26,6 +26,7 @@ bamlss.formula(formula, family = NULL, specials = NULL, ...)
   \item{family}{A \code{\link{bamlss.family}} object.}
   \item{specials}{A character vector specifying special functions to be used within
     formulae, see \code{\link{terms.object}}.}
+  \item{env}{The environment that should be assigned to the formula.}
   \item{\dots}{Arguments passed to the \code{family}.}
 }
 

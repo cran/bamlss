@@ -727,7 +727,9 @@ propose_surv_tc <- function(x, y, eta, int)
 ################################
 Surv2 <- function(..., obs = NULL)
 {
-  rval <- cbind(as.matrix(Surv(...)), "obs" = obs)
+  rval <- cbind(as.matrix(survival::Surv(...)), "obs" = obs)
+  if(all(c("start", "stop") %in% colnames(rval)))
+    rval <- cbind("time" = rval[, "stop"] - rval[, "start"], "status" = rval[, "status"], "obs" = obs)
   class(rval) <- c("matrix", "Surv2")
   rval
 }
@@ -1163,11 +1165,11 @@ cox.predict <- function(object, newdata, type = c("link", "parameter", "probabil
 
     pred_tc <- with(pred.setup, .predict.bamlss("gamma",
       object$x$gamma, samps, enames$gamma, intercept,
-      nsamps, data, env))
+      nsamps, data))
 
     pred_tv <- with(pred.setup, .predict.bamlss.surv.td("lambda",
       object$x$lambda$smooth.construct, samps, enames$lambda, intercept,
-      nsamps, data, env, yname, timegrid,
+      nsamps, data, yname, timegrid,
       drop.terms.bamlss(object$x$lambda$terms, sterms = FALSE, keep.response = FALSE)))
 
     probs <- NULL
@@ -1276,7 +1278,7 @@ param_Xtimegrid <- function(formula, data, grid, yname, type = 1, derivMat = FAL
 }
 
 
-.predict.bamlss.surv.td <- function(id, x, samps, enames, intercept, nsamps, newdata, env,
+.predict.bamlss.surv.td <- function(id, x, samps, enames, intercept, nsamps, newdata,
   yname, grid, formula, type = 1, derivMat = FALSE)
 {
   snames <- colnames(samps)
@@ -1296,7 +1298,7 @@ param_Xtimegrid <- function(formula, data, grid, yname, type = 1, derivMat = FAL
   if(length(i <- grep("p.", ec))) {
     for(j in enames2[i]) {
       if(j != "(Intercept)") {
-        f <- as.formula(paste("~", if(has_intercept) "1" else "-1", "+", j), env = env)
+        f <- as.formula(paste("~", if(has_intercept) "1" else "-1", "+", j))
         X <- param_Xtimegrid(f, newdata, grid, yname, type = type, derivMat = derivMat)
         if(has_intercept)
           X <- X[, colnames(X) != "(Intercept)", drop = FALSE]

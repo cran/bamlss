@@ -12,6 +12,7 @@
 \alias{gamma_bamlss}
 \alias{multinomial_bamlss}
 \alias{mvnorm_bamlss}
+\alias{mvnormAR1_bamlss}
 \alias{poisson_bamlss}
 \alias{gpareto_bamlss}
 
@@ -41,6 +42,7 @@ Gaussian_bamlss(...)
 gamma_bamlss(...)
 multinomial_bamlss(...)
 mvnorm_bamlss(k = 2, ...)
+mvnormAR1_bamlss(k = 2, ...)
 poisson_bamlss(...)
 gpareto_bamlss(...)
 

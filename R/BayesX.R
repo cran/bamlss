@@ -3,7 +3,7 @@
 ######################
 BayesX.control <- function(n.iter = 1200, thin = 1, burnin = 200,
   seed = NULL, predict = "light", model.name = "bamlss", data.name = "d",
-  prg.name = NULL, dir = NULL, verbose = FALSE, show.prg = TRUE, ...)
+  prg.name = NULL, dir = NULL, verbose = FALSE, show.prg = TRUE, modeonly = FALSE, ...)
 {
   if(is.null(seed))
     seed <- '##seed##'
@@ -26,7 +26,7 @@ BayesX.control <- function(n.iter = 1200, thin = 1, burnin = 200,
   cvals <- list(
     "prg" = list(
       "iterations" = n.iter, "burnin" = burnin, "step" = thin,
-      "setseed" = seed, "predict" = predict
+      "setseed" = seed, "predict" = predict, "modeonly" = modeonly
     ),
     "setup" = list(
       "main" = c(rep(FALSE, 3), rep(TRUE, 2)), "model.name" = model.name, "data.name" = data.name,
@@ -104,7 +104,7 @@ BayesX <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
   }
 
   is.tx <- function(x) {
-    inherits(x, "tensorX.smooth")
+    inherits(x, "tensorX.smooth") | inherits(x, "tensorX3.smooth")
   }
 
   single_eqn <- function(x, y, id) {
@@ -212,6 +212,10 @@ BayesX <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
   pcmd <- control$prg$predict
   control$prg$predict <- NULL
   control$prg$quantile <- family$bayesx$quantile
+  modeonly <- control$prg$modeonly
+  control$prg$modeonly <- NULL
+  if(modeonly)
+    control$prg <- control$prg[!(names(control$prg) %in% c("iterations", "burnin", "step"))]
 
   for(i in names(x)) {
     if(!all(c("fake.formula", "formula") %in% names(x[[i]]))) {
@@ -240,10 +244,11 @@ BayesX <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
       teqn <- paste(model.name, ".hregress ", msp$eqn, ", family=", fbx[[i]][1],
         " equationtype=", fbx[[i]][2],
         if(n == length(x)) {
-          paste(" ", paste(names(control$prg), "=", control$prg, sep = "", collapse = " "))
+          paste(paste(" ", paste(names(control$prg), "=", control$prg, sep = "", collapse = " ")),
+            if(modeonly) " modeonly" else "", sep = "")
         } else NULL,
         if(main[n]) {
-          paste(" predict=", pcmd, sep = "")
+          if(modeonly) " modeonly" else paste(" predict=", pcmd, sep = "")
         } else NULL,
         if(!is.null(msp$dname)) paste(" using", msp$dname) else NULL, sep = "")
       eqn[[i]] <- teqn
@@ -256,7 +261,8 @@ BayesX <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
   for(i in unlist(rev(eqn)))
     prg <- c(prg, i, "")
 
-  prg <- c(prg, paste(model.name, "getsample", sep = "."))
+  if(!modeonly)
+    prg <- c(prg, paste(model.name, "getsample", sep = "."))
   prg <- c(
     paste('%% BayesX program created by bamlss: ', as.character(Sys.time()), sep = ''),
     paste('%% usefile ', file.path(dir, prg.name), sep = ''), "",
@@ -577,7 +583,7 @@ sx.construct.userdefined.smooth.spec <- sx.construct.tensorX.smooth <- function(
     object$S <- object$sx.S
   if(!is.null(object$sx.rank))
     object$rank <- object$sx.rank
-  is.tx <- inherits(object, "tensorX.smooth")
+  is.tx <- inherits(object, "tensorX.smooth") | inherits(object, "tensorX3.smooth")
   if(inherits(object, "tensor.smooth")) {
     S <- 0
     for(j in seq_along(object$S))
@@ -648,20 +654,20 @@ sx.construct.userdefined.smooth.spec <- sx.construct.tensorX.smooth <- function(
     for(j in seq_along(object$S)) {
       if(!file.exists(file.path(dir, paste(Sn[j], ".raw", sep = "")))) {
         colnames(object$S[[j]]) <- rownames(object$S[[j]]) <- NULL
-        write.table(object$S[[j]], file = file.path(dir, paste(Sn[j], ".raw", sep = "")),
+        write.table(round(object$S[[j]], 5), file = file.path(dir, paste(Sn[j], ".raw", sep = "")),
           quote = FALSE, row.names = FALSE)
       } else exists <- c(exists, file.path(dir, paste(Sn[j], ".raw", sep = "")))
     }
     if(is.tx) {
       for(j in seq_along(object$S)) {
         if(!file.exists(file.path(dir, paste(Xn[j], ".raw", sep = "")))) {
-          write.table(object$margin[[j]]$X, file = file.path(dir, paste(Xn[j], ".raw", sep = "")),
+          write.table(round(object$margin[[j]]$X, 5), file = file.path(dir, paste(Xn[j], ".raw", sep = "")),
             quote = FALSE, row.names = FALSE)
         } else exists <- c(exists, file.path(dir, paste(Xn[j], ".raw", sep = "")))
       }
     } else {
       if(!file.exists(file.path(dir, paste(Xn, ".raw", sep = "")))) {
-        write.table(object$X, file = file.path(dir, paste(Xn, ".raw", sep = "")),
+        write.table(round(object$X, 5), file = file.path(dir, paste(Xn, ".raw", sep = "")),
           quote = FALSE, row.names = FALSE)
       } else exists <- c(exists, file.path(dir, paste(Xn, ".raw", sep = "")))
     }
@@ -1046,17 +1052,143 @@ resplit <- function(x) {
 }
 
 
-## Special tensor constructor.
+## Special tensor constructors.
+te2 <- function (..., k = NA, bs = "cr", m = NA, d = NA, by = NA, fx = FALSE, 
+  mp = TRUE, np = TRUE, xt = NULL, id = NULL, sp = NULL, pc = NULL) 
+{
+  vars <- as.list(substitute(list(...)))[-1]
+  dim <- length(vars)
+  by.var <- deparse(substitute(by), backtick = TRUE)
+  term <- deparse(vars[[1]], backtick = TRUE)
+  if(dim > 1) 
+    for(i in 2:dim) term[i] <- deparse(vars[[i]], backtick = TRUE)
+  for(i in 1:dim) term[i] <- attr(terms(stats::reformulate(term[i])), 
+    "term.labels")
+  if(sum(is.na(d)) || is.null(d)) {
+    n.bases <- dim
+    d <- rep(1, dim)
+  }
+  else {
+    d <- round(d)
+    ok <- TRUE
+    if(sum(d <= 0)) 
+      ok <- FALSE
+    if(sum(d) != dim) 
+      ok <- FALSE
+    if(ok) 
+      n.bases <- length(d)
+    else {
+      warning("something wrong with argument d.")
+      n.bases <- dim
+      d <- rep(1, dim)
+    }
+  }
+  if(sum(is.na(k)) || is.null(k)) 
+    k <- 5^d
+  else {
+    k <- round(k)
+    ok <- TRUE
+    if(sum(k < 3)) {
+      ok <- FALSE
+      warning("one or more supplied k too small - reset to default")
+    }
+    if(length(k) == 1 && ok) 
+      k <- rep(k, n.bases)
+    else if(length(k) != n.bases) 
+      ok <- FALSE
+    if(!ok) 
+      k <- 5^d
+  }
+  if(sum(is.na(fx)) || is.null(fx)) 
+    fx <- rep(FALSE, n.bases)
+  else if(length(fx) == 1) 
+    fx <- rep(fx, n.bases)
+  else if(length(fx) != n.bases) {
+    warning("dimension of fx is wrong")
+    fx <- rep(FALSE, n.bases)
+  }
+  xtra <- list()
+  if(is.null(xt) || length(xt) == 1)
+    for(i in 1:n.bases) xtra[[i]] <- xt
+  else if(length(xt) == n.bases) 
+    xtra <- xt
+  else stop("xt argument is faulty.")
+  if(length(bs) == 1) 
+    bs <- rep(bs, n.bases)
+  if(length(bs) != n.bases) {
+    warning("bs wrong length and ignored.")
+    bs <- rep("cr", n.bases)
+  }
+  bs[d > 1 & (bs == "cr" | bs == "cs" | bs == "cp")] <- "tp"
+  if(!is.list(m) && length(m) == 1) 
+    m <- rep(m, n.bases)
+  if(length(m) != n.bases) {
+    warning("m wrong length and ignored.")
+    m <- rep(0, n.bases)
+  }
+  if(!is.list(m)) 
+    m[m < 0] <- 0
+  if(length(unique(term)) != dim) 
+    stop("Repeated variables as arguments of a smooth are not permitted")
+  j <- 1
+  margin <- list()
+  for(i in 1:n.bases) {
+    j1 <- j + d[i] - 1
+    if(is.null(xt)) 
+      xt1 <- NULL
+    else xt1 <- xtra[[i]]
+    stxt <- "s("
+    for(l in j:j1) stxt <- paste(stxt, term[l], ",", sep = "")
+    stxt <- paste(stxt, "k=", deparse(k[i], backtick = TRUE), 
+      ",bs=", deparse(bs[i], backtick = TRUE), ",m=", deparse(m[[i]], 
+        backtick = TRUE), ",xt=xt1", ")")
+    margin[[i]] <- eval(parse(text = stxt))
+    j <- j1 + 1
+  }
+  if(mp) 
+    mp <- TRUE
+  else mp <- FALSE
+  if(np) 
+    np <- TRUE
+  else np <- FALSE
+  full.call <- paste("te(", term[1], sep = "")
+  if(dim > 1) 
+    for(i in 2:dim) full.call <- paste(full.call, ",", term[i], 
+      sep = "")
+  label <- paste(full.call, ")", sep = "")
+  if(!is.null(id)) {
+    if(length(id) > 1) {
+      id <- id[1]
+      warning("only first element of `id' used")
+    }
+    id <- as.character(id)
+  }
+  ret <- list(margin = margin, term = term, by = by.var, fx = fx, 
+    label = label, dim = dim, mp = mp, np = np, id = id, 
+    sp = sp, inter = FALSE)
+  if(!is.null(pc)) {
+    if(length(pc) < d) 
+      stop("supply a value for each variable for a point constraint")
+    if(!is.list(pc)) 
+      pc <- as.list(pc)
+    if(is.null(names(pc))) 
+      names(pc) <- unlist(lapply(vars, all.vars))
+    ret$point.con <- pc
+  }
+  class(ret) <- "tensor.smooth.spec"
+  ret
+}
+
 tx <- function(..., bs = "ps", k = -1,
   ctr = c("center", "main", "both", "both1", "both2",
-    "none", "meanf", "meanfd", "meansimple"),
+    "none", "meanf", "meanfd", "meansimple", "nullspace"),
   special = TRUE)
 {
   if(length(k) < 2) {
     if(k < 0)
       k <- 10
   }
-  object <- te(..., bs = bs, k = k)
+  object <- te2(..., bs = bs, k = k)
   object$constraint <- match.arg(ctr)
   object$label <- gsub("te(", "tx(", object$label, fixed = TRUE)
   object$special <- special
@@ -1071,6 +1203,97 @@ tx2 <- function(...)
   object
 }
 
+tx3 <- function(..., bs = "ps", k = c(10, 5), ctr = c("main", "center"), special = TRUE)
+{
+  vars <- as.character(unlist(as.list(substitute(list(...)))[-1]))
+  if(length(vars) != 3L)
+    stop("3 variables are necessary for the space-time interaction term!")
+  bs <- rep(bs, length.out = 2)
+  k <- rep(k, length.out = 2)
+  ctr <- rep(ctr, length.out = 2)
+  m1 <- paste('tx(', vars[1], ',bs="', bs[1], '",k=', k[1], ',ctr="', ctr[1],'")', sep = '')
+  m2 <- paste('tx(', vars[2], ',', vars[3], ',bs="', bs[2], '",k=', k[2], ',ctr="', ctr[2],'")', sep = '')
+  object <- list()
+  object$margin <- list(
+    eval(parse(text = m1)),
+    eval(parse(text = m2))
+  )
+  object$term <- vars
+  object$by <- "NA"
+  object$fx <- FALSE
+  object$label <- paste("tx3(", paste(vars, collapse = ","), ")", sep = "")
+  object$dim <- 3
+  object$special <- special
+  object$constraint <- match.arg(ctr)
+  class(object) <- "tensorX3.smooth.spec"
+  object
+}
+
+smooth.construct.tensorX3.smooth.spec <- function(object, data, knots, ...)
+{
+  object$margin[[1]] <- smooth.construct.tensorX.smooth.spec(object$margin[[1]], data, knots, ...)
+  object$margin[[2]] <- smooth.construct.tensorX.smooth.spec(object$margin[[2]], data, knots, ...)
+
+  object$margin[[1]]$S <- object$margin[[1]]$margin[[1]]$S
+  object$margin[[2]]$X <- tensor.prod.model.matrix(list(object$margin[[2]]$margin[[1]]$X, object$margin[[2]]$margin[[2]]$X))
+  object$margin[[2]]$S <- list(
+    kronecker(diag(1, ncol(object$margin[[2]]$margin[[1]]$S[[1]])), object$margin[[2]]$margin[[1]]$S[[1]]) +
+    kronecker(object$margin[[2]]$margin[[2]]$S[[1]], diag(1, ncol(object$margin[[2]]$margin[[2]]$S[[1]])))
+  )
+  object$X <- tensor.prod.model.matrix(list(object$margin[[1]]$X, object$margin[[2]]$X))
+  object$S <- tensor.prod.penalties(list(object$margin[[1]]$S[[1]], object$margin[[2]]$S[[1]]))
+
+  p1 <- ncol(object$margin[[1]]$X)
+  p2 <- ncol(object$margin[[2]]$X)
+
+  if(object$constraint == "main") {
+    A1 <- matrix(rep(1, p1), ncol = 1)
+    A2 <- matrix(rep(1, p2), ncol = 1)
+    I1 <- diag(p1); I2 <- diag(p2)
+
+    A <- cbind(kronecker(A1, I2), kronecker(I1,A2))
+
+    i <- match.index(t(A))
+    A <- A[, i$nodups, drop = FALSE]
+
+    k <- 0
+    while((qr(A)$rank < ncol(A)) & (k < 100)) {
+      i <- sapply(1:ncol(A), function(d) { qr(A[, -d])$rank })
+      j <- which(i == qr(A)$rank)
+      if(length(j))
+        A <- A[, -j[1], drop = FALSE]
+      k <- k + 1
+    }
+    if(k == 100)
+      stop("rank problems with constraint matrix!")
+
+    object$C <- t(A)
+  } else {
+    object$C <- matrix(1, ncol = p1 * p2)
+  }
+
+  attr(object$C, "always.apply") <- TRUE
+
+  object$tx.term <- paste(object$term, collapse = "")
+  object$sx.S <- lapply(object$margin, function(x) { x$S[[1]] })
+  object$sx.rank <- qr(do.call("+", object$S))$rank
+  if(!(object$constraint %in% c("center", "meanf", "meanfd", "meansimple", "none", "nullspace")))
+    object$sx.rank <- object$sx.rank - nrow(object$C)
+  object$side.constrain <- if(object$special) FALSE else TRUE
+
+  class(object) <- "tensorX3.smooth"
+
+  object
+}
+
+Predict.matrix.tensorX3.smooth <- function(object, data) 
+{
+  tensor.prod.model.matrix(list(Predict.matrix(object$margin[[1]], data),
+    Predict.matrix(object$margin[[2]]$margin[[1]], data),
+    Predict.matrix(object$margin[[2]]$margin[[2]], data)))
+}
+
+
 smooth.construct.tensorX.smooth.spec <- function(object, data, knots, ...)
 {
   if(length(object$margin) > 2)
@@ -1083,7 +1306,8 @@ smooth.construct.tensorX.smooth.spec <- function(object, data, knots, ...)
   if(is.null(object$inter))
     object$inter <- FALSE
   object <- smooth.construct.tensor.smooth.spec(object, data, knots)
-  object$sx.S <- lapply(object$margin, function(x) { x$S[[1]] })
+  if(object$mp)
+    object$sx.S <- lapply(object$margin, function(x) { x$S[[1]] })
   object$sx.rank <- qr(do.call("+", object$S))$rank
 
   if(object$by != "NA")
@@ -1093,12 +1317,17 @@ smooth.construct.tensorX.smooth.spec <- function(object, data, knots, ...)
 
   ref <- sapply(object$margin, function(x) { inherits(x, "random.effect") })
 
-  if(length(ref) < 1) {
+  if(length(ref) < 2) {
     if(ref)
+      object$constraint <- "center"
+  }
+
+  if(length(object$margin) > 1) {
+    if(!object$mp)
       object$constraint <- "none"
   }
 
-  if(object$constraint %in% c("meanf", "meanfd", "meansimple", "none")) {
+  if(object$constraint %in% c("meanf", "meanfd", "meansimple", "none", "nullspace")) {
     if(object$constraint == "none")
       object$xt$nocenter <- TRUE
     else
@@ -1119,8 +1348,8 @@ smooth.construct.tensorX.smooth.spec <- function(object, data, knots, ...)
       } else {
         if(object$constraint == "main") {
           ## Remove main effects only.
-          A1 <- matrix(rep(if(ref[1]) 0 else 1, p1), ncol = 1)
-          A2 <- matrix(rep(if(ref[2]) 0 else 1, p2), ncol = 1)
+          A1 <- matrix(rep(1, p1), ncol = 1)
+          A2 <- matrix(rep(1, p2), ncol = 1)
         }
         if(object$constraint == "both") {
           ## Remove main effects and varying coefficients.
@@ -1138,7 +1367,12 @@ smooth.construct.tensorX.smooth.spec <- function(object, data, knots, ...)
           A2 <- matrix(rep(1, p2), ncol = 1)
         }
 
-        A <- cbind(I2 %x% A1, A2 %x% I1)
+        if(ref[1])
+          A1 <- matrix(rep(1, p1), ncol = 1)
+        if(ref[2])
+          A2 <- matrix(rep(1, p2), ncol = 1)
+
+        A <- cbind(kronecker(A1, I2), kronecker(I1,A2))
 
         i <- match.index(t(A))
         A <- A[, i$nodups, drop = FALSE]
@@ -1148,11 +1382,12 @@ smooth.construct.tensorX.smooth.spec <- function(object, data, knots, ...)
           i <- sapply(1:ncol(A), function(d) { qr(A[, -d])$rank })
           j <- which(i == qr(A)$rank)
           if(length(j))
-            A <- A[, -j[length(j)], drop = FALSE]
+            A <- A[, -j[1], drop = FALSE]
           k <- k + 1
         }
         if(k == 100)
           stop("rank problems with constraint matrix!")
+
         object$C <- t(A)
       }
     }
@@ -1172,6 +1407,15 @@ smooth.construct.tensorX.smooth.spec <- function(object, data, knots, ...)
     attr(object$C, "always.apply") <- TRUE
   
   class(object) <- "tensorX.smooth"
+
+  if(length(object$margin) > 1) {
+    if(!(object$constraint %in% c("center", "meanf", "meanfd", "meansimple", "none", "nullspace")))
+      object$sx.rank <- object$sx.rank - nrow(object$C)
+    if(!object$mp) {
+      class(object) <- "tensor.smooth"
+    }
+  }
+
   return(object)
 }
 

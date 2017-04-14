@@ -19,9 +19,9 @@ la(formula, type = c("single", "multiple"), ...)
 
 ## Single Lasso smoothing parameter optimizer.
 lasso(x, y, start = NULL, adaptive = TRUE, lower = 0.001, upper = 1000,
-  nlambda = 100, lambda = NULL, verbose = TRUE, digits = 4,
-  flush = TRUE, nu = NULL, stop.nu = NULL,
-  ridge = .Machine$double.eps^0.25, zeromodel = NULL, ...)
+  nlambda = 100, lambda = NULL,  multiple = FALSE, verbose = TRUE,
+  digits = 4, flush = TRUE, nu = NULL, stop.nu = NULL,
+  ridge = .Machine$double.eps^0.5, zeromodel = NULL, ...)
 
 ## Lasso transformation function to set
 ## adaptive weights from an unpenalized model.
@@ -29,9 +29,9 @@ lasso.transform(x, zeromodel, nobs = NULL, ...)
 
 ## Plotting function for lasso() optimizer.
 lasso.plot(x, which = c("criterion", "parameters"),
-  spar = TRUE, name = NULL, mstop = NULL, retrans = FALSE,
-  color = NULL, show.lambda = TRUE, labels = NULL,
-  digits = 2, ...)
+  spar = TRUE, model = NULL, name = NULL, mstop = NULL,
+  retrans = FALSE, color = NULL, show.lambda = TRUE,
+  labels = NULL, digits = 2, ...)
 
 ## Extract optimum stopping iteration for lasso() optimizer.
 ## Based on the minimum of the information criterion.
@@ -60,6 +60,8 @@ lasso.coef(x, ...)
     estimated, i.e., the vector of smoothing parameters is build up as a sequence from
     \code{lower} to \code{upper} with length \code{nlambda}.}
   \item{lambda}{Numeric. A sequence/vector of lambda parameters that should be used.}
+  \item{multiple}{Logical. Should the lambda grid be exapnded to search for multiple lambdas, one for
+    each distributional parameter.}
   \item{verbose}{Print information during runtime of the algorithm.}
   \item{digits}{Set the digits for printing when \code{verbose = TRUE}. If the optimum lambda value
     is plotted, the number of decimal decimal places to be used within \code{lasso.plot()}.}
@@ -80,6 +82,7 @@ lasso.coef(x, ...)
     \code{nobs} is taken from the number of rows from the model term design matrices.}
   \item{which}{Which of the two provided plots should be created, character or integer \code{1} and \code{2}.}
   \item{spar}{Should graphical parameters be set by the plotting function?}
+  \item{model}{Character selecting for which model the plot shpuld be created.}
   \item{name}{Character, the name of the coefficient group that should be plotted. Note that
     the string provided in \code{name} will be removed from the labels on the 4th axis.}
   \item{mstop}{Integer vector, defines the path length to be plotted.}
@@ -143,8 +146,8 @@ b1 <- bamlss(f, sampler = FALSE, optimizer = lasso,
 ## Plot information criterion and coefficient paths.
 lasso.plot(b1, which = 1)
 lasso.plot(b1, which = 2)
-lasso.plot(b1, which = 2, name = "mu.s.la(id).id")
-lasso.plot(b1, which = 2, name = "sigma.s.la(id).id")
+lasso.plot(b1, which = 2, model = "mu", name = "mu.s.la(id).id")
+lasso.plot(b1, which = 2, model = "sigma", name = "sigma.s.la(id).id")
 
 ## Extract coefficients for optimum Lasso parameter.
 coef(b1, mstop = lasso.stop(b1))
@@ -160,7 +163,7 @@ summary(b2)
 plot(b2)
 
 ci <- confint(b2, model = "mu", pterms = FALSE, sterms = TRUE)
-lasso.plot(b1, which = 2, name = "mu.s.la(id).id", spar = FALSE)
+lasso.plot(b1, which = 2, model = "mu", name = "s.la(id).id", spar = FALSE)
 for(i in 1:8) {
   abline(h = ci[i, 1], lty = 2, col = "red")
   abline(h = ci[i, 2], lty = 2, col = "red")

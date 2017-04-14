@@ -1,0 +1,13 @@
+0.1-2
+
+* Fixed some issues with tx() for BayesX.
+
+* Added tx3() for BayesX.
+
+* Fixed environment saving problem when using light = TRUE in bamlss().
+
+* Dropped some parts of the jm.mode() return value.
+
+* Solved PROTECT() problems in the C code.
+
+* Many other small edits ...

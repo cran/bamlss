@@ -143,15 +143,15 @@ plot3d(f, c.select = 95, border = c("red", NA, "green"),
   col.surface = c(1, NA, 1), resid = TRUE, cex.resid = 0.2)
 
 ## Now some image and contour.
-plot3d(f, image = TRUE, legend = FALSE)
-plot3d(f, image = TRUE, legend = TRUE)
-plot3d(f, image = TRUE, contour = TRUE)
-plot3d(f, image = TRUE, contour = TRUE, swap = TRUE)
-plot3d(f, image = TRUE, contour = TRUE, col.contour = "white")
-plot3d(f, contour = TRUE)
-plot3d(f, image = TRUE, contour = TRUE, c.select = 3)
-plot3d(f, image = TRUE, contour = TRUE, c.select = "Mean")
-plot3d(f, image = TRUE, contour = TRUE, c.select = "97.5%")
+# plot3d(f, image = TRUE, legend = FALSE)
+# plot3d(f, image = TRUE, legend = TRUE)
+# plot3d(f, image = TRUE, contour = TRUE)
+# plot3d(f, image = TRUE, contour = TRUE, swap = TRUE)
+# plot3d(f, image = TRUE, contour = TRUE, col.contour = "white")
+# plot3d(f, contour = TRUE)
+# plot3d(f, image = TRUE, contour = TRUE, c.select = 3)
+# plot3d(f, image = TRUE, contour = TRUE, c.select = "Mean")
+# plot3d(f, image = TRUE, contour = TRUE, c.select = "97.5%")
 }
 
 ## Variations.
@@ -177,9 +177,9 @@ plot3d(sin(z) * cos(w) ~ z + w, col.surface = sequential_hcl, data = d)
 plot3d(sin(z) * cos(w) ~ z + w, 
   col.surface = rainbow_hcl(n = 99, c = 300, l = 80, start = 0, end = 100), 
   data = d)
-plot3d(sin(z) * cos(w) ~ z + w, 
-  col.surface = rainbow_hcl(n = 99, c = 300, l = 80, start = 0, end = 100), 
-  image = TRUE, grid = 200, data = d)
+# plot3d(sin(z) * cos(w) ~ z + w, 
+#  col.surface = rainbow_hcl(n = 99, c = 300, l = 80, start = 0, end = 100), 
+#  image = TRUE, grid = 200, data = d)
 }
 
 \keyword{hplot}
