@@ -18,7 +18,7 @@ samples(object, ...)
 ## Method for "bamlss" objects.
 \method{samples}{bamlss}(object, model = NULL, term = NULL,
   combine = TRUE, drop = TRUE, burnin = NULL,
-  thin = NULL, ...)
+  thin = NULL, coef.only = FALSE, ...)
 }
 
 \arguments{
@@ -32,6 +32,7 @@ samples(object, ...)
   \item{burnin}{Integer, specifies the number of samples that should be withdrawn as a burn-in phase.}
   \item{thin}{Integer, specifies the step length of samples that should be extracted, e.g.,
     \code{thin = 10} mean that only every 10th sample is returned.}
+  \item{coef.only}{Logical, should only samples of model coefficients be returned?}
   \item{\dots}{Other arguments.}
 }
 

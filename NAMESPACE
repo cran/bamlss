@@ -19,7 +19,7 @@ importFrom("grDevices", "chull", "dev.interactive", "devAskNewPage",
   "gray", "gray.colors", "n2mfrow", "trans3d", "rgb")
 importFrom("graphics", "abline", "axis", "box", "contour", "hist",
   "layout", "lcm", "lines", "matplot", "mtext", "par",
-  "points", "rect", "text", "plot.default")
+  "points", "rect", "text", "plot.default", "barplot", "title", "legend")
 importFrom("methods", "is", "as", "slot")
 importFrom("stats", "acf", "as.formula", "coef", "complete.cases",
   "contrasts<-", "dbeta", "dbinom", "delete.response",
@@ -34,12 +34,13 @@ importFrom("stats", "acf", "as.formula", "coef", "complete.cases",
   "qqline", "qqnorm", "quantile", "rexp", "rgamma",
   "rmultinom", "rnorm", "runif", "rweibull", "sd", "start",
   "terms", "terms.formula", "time", "uniroot", "update",
-  "var", "window", "median", "asOneSidedFormula")
+  "var", "window", "median", "asOneSidedFormula", "ecdf",
+  "pweibull", "qlogis", "rbeta", "rbinom", "rlnorm", "rpois",
+  "qgamma", "qlnorm", "qweibull", "prcomp", "deviance")
 importFrom("utils", "download.file", "flush.console", "getS3method",
   "head", "read.csv2", "read.table", "tail", "unzip",
-  "write.table", "combn")
+  "write.table", "combn", "capture.output")
 
-import("spam")
 import("Matrix")
 
 export(
@@ -51,9 +52,9 @@ export(
   "bfit",
   "bfit_iwls",
   "bfit_iwls_Matrix",
-  "bfit_iwls_spam",
   "bfit_lm",
   "bfit_optim",
+  "bfit_glmnet",
   "GMCMC",
   "GMCMC_iwls",
   "GMCMC_iwlsC",
@@ -91,6 +92,7 @@ export(
   "poisson_bamlss",
   "quant_bamlss",
   "gpareto_bamlss",
+  "glogis_bamlss",
   "gF",
 
   ## extractor functions
@@ -144,22 +146,37 @@ export(
   "plotneighbors",
   "bamlss.model.frame",
   
-  ## Boosting/Lasso
+  ## boosting/lasso
   "boost",
+  "boostm",
   "boost.summary",
   "boost.plot",
+  "boost.frame",
   "la",
   "lasso",
   "lasso.plot",
   "lasso.stop",
   "lasso.coef",
-  "lasso.transform"
+  "lasso.transform",
+
+  ## neural nets
+  "n",
+  "n.weights",
+  "dl.bamlss",
+  "predict.dl.bamlss",
+
+  ## stability selection
+  "stabsel",
+
+  ## neural networks
+  "smooth.construct.nn.smooth.spec"
 )
 
 S3method("plot", "bamlss")
 S3method("plot", "bnd")
 S3method("plot", "bamlss.results")
 S3method("plot", "bamlss.residuals")
+S3method("plot", "stabsel")
 S3method("summary", "bamlss")
 S3method("family", "bamlss")
 S3method("family", "bamlss.frame")
@@ -167,11 +184,16 @@ S3method("print", "summary.bamlss")
 S3method("print", "family.bamlss")
 S3method("print", "bamlss.frame")
 S3method("print", "boost.summary")
+S3method("print", "bamlss.formula")
+S3method("print", "stabsel")
 S3method("plot", "boost.summary")
 S3method("predict", "bamlss")
+S3method("predict", "boost.frame")
 S3method("fitted", "bamlss")
 S3method("logLik", "bamlss")
 S3method("DIC", "bamlss")
+S3method("BIC", "bamlss")
+S3method("AIC", "bamlss")
 S3method("coef", "bamlss")
 S3method("confint", "bamlss")
 S3method("residuals", "bamlss")
@@ -185,11 +207,14 @@ S3method("smooth.construct", "kr.smooth.spec")
 S3method("smooth.construct", "tensorX.smooth.spec")
 S3method("smooth.construct", "tensorX3.smooth.spec")
 S3method("smooth.construct", "la.smooth.spec")
+S3method("smooth.construct", "nnet.smooth.spec")
+S3method("smooth.construct", "nn.smooth.spec")
 S3method("Predict.matrix", "kriging.smooth")
 S3method("Predict.matrix", "deriv.smooth")
 S3method("Predict.matrix", "tensorX.smooth")
 S3method("Predict.matrix", "tensorX3.smooth")
 S3method("Predict.matrix", "lasso.smooth")
+S3method("Predict.matrix", "nnet.smooth")
 S3method("bamlss.engine.setup.smooth", "default")
 S3method("sx.construct", "tensorX.smooth")
 S3method("terms", "bamlss")
@@ -199,6 +224,13 @@ S3method("samples", "bamlss")
 S3method("samples", "bamlss.frame")
 S3method("model.frame", "bamlss")
 S3method("model.frame", "bamlss.frame")
+S3method("predict", "dl.bamlss")
+S3method("fitted", "dl.bamlss")
+S3method("residuals", "dl.bamlss")
+S3method("formula", "bamlss.formula.character")
+S3method("formula", "bamlss.formula")
+S3method("as.character", "bamlss.formula")
+S3method("as.character", "bamlss.terms")
 
 useDynLib(bamlss, .registration = TRUE)
 

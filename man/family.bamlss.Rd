@@ -15,6 +15,7 @@
 \alias{mvnormAR1_bamlss}
 \alias{poisson_bamlss}
 \alias{gpareto_bamlss}
+\alias{glogis_bamlss}
 
 \title{
   Distribution Families in \pkg{bamlss}
@@ -45,6 +46,7 @@ mvnorm_bamlss(k = 2, ...)
 mvnormAR1_bamlss(k = 2, ...)
 poisson_bamlss(...)
 gpareto_bamlss(...)
+glogis_bamlss(...)
 
 ## Extractor functions:
 \method{family}{bamlss}(object, ...)
@@ -98,7 +100,7 @@ gpareto_bamlss(...)
   are organized in a named list, see the examples below.
 
   In addition, for the cumulative distribution function (\code{p(y, par, ...)}), for the quantile
-  function (\code{q(y, par, ...)}) or for creating random numbers (\code{r(y, par, ...)}) the same
+  function (\code{q(y, par, ...)}) or for creating random numbers (\code{r(n, par, ...)}) the same
   structure is assumed. See, e.g., the code of function \code{gaussian.bamlss()}.
 
   Some model fitting engines can initialize the distributional parameters which oftentimes

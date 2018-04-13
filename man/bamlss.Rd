@@ -195,8 +195,8 @@ bamlss(formula, family = "gaussian", data = NULL,
 }
 
 \references{
-  Umlauf N, Klein N, Zeileis A (2016). Bayesian Additive Models for Location
-    Scale and Shape (and Beyond). \emph{(to appear)}
+  Nikolaus Umlauf, Nadja Klein, and Achim Zeileis. BAMLSS: Bayesian Additive Models for Location,
+  Scale and Shape (and Beyond). Journal of Computational and Graphical Statistics, 2017. \emph{(to appear)} \url{http://dx.doi.org/10.1080/10618600.2017.1407325}
 }
 
 \author{

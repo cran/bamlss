@@ -35,73 +35,88 @@ print.family.bamlss <- function(x, full = TRUE, ...)
 make.link2 <- function(link)
 {
   link0 <- link
-  mu.eta2 <- function(x) {
-    if(link0 == "identity") {
-      x$mu.eta2 <- function(eta) rep.int(0, length(eta))
-      return(x)
-    }
-    if(link0 == "log") {
-      x$mu.eta2 <- function(eta) exp(eta)
-      return(x)
-    }
-    if(link0 == "logit") {
-      x$mu.eta2 <- function(eta) {
-        eta <- exp(eta)
-        return(-eta * (eta - 1) / (eta + 1)^3)
-      }
-      return(x)
-    }
-    if(link0 == "probit") {
-      x$mu.eta2 <- function(eta) {
-        -eta * dnorm(eta, mean = 0, sd = 1)
-      }
-      return(x)
-    }
-    if(link0 == "inverse") {
-      x$mu.eta2 <- function(eta) {
-        2 / (eta^3)
-      }
-      return(x)
-    }
-    if(link0 == "1/mu^2") {
-      x$mu.eta2 <- function(eta) {
-        0.75 / eta^(2.5)
-      }
-      return(x)
-    }
-    if(link0 == "sqrt") {
-      x$mu.eta2 <- function(eta) { rep(2, length = length(eta)) }
-      return(x)
-    }
-    x$mu.eta2 <- function(eta) rep.int(0, length(eta))
-    warning(paste('higher derivatives of link "', link, '" not available!', sep = ''))
-    return(x)
-  }
-
-  if(link %in% c("logit", "probit", "cauchit", "cloglog", "identity",
-                 "log", "sqrt", "1/mu^2", "inverse")) {
-    rval <- make.link(link)
-  } else {
-    rval <- switch(link,
-      "rhogit" = list(
-        "linkfun" = function(mu) { mu / sqrt(1 - mu^2) },
-        "linkinv" = function(eta) { eta / sqrt(1 + eta^2) }, 
-        "mu.eta" = function(eta) { 1 / (1 + eta^2)^1.5 }
-      ),
-      "cloglog2" = list(
-        "linkfun" = function(mu) { log(-log(mu)) },
-        "linkinv" = function(eta) {
-          pmax(pmin(1 - expm1(-exp(eta)), .Machine$double.eps), .Machine$double.eps)
-        },
-        "mu.eta" = function(eta) {
-          eta <- pmin(eta, 700)
-          pmax(-exp(eta) * exp(-exp(eta)), .Machine$double.eps)
-        }
+  if(link0 == "tanhalf"){
+    rval <- list(
+      "linkfun" = function (mu) {
+        tan(mu/2)},
+      "linkinv" = function(eta) {
+        2 * atan(eta)},
+      "mu.eta" = function(eta) {
+        2 / (eta^2 + 1)},
+      "mu.eta2" = function(eta) {
+        (-4 * eta ) / (eta^2 + 1)^2},
+      "valideta" = function(eta) TRUE,
+      "name" = "tanhalf"
       )
-    )
+  } else {
+    mu.eta2 <- function(x) {
+      if(link0 == "identity") {
+        x$mu.eta2 <- function(eta) rep.int(0, length(eta))
+        return(x)
+      }
+      if(link0 == "log") {
+        x$mu.eta2 <- function(eta) exp(eta)
+        return(x)
+      }
+      if(link0 == "logit") {
+        x$mu.eta2 <- function(eta) {
+          eta <- exp(eta)
+          return(-eta * (eta - 1) / (eta + 1)^3)
+        }
+        return(x)
+      }
+      if(link0 == "probit") {
+        x$mu.eta2 <- function(eta) {
+          -eta * dnorm(eta, mean = 0, sd = 1)
+        }
+        return(x)
+      }
+      if(link0 == "inverse") {
+        x$mu.eta2 <- function(eta) {
+          2 / (eta^3)
+        }
+        return(x)
+      }
+      if(link0 == "1/mu^2") {
+        x$mu.eta2 <- function(eta) {
+          0.75 / eta^(2.5)
+        }
+        return(x)
+      }
+      if(link0 == "sqrt") {
+        x$mu.eta2 <- function(eta) { rep(2, length = length(eta)) }
+        return(x)
+      }
+      x$mu.eta2 <- function(eta) rep.int(0, length(eta))
+      warning(paste('higher derivatives of link "', link, '" not available!', sep = ''))
+      return(x)
+    }
+
+    if(link %in% c("logit", "probit", "cauchit", "cloglog", "identity",
+                   "log", "sqrt", "1/mu^2", "inverse")) {
+      rval <- make.link(link)
+    } else {
+      rval <- switch(link,
+        "rhogit" = list(
+          "linkfun" = function(mu) { mu / sqrt(1 - mu^2) },
+          "linkinv" = function(eta) { eta / sqrt(1 + eta^2) },
+          "mu.eta" = function(eta) { 1 / (1 + eta^2)^1.5 }
+        ),
+        "cloglog2" = list(
+          "linkfun" = function(mu) { log(-log(mu)) },
+          "linkinv" = function(eta) {
+            pmax(pmin(1 - expm1(-exp(eta)), .Machine$double.eps), .Machine$double.eps)
+          },
+          "mu.eta" = function(eta) {
+            eta <- pmin(eta, 700)
+            pmax(-exp(eta) * exp(-exp(eta)), .Machine$double.eps)
+          }
+        )
+      )
+    }
+
+    rval <- mu.eta2(rval)
   }
-  
-  rval <- mu.eta2(rval)
   rval$name <- link
   rval
 }
@@ -200,6 +215,13 @@ beta_bamlss <- function(...)
        a <- mu * (1 - sigma2) / (sigma2)
        b <- a * (1 - mu) / mu
        pbeta(y, shape1 = a, shape2 = b, ...)
+    },
+    "r" = function(n, par) {
+       mu <- par$mu
+       sigma2 <- par$sigma2
+       a <- mu * (1 - sigma2) / (sigma2)
+       b <- a * (1 - mu) / mu
+       rbeta(n, shape1 = a, shape2 = b)
     }
   )
   class(rval) <- "family.bamlss"
@@ -409,6 +431,9 @@ binomial_bamlss <- function(link = "logit", ...)
       y <- process_factor_response(y)
       pbinom(y, size = 1, prob = par$pi, ...)
     },
+    "r" = function(n, par) {
+      rbinom(n, size = 1, prob = par$pi)
+    },
     "score" = list(
       "pi" = function(y, par, ...) {
         y <- process_factor_response(y)
@@ -495,6 +520,9 @@ cloglog_bamlss <- function(...)
     },
     "p" = function(y, par, ...) {
       pbinom(y, size = 1, prob = par$pi, ...)
+    },
+    "r" = function(n, par) {
+      pbinom(n, size = 1, prob = par$pi)
     }
   )
 
@@ -638,6 +666,24 @@ gaussian_bamlss <- function(...)
     "p" = function(y, par, ...) {
       pnorm(y, mean = par$mu, sd = par$sigma, ...)
     },
+    "r" = function(n, par) {
+      rnorm(n, mean = par$mu, sd = par$sigma)
+    },
+	# Inputs 'par' have to be on the parameter scale!
+    # ..$moments(fitted(bamlssmodel, type = "parameter"))
+    "moments" = function(par, which=NULL) {
+        mom <- list(
+          "mean"      = function(par) par[[1]],
+          "variance"  = function(par) par[[2]]^2
+        )
+        # If input which is not set: return all moments.
+        if ( is.null(which) ) { which <- 1:length(mom) }
+        else if ( is.character(which) ) { which <- match(which, names(mom)) }
+        # Compute moments
+        res <- list()
+        for ( w in which ) res[[names(mom)[w]]] <- mom[[w]](par)
+        if ( length(res) == 1 ) return( res[[1]]) else return( as.data.frame(res) )
+    },
     "initialize" = list(
       "mu" = function(y, ...) { (y + mean(y)) / 2 },
       "sigma" = function(y, ...) { rep(sd(y), length(y)) }
@@ -698,11 +744,24 @@ gpareto_bamlss <- function(...)
       par$sigma / (1 - par$xi)
     },
     "p" = function(y, par, ...) {
-      p <- 1 - (1 + par$xi * y / par$sigma)^(-1 / par$xi)
+      ##p <- 1 - (1 + par$xi * y / par$sigma)^(-1 / par$xi)
+      y <- pmax(y, 0) / par$sigma
+      p <- pmax(1 + par$xi * y, 0)
+      p <- 1 - p^(-1 / par$xi)
       p
     },
-    "q" = function(y, par, ...) {
-      (par$sigma / par$xi) * ((1 - y)^(-par$xi) - 1)
+    "q" = function(p, par, ...) {
+      ##(par$sigma / par$xi) * ((1 - p)^(-par$xi) - 1)
+      par$sigma * ((1 - p)^(-par$xi) - 1) / par$xi
+    },
+    "r" = function(n, par) {
+      nobs <- length(par[[1]])
+      samps <- matrix(NA, nrow = nobs, ncol = n)
+      for(i in 1:n)
+        samps[, i] <- par$sigma * ((1 - runif(nobs))^(-par$xi) - 1) / par$xi
+      if(n < 2)
+        samps <- as.vector(samps)
+      samps
     }
   )
 
@@ -1120,7 +1179,7 @@ cnorm_bamlss <- function(...)
     rval <- qnorm(y) * par$sigma + par$mu
     pmax(pmin(rval, Inf), 0)
   }
-  f$r <- function(n, y, par, ...) {
+  f$r <- function(n, par, ...) {
     rval <- rnorm(n) * par$sigma + par$mu
     pmax(pmin(rval, Inf), 0)
   }
@@ -1589,8 +1648,55 @@ weibull_bamlss <- function(...)
     "p" = function(y, par, ...) {
       alpha <- par$alpha
       lambda <- par$lambda
-      rweibull(y, scale = lambda, shape = alpha, ...)
-    }
+      pweibull(y, scale = lambda, shape = alpha, ...)
+    },
+    "q" = function(p, par, ...) {
+      alpha <- par$alpha
+      lambda <- par$lambda
+      qweibull(p, scale = lambda, shape = alpha, ...)
+    },
+    "r" = function(n, par) {
+      alpha <-  par$alpha
+      lambda <- par$lambda
+      rweibull(n, scale = lambda, shape = alpha)
+    },
+    "score" = list(
+      "lambda" = function(y, par, ...) {
+        sc <- par$lambda
+        sh <- par$alpha
+        -sh * (1 - (y/sc)^sh)
+      },
+      "alpha" = function(y, par, ...) {
+        sc <- par$lambda
+        sh <- par$alpha
+        1 + sh*log(y/sc) - sh*((y/sc)^sh)*log(y/sc)
+      }
+    ),
+    "hess" = list(
+      "lambda" = function(y, par, ...) {
+        par$alpha^2
+      },
+      "alpha" = function(y, par, ...) {
+        ## page 16 in
+        ## https://projecteuclid.org/download/suppdf_2/euclid.aoas/1437397122
+        ## 1 + trigamma(2) + digamma(2)^2
+        rep(1.823681, length(y))
+      }
+    ),
+    "loglik" = function(y, par, ...) {
+       sum(dweibull(y, shape = par$alpha, scale = par$lambda,
+                    log = TRUE), na.rm = TRUE)
+    },
+    "initialize" = list(
+      "lambda" = function(y, ...) {
+        k <- 1.283 / var(log(y))
+        exp(log(y) + 0.5772 / k)
+      },
+      "alpha" = function(y, ...) {
+        k <- 1.283 / var(log(y))
+        rep(k, length(y))
+      }
+    )
   )
   
   class(rval) <- "family.bamlss"
@@ -1649,10 +1755,20 @@ gamma_bamlss <- function(...)
       s <- par$mu / par$sigma
       dgamma(y, shape = a, scale = s, log = log)
     },
+    "q" = function(p, par, lower.tail = TRUE, log.p = FALSE) {
+      a <- par$sigma
+      s <- par$mu / par$sigma
+      qgamma(p, shape = a, scale = s, lower.tail = lower.tail, log.p = log.p)
+    },
     "p" = function(y, par, lower.tail = TRUE, log.p = FALSE) {
       a <- par$sigma
       s <- par$mu / par$sigma
       pgamma(y, shape = a, scale = s, lower.tail = lower.tail, log.p = log.p)
+    },
+    "r" = function(n, par) {
+      a <- par$sigma
+      s <- par$mu / par$sigma
+      rgamma(n, shape = a, scale = s)
     },
     "initialize" = list(
       "mu" = function(y, ...) { (y + mean(y)) / 2 },
@@ -1723,6 +1839,12 @@ lognormal_bamlss <- function(...)
     },
     "p" = function(y, par, ...) {
       plnorm(y, meanlog = par$mu, sdlog = par$sigma, ...)
+    },
+    "q" = function(p, par, ...) {
+      qlnorm(p, meanlog = par$mu, sdlog = par$sigma, ...)
+    },
+    "r" = function(n, par) {
+      rlnorm(n, meanlog = par$mu, sdlog = par$sigma)
     }
   )
 
@@ -1764,6 +1886,9 @@ lognormal2_bamlss <- function(...)
     },
     "p" = function(y, par, ...) {
       plnorm(y, meanlog = par$mu, sdlog = sqrt(par$sigma2), ...)
+    },
+    "r" = function(n, par) {
+      rlnorm(n, meanlog = par$mu, sdlog = sqrt(par$sigma2))
     }
   )
 
@@ -2314,7 +2439,7 @@ multinomial_bamlss <- multinom_bamlss <- function(...)
       "model" = BUGSmodel
     ),
     "bayesx" = list(
-      "pi" = c(paste("multinom", "logit", sep = "_"), "main", "servant")
+      "pi" = c(paste("multinom", "probit", sep = "_"), "main", "servant")
     ),
     "score" = function(y, par, id, ...) {
       pi <- par[[id]] / (1 + rowSums(do.call("cbind", par)))
@@ -2378,6 +2503,9 @@ poisson_bamlss <- function(...)
     },
     "p" = function(y, par, ...) {
       ppois(y, lambda = par$lambda, ...)
+    },
+    "r" = function(n, par) {
+      rpois(n, lambda = par$lambda)
     },
     "score" = list(
       "lambda" = function(y, par, ...) {
@@ -2826,11 +2954,11 @@ tF <- function(x, ...)
 
   dc <- parse(text = paste('dfun(y,', paste(paste(nx, 'par$', sep = "="),
     nx, sep = '', collapse = ','), ',log=log,...)', sep = ""))
-  pc <- parse(text = paste('pfun(y,', paste(paste(nx, 'par$', sep = "="),
+  pc <- parse(text = paste('pfun(q,', paste(paste(nx, 'par$', sep = "="),
     nx, sep = '', collapse = ','), ',log=log,...)', sep = ""))
-  qc <- parse(text = paste('qfun(y,', paste(paste(nx, 'par$', sep = "="),
+  qc <- parse(text = paste('qfun(p,', paste(paste(nx, 'par$', sep = "="),
     nx, sep = '', collapse = ','), ',log=log,...)', sep = ""))
-  rc <- parse(text = paste('rfun(y,', paste(paste(nx, 'par$', sep = "="),
+  rc <- parse(text = paste('rfun(n,', paste(paste(nx, 'par$', sep = "="),
     nx, sep = '', collapse = ','), ',...)', sep = ""))
 
   rval <- list(
@@ -2840,9 +2968,9 @@ tF <- function(x, ...)
     "score" = score,
     "hess" = hess,
     "d" = function(y, par, log = FALSE, ...) { eval(dc) },
-    "p" = if(!inherits(pfun, "try-error")) function(y, par, log = FALSE, ...) { eval(pc) } else NULL,
-    "q" = if(!inherits(qfun, "try-error")) function(y, par, log = FALSE, ...) { eval(qc) } else NULL,
-    "r" = if(!inherits(rfun, "try-error")) function(y, par, ...) { eval(rc) } else NULL
+    "p" = if(!inherits(pfun, "try-error")) function(q, par, log = FALSE, ...) { eval(pc) } else NULL,
+    "q" = if(!inherits(qfun, "try-error")) function(p, par, log = FALSE, ...) { eval(qc) } else NULL,
+    "r" = if(!inherits(rfun, "try-error")) function(n, par, ...) { eval(rc) } else NULL
   )
   names(rval$links) <- nx
   rval$valid.response <- x$y.valid
@@ -3220,5 +3348,156 @@ rho_score_mvnormAR1 <- function(y, par)
   mj <- grep("mu", cn)
   rj <- as.integer(grep("rho", cn))
   return(.Call("rho_score_mvnormAR1", y, par, nrow(y), ncol(y), mj, sj, rj, PACKAGE = "bamlss"))
+}
+
+
+# -------------------------------------------------------------------
+# Generalized logistic type I distribution with gradients.
+# -------------------------------------------------------------------
+glogis_bamlss <- function(...) {
+
+   requireNamespace('glogis')
+
+   links <- c(mu="identity",sigma="log",alpha="log")
+
+   rval <- list(
+      "family" = "Gernalized Logistic Distribution Type I (a.k.a. skewed logistic distribution)",
+      "names"  = c("mu","sigma","alpha"),
+      "score" = list(
+         "mu" = function(y,par,...) {
+            .Call("bamlss_glogis_score",as.integer(1),as.numeric(y),
+                  as.numeric(par$mu),as.numeric(par$sigma),as.numeric(par$alpha))
+         },
+         "sigma" = function(y,par,...) {
+            .Call("bamlss_glogis_score",as.integer(2),as.numeric(y),
+                  as.numeric(par$mu),as.numeric(par$sigma),as.numeric(par$alpha))
+         },
+         "alpha" = function(y,par,...) {
+            .Call("bamlss_glogis_score",as.integer(3),as.numeric(y),
+                  as.numeric(par$mu),as.numeric(par$sigma),as.numeric(par$alpha))
+         }
+      ),
+      "hess" = list(
+         "mu" = function(y,par,...) {
+            .Call("bamlss_glogis_hesse",as.integer(1),as.numeric(y),
+                  as.numeric(par$mu),as.numeric(par$sigma),as.numeric(par$alpha))
+         },
+         "sigma" = function(y,par,...) {
+            .Call("bamlss_glogis_hesse",as.integer(2),as.numeric(y),
+                  as.numeric(par$mu),as.numeric(par$sigma),as.numeric(par$alpha))
+         },
+         "alpha" = function(y,par,...) {
+            .Call("bamlss_glogis_hesse",as.integer(3),as.numeric(y),
+                  as.numeric(par$mu),as.numeric(par$sigma),as.numeric(par$alpha))
+         }
+      ),
+      "links"  = parse.links(links,c(mu="identity",sigma="log",alpha="log"),...),
+      "loglik" = function(y, par, ... ) {
+         .Call("bamlss_glogis_loglik",as.numeric(y),
+                  as.numeric(par$mu),as.numeric(par$sigma),as.numeric(par$alpha))
+      },
+      "d" = function(y,par,log=FALSE) {
+         .Call("bamlss_glogis_density",as.numeric(y),
+                  as.numeric(par$mu),as.numeric(par$sigma),as.numeric(par$alpha),
+                  as.integer(log))
+      },
+      "p" = function(y,par,...) {
+         .Call("bamlss_glogis_distr",as.numeric(y),
+                  as.numeric(par$mu),as.numeric(par$sigma),as.numeric(par$alpha))
+      },
+      "q" = function(y,par,...) {
+         .Call("bamlss_glogis_quantile",as.numeric(y),
+               as.numeric(par$mu),as.numeric(par$sigma),as.numeric(par$alpha))
+      },
+      "r" = function(y,par,...) {
+         glogis::rglogis(y,par$mu,par$sigma,par$alpha)
+      },
+      "initialize" = list(
+         "mu"    = function(y, ...) { (y + mean(y)) / 2 },
+         "sigma" = function(y, ...) { rep(sd(y), length(y)) },
+         "alpha" = function(y, ...) { rep(1,length(y)) }
+      ),
+      # Inputs 'par' have to be on the parameter scale!
+      # ..$moments(fitted(bamlssmodel, type = "parameter"))
+      "moments" = function(par, which=NULL) {
+         mom <- list(
+           "mean"      = function(par) as.vector(par[[1]] + (digamma(par[[3]]) - digamma(1)) * par[[2]]),
+           "variance"  = function(par) as.vector((psigamma(par[[3]], deriv = 1) + psigamma(1, deriv = 1)) * par[[2]]),
+           "skewness"  = function(par) as.vector((psigamma(par[[3]], deriv = 2) - psigamma(1, deriv = 2)) /
+                         (psigamma(par[[3]], deriv = 1) + psigamma(1, deriv = 1))^(3/2))
+         )
+         # If input which is not set: return all moments.
+         if ( is.null(which) ) { which <- 1:length(mom) }
+         else if ( is.character(which) ) { which <- match(which, names(mom)) }
+         res <- list()
+         for ( w in which ) res[[names(mom)[w]]] <- mom[[w]](par)
+         if ( length(res) == 1 ) return( res[[1]]) else return( as.data.frame(res) )
+      }
+   )
+
+   # Return family object
+   class(rval) <- "family.bamlss"
+   return(rval)
+}
+
+
+## Most likely transformations.
+mlt_bamlss <- function(todistr = "Normal")
+{
+  rval <- list(
+    "family" = "mlt",
+    "names" = "mu",
+    "links" = c("mu" = "identity"),
+    "optimizer" = mlt.mode,
+    "sampler" = FALSE
+  )
+  rval$distr <- mlt_distr(todistr)
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+mlt_Normal <- function() {
+    list(p = pnorm, d = dnorm, q = qnorm, 
+         ### see also MiscTools::ddnorm
+         dd = function(x) -dnorm(x = x) * x,
+         ddd = function(x) dnorm(x = x) * (x^2 - 1), 
+         name = "normal")
+}
+
+mlt_Logistic <- function() {
+    list(p = plogis, d = dlogis, q = qlogis,
+         dd = function(x) {
+             ex <- exp(x)
+             (ex - exp(2 * x)) / (1 + ex)^3
+         },
+         ddd = function(x) {
+             ex <- exp(x)
+             (ex - 4*(exp(2 * x)) + exp(3 * x)) / (1 + ex)^4
+         },
+         name = "logistic")
+}
+
+mlt_MinExtrVal <- function() {
+    list(p = function(x) 1 - exp(-exp(x)),
+         q = function(p) log(-log(1 - p)),
+         d = function(x, log = FALSE) {
+             ret <- x - exp(x)
+             if (!log) return(exp(ret))
+             ret
+         },
+         dd = function(x) {
+             ex <- exp(x)
+             (ex - exp(2 * x)) / exp(ex)
+         },
+         ddd = function(x) {
+             ex <- exp(x)
+             (ex - 3*exp(2 * x) + exp(3 * x)) / exp(ex)
+         },
+         name = "minimum extreme value")
+}
+
+mlt_distr <- function(which = c("Normal", "Logistic", "MinExtrVal")) {
+    which <- match.arg(which)
+    do.call(paste("mlt_", which, sep = ""), list())
 }
 

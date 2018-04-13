@@ -40,11 +40,11 @@ sx(x, z = NULL, bs = "ps", by = NA, ...)
 tx(..., bs = "ps", k = -1,
   ctr = c("center", "main", "both", "both1", "both2",
     "none", "meanf", "meanfd", "meansimple", "nullspace"),
-  special = TRUE)
+  xt = NULL, special = TRUE)
 tx2(...)
 tx3(..., bs = "ps", k = c(10, 5),
   ctr = c("main", "center"),
-  special = TRUE)
+  xt = NULL, special = TRUE)
 
 ## Smooth constructors and predict matrix.
 \method{smooth.construct}{tensorX.smooth.spec}(object, data, knots, ...)
@@ -103,6 +103,7 @@ get_BayesXsrc(dir = NULL, install = TRUE)
   \item{ctr}{Specifies the type of constraints that should be applied. \code{"main"}, both
     main effects should be removed; \code{"both"}, both main effects and varying effects should
     be removed; \code{"none"}, no constraint should be applied.}
+  \item{xt}{A list of extra arguments to be passed to \pkg{BayesX}.}
   \item{special}{Should the \code{tx()} model term be treated as a special smooth. This must
     be set to \code{TRUE} if using the \code{BayesX} sampler and should be set to \code{FALSE},
     e.g., when using the \code{\link{GMCMC}} sampler.}

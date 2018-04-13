@@ -1,4 +1,4 @@
-bibentry(bibtype = "TechReport",
+bibentry(bibtype = "Article",
   title        = "{BAMLSS}: {B}ayesian Additive Models for Location, Scale and Shape (and Beyond)",
   author       = c(person(given = "Nikolaus",
                           family = "Umlauf",
@@ -9,19 +9,14 @@ bibentry(bibtype = "TechReport",
                    person(given = "Achim",
                           family = "Zeileis",
                           email = "Achim.Zeileis@R-project.org")),
-  institution  = "Working Papers in Economics and Statistics, Research Platform Empirical
-  		  and Experimental Economics, Universit\\\"at Innsbruck",
+  journal  = "Journal of Computational and Graphical Statistics",
   year         = "2017",
-  type         = "Working Paper",
-  number       = "2017-05",
-  month        = "February",
-  url	       = "http://EconPapers.RePEc.org/RePEc:inn:wpaper:2017-05",
+  url	       = "http://dx.doi.org/10.1080/10618600.2017.1407325",
 
   header       = "To cite bamlss in publications use:",
   textVersion  =
   paste("Nikolaus Umlauf, Nadja Klein, Achim Zeileis (2017).",
-	"BAMLSS: Bayesian Additive Models for Location, Scale and Shape (and Beyond).",
- 	"Working Paper 2017-05.",
- 	"Working Papers in Economics and Statistics, Research Platform Empirical and Experimental Economics, Universitaet Innsbruck.",
-	"URL http://EconPapers.RePEc.org/RePEc:inn:wpaper:2017-05")
+	"BAMLSS: Bayesian Additive Models for Location, Scale and Shape (and Beyond),",
+        "Journal of Computational and Graphical Statistics.",
+	"URL http://dx.doi.org/10.1080/10618600.2017.1407325")
 )

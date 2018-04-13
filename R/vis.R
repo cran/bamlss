@@ -96,7 +96,7 @@ plot2d <- function(x, residuals = FALSE, rug = FALSE, jitter = TRUE,
   }	
   if(is.character(c.select)) 
     c.select <- pmatch(c.select, colnames(x))
-  x <- x[, c.select]
+  x <- x[, c.select, drop = FALSE]
   if(!is.null(shift)) {
     shift <- as.numeric(shift[1])
     x[, 2:ncol(x)] <- x[, 2:ncol(x)] + shift
@@ -205,7 +205,7 @@ plot2d.default <- function(x, residuals, range, col.residuals = "black",
     x <- cbind(x.co, ux)
     x <- rbind(x, x, x)
   }
-  x <- x[order(x[,1L]),]
+  x <- x[order(x[,1L]), , drop = FALSE]
   if(!is.null(fill.select)) {      
     ufs <- unique(fill.select)
     ufs <- ufs[ufs != 0]
@@ -233,10 +233,10 @@ plot2d.default <- function(x, residuals, range, col.residuals = "black",
     for(k in 1L:nu) {
       check <- fill.select == ufs[k]
       if(length(check) == ncol(x)) {
-        poly <- x[, check]
+        poly <- x[, check, drop = FALSE]
         if(specs$scheme == 1) {
-          p1 <- poly[, 1L]
-          p2 <- poly[, 2L]
+          p1 <- poly[, 1L, drop = FALSE]
+          p2 <- poly[, 2L, drop = FALSE]
           y.co <- c(p1, p2[length(p2):1L])
           x.co <- x[,1L]
           x.co <- c(x.co, x.co[length(x.co):1L])

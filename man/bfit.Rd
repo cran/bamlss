@@ -2,11 +2,11 @@
 \alias{bfit}
 \alias{bfit_iwls}
 \alias{bfit_iwls_Matrix}
-\alias{bfit_iwls_spam}
 \alias{bfit_iwls_lm}
 \alias{bfit_iwls_optim}
 \alias{bfit_lm}
 \alias{bfit_optim}
+\alias{bfit_glmnet}
 
 \title{
   Fit BAMLSS with Backfitting
@@ -25,16 +25,16 @@
 bfit(x, y, family, start = NULL, weights = NULL, offset = NULL,
   update = "iwls", criterion = c("AICc", "BIC", "AIC"),
   eps = .Machine$double.eps^0.25, maxit = 400,
-  outer = FALSE, inner = FALSE, mgcv = FALSE,
+  outer = NULL, inner = FALSE, mgcv = FALSE,
   verbose = TRUE, digits = 4, flush = TRUE,
   nu = NULL, stop.nu = NULL, ...)
 
 ## Model term updating functions:
 bfit_iwls(x, family, y, eta, id, weights, criterion, ...)
 bfit_iwls_Matrix(x, family, y, eta, id, weights, criterion, ...)
-bfit_iwls_spam(x, family, y, eta, id, weights, criterion, ...)
 bfit_lm(x, family, y, eta, id, weights, criterion, ...)
 bfit_optim(x, family, y, eta, id, weights, criterion, ...)
+bfit_glmnet(x, family, y, eta, id, weights, criterion, ...)
 }
 
 \arguments{
@@ -64,7 +64,8 @@ bfit_optim(x, family, y, eta, id, weights, criterion, ...)
   \item{maxit}{The maximum number of iterations for the backfitting algorithm}
   \item{outer}{Should the current working observations and weights be computed in one outer
     iteration, otherwise the working observations are computed anew for each model term
-    updating step.}
+    updating step. The default will run one outer iteration first, afterwards model weights
+    are computed for each term anew.}
   \item{inner}{Should the model terms for one parameter of the modeled distribution be
     fully updated until convergence in an inner iteration, i.e., the algorithm waits until
     coefficients for the current distribution parameter do not change anymore before updating
@@ -159,13 +160,12 @@ bfit_optim(x, family, y, eta, id, weights, criterion, ...)
   after calling the constructor function \code{\link[mgcv]{smooth.construct}} or
   \code{\link[mgcv]{smoothCon}}. Note that the dots argument is usually not needed by the user.
 
-  The default updating function is \code{bfit_iwls()}. Functions \code{bfit_iwls_Matrix()} and
-  \code{bfit_iwls_spam()} use the sparse matrix infrastructures of package \pkg{Matrix} and
-  \pkg{spam}. The \pkg{Matrix} package and \code{bfit_iwls_Matrix()} is used for model terms where
+  The default updating function is \code{bfit_iwls()}. Function \code{bfit_iwls_Matrix()} uses the
+  sparse matrix infrastructures of package \pkg{Matrix}. The \pkg{Matrix} package and
+  \code{bfit_iwls_Matrix()} is used for model terms where
   the maximum number of non-zero entries in the design matrix is less than half of the total number
-  of columns, if an additional argument \code{force.spam} is set to \code{TRUE} in the \code{bfit()}
-  call. Similarly the \pkg{spam} package and \code{bfit_iwls_spam()} is used if
-  \code{force.spam = TRUE} is supplied in the \code{bfit()} call.
+  of columns, if an additional argument \code{force.Matrix} is set to \code{TRUE} in the \code{bfit()}
+  call.
 
   The IWLS updating functions find optimum smoothing variances according to an information criterion
   using a stepwise approach, i.e., in each iteration and for each model term update the updating

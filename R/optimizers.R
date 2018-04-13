@@ -87,7 +87,8 @@ bamlss.engine.setup <- function(x, update = "iwls", propose = "iwlsC_gp",
                 tdf <- df[x$smooth.construct[[j]]$label]
             } else tdf <- df[1]
           }
-          x$smooth.construct[[j]] <- assign.df(x$smooth.construct[[j]], tdf)
+          if(is.null(list(...)$nodf))
+            x$smooth.construct[[j]] <- assign.df(x$smooth.construct[[j]], tdf, do.part = TRUE)
           if(!is.null(x$smooth.construct[[j]]$xt[["update"]]))
             x$smooth.construct[[j]]$update <- x$smooth.construct[[j]]$xt[["update"]]
           if(is.null(x$smooth.construct[[j]]$update)) {
@@ -96,7 +97,10 @@ bamlss.engine.setup <- function(x, update = "iwls", propose = "iwlsC_gp",
                 update <- paste("bfit", update, sep = "_")
               update <- get(update)
             }
-            x$smooth.construct[[j]]$update <- update
+            if(is.null(x$smooth.construct[[j]]$is.model.matrix))
+              x$smooth.construct[[j]]$update <- update
+            else
+              x$smooth.construct[[j]]$update <- bfit_iwls
           }
           if(is.null(x$smooth.construct[[j]]$propose)) {
             if(is.character(propose)) {
@@ -173,13 +177,13 @@ get.state <- function(x, what = NULL) {
   if(what %in% c("par", "parameters")) {
     return(x$state$parameters)
   } else {
-    if(what %in% c("tau2", "tau", "lambda")) {
+    if(what %in% c("tau2", "lambda")) {
       p <- x$state$parameters
-      return(p[grep("tau", names(p))])
+      return(p[grep("tau2", names(p))])
     } else {
       if(what %in% "b") {
         p <- x$state$parameters
-        return(p[!grepl("tau", names(p)) & !grepl("edf", names(p)) & !grepl("lasso", names(p))])
+        return(p[!grepl("tau2", names(p)) & !grepl("edf", names(p)) & !grepl("lasso", names(p))])
       } else return(x$state[[what]])
     }
   }
@@ -187,11 +191,11 @@ get.state <- function(x, what = NULL) {
 
 get.par <- function(x, what = NULL) {
   if(is.null(what) | is.null(names(x))) return(x)
-  if(what %in% c("tau2", "tau", "lambda")) {
-    return(x[grep("tau", names(x))])
+  if(what %in% c("tau2", "lambda")) {
+    return(x[grep("tau2", names(x))])
   } else {
     if(what %in% "b") {
-      return(x[!grepl("tau", names(x)) & !grepl("edf", names(x)) & !grepl("lasso", names(x))])
+      return(x[!grepl("tau2", names(x)) & !grepl("edf", names(x)) & !grepl("lasso", names(x))])
     } else return(x[what])
   }
 }
@@ -199,37 +203,54 @@ get.par <- function(x, what = NULL) {
 set.par <- function(x, replacement, what) {
   if(is.null(replacement))
     return(x)
-  if(what %in% c("tau2", "tau", "lambda")) {
-    x[grep("tau", names(x))] <- replacement
+  if(what %in% c("tau2", "lambda")) {
+    x[grep("tau2", names(x))] <- replacement
   } else {
     if(what %in% "b") {
-      if(as.integer(sum(!grepl("tau", names(x)) & !grepl("edf", names(x)) & !grepl("lasso", names(x)))) != length(replacement)) {
+      if(as.integer(sum(!grepl("tau2", names(x)) & !grepl("edf", names(x)) & !grepl("lasso", names(x)))) != length(replacement)) {
         stop("here")
       }
-      x[!grepl("tau", names(x)) & !grepl("edf", names(x)) & !grepl("lasso", names(x))] <- replacement
+      x[!grepl("tau2", names(x)) & !grepl("edf", names(x)) & !grepl("lasso", names(x))] <- replacement
     } else x[what] <- replacement
   }
   x
 }
 
 ## The default method.
-bamlss.engine.setup.smooth.default <- function(x, spam = FALSE, Matrix = FALSE, ...)
+bamlss.engine.setup.smooth.default <- function(x, Matrix = FALSE, ...)
 {
   if(inherits(x, "special"))
     return(x)
   if(!is.null(x$margin)) {
     x$xt <- c(x$xt, x$margin[[1]]$xt)
     x$xt <- x$xt[unique(names(x$xt))]
+    x$fixed <- x$margin[[1]]$fixed
   }
   if(is.null(x$binning) & !is.null(x$xt[["binning"]])) {
-    x$binning <- match.index(x$X)
-    x$binning$order <- order(x$binning$match.index)
-    x$binning$sorted.index <- x$binning$match.index[x$binning$order]
-    x$X <- x$X[x$binning$nodups, , drop = FALSE]
+    if(is.logical(x$xt[["binning"]])) {
+      if(x$xt[["binning"]]) {
+        x$binning <- match.index(x$X)
+        x$binning$order <- order(x$binning$match.index)
+        x$binning$sorted.index <- x$binning$match.index[x$binning$order]
+        assign <- attr(x$X, "assign")
+        x$X <- x$X[x$binning$nodups, , drop = FALSE]
+        attr(x$X, "assign") <- assign
+      }
+    } else {
+      x$binning <- match.index(x$X)
+      x$binning$order <- order(x$binning$match.index)
+      x$binning$sorted.index <- x$binning$match.index[x$binning$order]
+      assign <- attr(x$X, "assign")
+      x$X <- x$X[x$binning$nodups, , drop = FALSE]
+      attr(x$X, "assign") <- assign
+    }
   }
   if(!is.null(x$binning)) {
-    if(nrow(x$X) != length(x$binning$nodups))
+    if(nrow(x$X) != length(x$binning$nodups)) {
+      assign <- attr(x$X, "assign")
       x$X <- x$X[x$binning$nodups, , drop = FALSE]
+      attr(x$X, "assign") <- assign
+    }
   }
   if(is.null(x$binning)) {
     nr <- nrow(x$X)
@@ -354,26 +375,6 @@ bamlss.engine.setup.smooth.default <- function(x, spam = FALSE, Matrix = FALSE, 
   
   args <- list(...)
   
-  force.spam <- if(is.null(args$force.spam)) FALSE else args$force.spam
-  if(!is.null(x$xt$force.spam))
-    force.spam <- x$xt$force.spam
-  if(!is.null(x$sparse.setup$crossprod)) {
-    if((ncol(x$sparse.setup$crossprod) < ncol(x$X) * 0.5) & force.spam)
-      spam <- TRUE
-    if(spam) {
-      x$X <- as.spam(x$X)
-      xx <- crossprod.spam(x$X)
-      for(j in seq_along(x$S)) {
-        x$S[[j]] <- as.spam( if(is.function(x$S[[j]])) x$S[[j]](c("b" = rep(0, attr(x$S[[j]], "npar")))) else x$S[[j]] )
-        xx <- xx + x$S[[j]]
-      }
-      x$sparse.setup$spam.cholFactor <- chol.spam(xx)
-      if(force.spam) {
-        x$update <- bfit_iwls_spam
-      }
-    }
-  }
-  
   force.Matrix <- if(is.null(args$force.Matrix)) FALSE else args$force.Matrix
   if(!is.null(x$xt$force.Matrix))
     force.Matrix <- x$xt$force.Matrix
@@ -411,7 +412,7 @@ bamlss.engine.setup.smooth.default <- function(x, spam = FALSE, Matrix = FALSE, 
       x$state$parameters <- set.par(x$state$parameters, tau2, "tau2")
     }
   }
-  pid <- !grepl("tau", names(x$state$parameters)) & !grepl("edf", names(x$state$parameters))
+  pid <- !grepl("tau2", names(x$state$parameters)) & !grepl("edf", names(x$state$parameters))
   x$pid <- list("b" = which(pid), "tau2" = which(!pid))
   if(!length(x$pid$tau2))
     x$pid$tau2 <- NULL
@@ -425,7 +426,7 @@ bamlss.engine.setup.smooth.default <- function(x, spam = FALSE, Matrix = FALSE, 
       x$hess <- priors$hess
     }
   }
-  
+
   x$fit.fun <- make.fit.fun(x)
   x$state$fitted.values <- x$fit.fun(x$X, get.par(x$state$parameters, "b"))
   x$state$edf <- x$edf(x)
@@ -447,9 +448,15 @@ tau2interval <- function(x, lower = .Machine$double.eps^0.8, upper = 1e+10)
 
 
 ## Assign degrees of freedom.
-assign.df <- function(x, df)
+assign.df <- function(x, df, do.part = FALSE)
 {
   if(inherits(x, "special"))
+    return(x)
+  if(!is.null(x$is.model.matrix)) {
+    if(x$is.model.matrix)
+      return(x)
+  }
+  if(is.null(x$S))
     return(x)
   tau2 <- get.par(x$state$parameters, "tau2")
   if(x$fixed | !length(tau2))
@@ -458,6 +465,8 @@ assign.df <- function(x, df)
     if(x$fxsp)
       return(x)
   }
+  if(!is.null(x$no.assign.df))
+    return(x)
   df <- if(is.null(x$xt$df)) df else x$xt$df
   if(is.null(df)) {
     nc <- ncol(x$X)
@@ -465,45 +474,41 @@ assign.df <- function(x, df)
   }
   if(df > ncol(x$X))
     df <- ncol(x$X)
-  if(df < 1)
-    df <- 1
-  int <- c(.Machine$double.eps^0.25, 1e+10)
-  if(inherits(x$X, "spam")) {
-    XX <- crossprod.spam(x$X)
-  } else {
-    XX <- crossprod(x$X)
-  }
+  XX <- crossprod(x$X)
   if(length(tau2) > 1) {
-    if(FALSE) {
-      df.part <- df / length(tau2)
-      for(j in seq_along(tau2)) {
-        objfun <- function(val) {
-          tau2[j] <- val
-          S <- 0
-          for(i in seq_along(x$S))
-            S <- S + 1 / tau2[i] * (if(is.function(x$S[[i]])) x$S[[i]](c("b" = rep(0, attr(x$S[[i]], "npar")))) else x$S[[i]])
-          edf <- sum_diag(XX %*% matrix_inv(XX + S, index = x$sparse.setup))
-          return((df - edf)^2)
-        }
-        opt <- try(optimize(objfun, int)$minimum, silent = TRUE)
-        if(!inherits(opt, "try-error"))
-          tau2[j] <- opt
-      }
-      tau2 <- rep(1000, length(tau2))
+    objfun <- function(tau2, ret.edf = FALSE) {
+      S <- 0
+      for(i in seq_along(x$S))
+        S <- S + 1 / tau2[i] * (if(is.function(x$S[[i]])) x$S[[i]](c("b" = rep(0, attr(x$S[[i]], "npar")))) else x$S[[i]])
+      edf <- sum_diag(XX %*% matrix_inv(XX + S, index = x$sparse.setup))
+      if(ret.edf)
+        return(edf)
+      else
+        return((df - edf)^2)
+    }
+    if(do.part) {
+      opt <- tau2.optim(objfun, start = tau2, maxit = 1000, scale = 100,
+        add = FALSE, force.stop = FALSE, eps = .Machine$double.eps^0.8)
+      if(!inherits(opt, "try-error"))
+        tau2 <- opt
     }
   } else {
-    objfun <- function(tau2) {
+    objfun <- function(tau2, ret.edf = FALSE) {
       edf <- sum_diag(XX %*% matrix_inv(XX + 1 / tau2 * (if(is.function(x$S[[1]])) {
-        x$S[[1]](c("b" = rep(0, attr(x$S[[1]], "npar"))))
+        x$S[[1]](c("b" = rep(0, attr(x$S[[1]], "npar")), x$fixed.hyper))
       } else x$S[[1]]), index = x$sparse.setup))
-      return((df - edf)^2)
+      if(ret.edf)
+        return(edf)
+      else
+        return((df - edf)^2)
     }
-    tau2 <- try(optimize(objfun, int)$minimum, silent = TRUE)
+    tau2 <- tau2.optim(objfun, start = tau2, maxit = 1000, scale = 10,
+      add = FALSE, force.stop = FALSE, eps = .Machine$double.eps^0.8)
     if(inherits(tau2, "try-error"))
       return(x)
   }
   x$state$parameters <- set.par(x$state$parameters, tau2, "tau2")
-  x$state$edf <- df
+  x$state$edf <- objfun(tau2, ret.edf = TRUE)
   return(x)
 }
 
@@ -714,7 +719,7 @@ fmt <- Vectorize(function(x, width = 8, digits = 2) {
 bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
   update = "iwls", criterion = c("AICc", "BIC", "AIC"),
   eps = .Machine$double.eps^0.25, maxit = 400,
-  outer = FALSE, inner = FALSE, mgcv = FALSE,
+  outer = NULL, inner = FALSE, mgcv = FALSE,
   verbose = TRUE, digits = 4, flush = TRUE, nu = NULL, stop.nu = NULL, ...)
 {
   nx <- family$names
@@ -743,8 +748,6 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
   if(!is.null(start))
     x <- set.starting.values(x, start)
   eta <- get.eta(x)
-  if(is.null(start))
-    eta <- init.eta(eta, y, family, nobs)
   
   if(!is.null(weights))
     weights <- as.data.frame(weights)
@@ -754,13 +757,27 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
       if(!is.null(offset[[j]]))
         eta[[j]] <- eta[[j]] + offset[[j]]
     }
+  } else {
+    if(is.null(start))
+      eta <- init.eta(eta, y, family, nobs)
   }
   
   ia <- if(flush) interactive() else FALSE
-  
+
+  if(is.null(outer)) {
+    outer <- FALSE
+    max_outer <- 1
+  } else {
+    max_outer <- if(outer) {
+      maxit + 1
+    } else {
+      0
+    }
+  }
   if(mgcv) {
     outer <- TRUE
     inner <- TRUE
+    max_outer <- maxit + 1
   }
   
   inner_bf <- if(!mgcv) {
@@ -894,7 +911,7 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
       eta0 <- eta
       ## Cycle through all parameters
       for(j in 1:np) {
-        if(outer | iter < 2) {
+        if(iter < max_outer) {
           peta <- family$map2par(eta)
           
           if(no_ff) {
@@ -916,6 +933,7 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
           
           ## Compute working observations.
           z <- eta[[nx[j]]] + 1 / hess * score
+
         } else z <- hess <- score <- NULL
         
         if(iter < 2)
@@ -999,7 +1017,7 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
         if(iter > stop.nu)
           nu <- NULL
       }
-      
+
       eps0 <- do.call("cbind", eta)
       eps0 <- mean(abs((eps0 - do.call("cbind", eta0)) / eps0), na.rm = TRUE)
       if(is.na(eps0) | !is.finite(eps0)) eps0 <- eps + 1
@@ -1115,7 +1133,7 @@ cround <- function(x, digits = 2)
 
 
 ## Naive smoothing parameter optimization.
-tau2.optim <- function(f, start, ..., scale = 10, eps = 0.0001, maxit = 1)
+tau2.optim <- function(f, start, ..., scale = 10, eps = .Machine$double.eps^0.5, maxit = 1, add = TRUE, force.stop = TRUE)
 {
   foo <- function(par, start, k) {
     start[k] <- cround(par)
@@ -1123,25 +1141,27 @@ tau2.optim <- function(f, start, ..., scale = 10, eps = 0.0001, maxit = 1)
   }
   
   start <- cround(start)
-  ic0 <- f(start)
+  ic0 <- f(start, ...)
   
   iter <- 0; eps0 <- eps + 1
   while((eps0 > eps) & (iter < maxit)) {
     start0 <- start
     for(k in seq_along(start)) {
-      xr <- c(start[k] / scale, start[k] * scale + 1)
-      tpar <- try(optimize(foo, interval = xr, start = start, k = k), silent = TRUE)
+      xr <- c(start[k] / scale, start[k] * scale + if(add) 1 else 0)
+      tpar <- try(optimize(foo, interval = xr, start = start, k = k, tol = eps), silent = TRUE)
       if(!inherits(tpar, "try-error")) {
         if(tpar$objective < ic0) {
-          start[k] <- cround(tpar$minimum)
+          start[k] <- tpar$minimum
           ic0 <- tpar$objective
         }
       }
     }
-    if(length(start) < 2)
+
+    if((length(start) < 2) & force.stop)
       break
     
     eps0 <- mean(abs((start - start0) / start0))
+
     iter <- iter + 1
   }
   
@@ -1246,6 +1266,76 @@ bfit_newton <- function(x, family, y, eta, id, ...)
 }
 
 
+boostm_fit0 <- function(x, grad, hess, z, nu, stop.criterion, family, y, eta, edf, id, do.optim, ...)
+{
+  b0 <- get.par(x$state$parameters, "b")
+
+  xbin.fun(x$binning$sorted.index, hess, rep(0, length(grad)),
+    x$weights, x$rres, x$binning$order, x$binning$uind)
+  XWX <- do.XWX(x$X, 1 / x$weights, x$sparse.setup$matrix)
+
+  if(x$fixed) {
+    k <- length(b0)
+    S <- matrix(0, k, k)
+  } else {
+    if(do.optim) {
+      tpar <- x$state$parameters
+      edf <- edf - x$state$edf
+
+      eta[[id]] <- eta[[id]] - fitted(x$state)
+
+      objfun <- function(tau2) {
+        tpar2 <- set.par(tpar, tau2, "tau2")
+        S <- 0
+        for(j in seq_along(tau2))
+          S <- S + (1 / tau2[j]) * if(is.function(x$S[[j]])) x$S[[j]](c(tpar2, x$fixed.hyper)) else x$S[[j]]
+        xgrad <- t(x$X) %*% grad + S %*% b0
+        xhess <- XWX + S
+        Sigma <- matrix_inv(xhess, index = x$sparse.setup)
+        b1 <- b0 + drop(nu * Sigma %*% xgrad)
+        eta[[id]] <- eta[[id]] + x$fit.fun(x$X, b1)
+        edf <- edf + sum_diag(XWX %*% Sigma)
+        return(get.ic(family, y, family$map2par(eta), edf, length(eta[[1]]), type = stop.criterion))
+      }
+
+      tau2 <- tau2.optim(objfun, start = get.par(x$state$parameters, "tau2"), scale = 10, maxit = 10, force.stop = FALSE, add = FALSE)
+      x$state$parameters <- set.par(x$state$parameters, tau2, "tau2")
+    }
+
+    tau2 <- get.par(x$state$parameters, "tau2")
+
+    S <- 0
+    for(j in seq_along(tau2))
+      S <- S + (1 / tau2[j]) * if(is.function(x$S[[j]])) x$S[[j]](c(x$state$parameters, x$fixed.hyper)) else x$S[[j]]
+  }
+
+  xgrad <- t(x$X) %*% grad + S %*% b0
+  xhess <- XWX + S
+  Sigma <- matrix_inv(xhess, index = x$sparse.setup)
+  b1 <- b0 + drop(nu * Sigma %*% xgrad)
+    
+  x$state$parameters <- set.par(x$state$parameters, b1, "b")
+  x$state$fitted.values <- x$fit.fun(x$X, b1)
+  x$state$hessian <- Sigma
+  x$state$edf <- sum_diag(XWX %*% Sigma)
+  
+  return(x$state)
+}
+
+
+boostm_fit <- function(x, grad, hess, z, nu, stop.criterion, family, y, eta, edf, id, do.optim, ...)
+{
+  x$state$do.optim <- do.optim
+  b0 <- get.par(x$state$parameters, "b")
+  state <- bfit_iwls(x = x, family = family, y = y, eta = eta, id = id, criterion = stop.criterion,
+    grad = grad, hess = hess, z = z, edf = edf, ...)
+  b1 <- get.par(state$parameters, "b")
+  state$parameters <- set.par(state$parameters, nu * b1 + (1 - nu) * b0, "b")
+  state$fitted.values <- x$fit.fun(x$X, get.par(state$parameters, "b"))
+  return(state)
+}
+
+
 bfit_lm <- function(x, family, y, eta, id, weights, criterion, ...)
 {
   args <- list(...)
@@ -1325,6 +1415,7 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
   
   ## Compute reduced residuals.
   e <- z - eta[[id]]
+
   xbin.fun(x$binning$sorted.index, hess, e, x$weights, x$rres, x$binning$order, x$binning$uind)
   
   ## Old parameters.
@@ -1350,7 +1441,7 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
     eta2 <- eta
     
     env <- new.env()
-    
+
     objfun <- function(tau2, ...) {
       S <- 0
       for(j in seq_along(x$S))
@@ -1380,13 +1471,13 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
       } else assign("ic_val", ic, envir = env)
       return(ic)
     }
+
+    assign("ic00_val", objfun(tau2 <- get.state(x, "tau2")), envir = env)
+
+    tau2 <- tau2.optim(objfun, start = tau2)
     
-    assign("ic00_val", objfun(get.state(x, "tau2")), envir = env)
-    
-    tau2 <- tau2.optim(objfun, start = get.state(x, "tau2"))
-    
-    #if(!is.null(env$state))
-    #  return(env$state)
+    if(!is.null(env$state))
+      return(env$state)
     
     x$state$parameters <- set.par(x$state$parameters, tau2, "tau2")
     S <- 0
@@ -1403,118 +1494,7 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
   }
   x$state$fitted.values <- x$fit.fun(x$X, get.state(x, "b"))
   x$state$edf <- sum_diag(XWX %*% P)
-  
-  if(!is.null(x$prior)) {
-    if(is.function(x$prior))
-      x$state$log.prior <- x$prior(x$state$parameters)
-  }
-  
-  return(x$state)
-}
 
-
-bfit_iwls_spam <- function(x, family, y, eta, id, weights, criterion, ...)
-{
-  args <- list(...)
-  
-  peta <- family$map2par(eta)
-  if(is.null(args$hess)) {
-    ## Compute weights.
-    hess <- family$hess[[id]](y, peta, id = id, ...)
-  } else hess <- args$hess
-  
-  if(!is.null(weights))
-    hess <- hess * weights
-  
-  hess <- process.derivs(hess, is.weight = TRUE)
-  
-  if(is.null(args$z)) {
-    ## Score.
-    score <- process.derivs(family$score[[id]](y, peta, id = id, ...), is.weight = FALSE)
-    
-    ## Compute working observations.
-    z <- eta[[id]] + 1 / hess * score
-  } else z <- args$z
-  
-  ## Compute partial predictor.
-  eta[[id]] <- eta[[id]] - fitted(x$state)
-  
-  ## Compute reduced residuals.
-  e <- z - eta[[id]]
-  xbin.fun(x$binning$sorted.index, hess, e, x$weights, x$rres, x$binning$order)
-  
-  ## Compute mean and precision.
-  XWX <- (t(diag.spam(x$weights) %*% x$X)) %*% x$X
-  Xr <- crossprod.spam(x$X, x$rres)
-  
-  if(!x$state$do.optim | x$fixed | x$fxsp) {
-    if(!x$fixed) {
-      tau2 <- get.state(x, "tau2")
-      S <- 0
-      for(j in seq_along(x$S))
-        S <- S + 1 / tau2[j] * x$S[[j]]
-      U <- update.spam.chol.NgPeyton(x$sparse.setup$spam.cholFactor, XWX + S)
-    } else {
-      U <- update.spam.chol.NgPeyton(x$sparse.setup$spam.cholFactor, XWX)
-    }
-    P <- chol2inv.spam(U)
-    b <- P %*% Xr
-    x$state$parameters <- set.par(x$state$parameters, b, "b")
-  } else {
-    args <- list(...)
-    edf0 <- args$edf - x$state$edf
-    eta2 <- eta
-    
-    env <- new.env()
-    
-    objfun <- function(tau2, ...) {
-      S <- 0
-      for(j in seq_along(x$S))
-        S <- S + 1 / tau2[j] * x$S[[j]]
-      U <- update.spam.chol.NgPeyton(x$sparse.setup$spam.cholFactor, XWX + S)
-      P <- chol2inv.spam(U)
-      b <- P %*% Xr
-      fit <- x$fit.fun(x$X, b)
-      edf <- sum_diag(XWX %*% P)
-      eta2[[id]] <- eta2[[id]] + fit
-      ic <- get.ic(family, y, family$map2par(eta2), edf0 + edf, length(z), criterion, ...)
-      if(!is.null(env$ic_val)) {
-        if((ic < env$ic_val) & (ic < env$ic00_val)) {
-          par <- c(b, tau2)
-          names(par) <- names(x$state$parameters)
-          x$state$parameters <- par
-          x$state$fitted.values <- fit
-          x$state$edf <- edf
-          if(!is.null(x$prior)) {
-            if(is.function(x$prior))
-              x$state$log.prior <- x$prior(par)
-          }
-          assign("state", x$state, envir = env)
-          assign("ic_val", ic, envir = env)
-        }
-      } else assign("ic_val", ic, envir = env)
-      return(ic)
-    }
-    
-    assign("ic00_val", objfun(get.state(x, "tau2")), envir = env)
-    tau2 <- tau2.optim(objfun, start = get.state(x, "tau2"))
-    
-    if(!is.null(env$state))
-      return(env$state)
-    
-    S <- 0
-    for(j in seq_along(x$S))
-      S <- S + 1 / tau2[j] * x$S[[j]]
-    U <- update.spam.chol.NgPeyton(x$sparse.setup$spam.cholFactor, XWX + S)
-    P <- chol2inv.spam(U)
-    b <- P %*% Xr
-    x$state$parameters <- set.par(x$state$parameters, b, "b")
-    x$state$parameters <- set.par(x$state$parameters, tau2, "tau2")
-  }
-  
-  ## Compute fitted values.
-  x$state$fitted.values <- x$fit.fun(x$X, get.state(x, "b"))
-  x$state$edf <- sum_diag(XWX %*% P)
   if(!is.null(x$prior)) {
     if(is.function(x$prior))
       x$state$log.prior <- x$prior(x$state$parameters)
@@ -1634,6 +1614,64 @@ bfit_iwls_Matrix <- function(x, family, y, eta, id, weights, criterion, ...)
 }
 
 
+bfit_glmnet <- function(x, family, y, eta, id, weights, criterion, ...)
+{
+  requireNamespace("glmnet")
+
+  args <- list(...)
+  peta <- family$map2par(eta)
+  
+  hess <- if(is.null(args$hess)) {
+    hess <- process.derivs(family$hess[[id]](y, peta, id = id, ...), is.weight = TRUE)
+  } else args$hess
+  
+  if(!is.null(weights))
+    hess <- hess * weights
+ 
+  if(is.null(args$z)) {
+    score <- process.derivs(family$score[[id]](y, peta, id = id, ...), is.weight = FALSE)
+    
+    ## Compute working observations.
+    z <- eta[[id]] + 1 / hess * score
+  } else z <- args$z
+  
+  ## Compute partial predictor.
+  eta[[id]] <- eta[[id]] - fitted(x$state)
+  
+  ## Compute residuals.
+  e <- z - eta[[id]]
+
+  if(is.null(x$xt$alpha))
+    x$xt$alpha <- 1
+  if(is.null(x$xt$nlambda))
+    x$xt$nlambda <- 100
+  if(is.null(x$xt$lambda.min.ratio))
+    x$xt$lambda.min.ratio <- 1e-20
+
+  b <- glmnet::glmnet(x$X, e, alpha = x$xt$alpha,
+    nlambda = x$xt$nlambda, standardize = FALSE, intercept = FALSE,
+    lambda.min.ratio = x$xt$lambda.min.ratio,
+    weights = hess)
+
+  tLL <- b$nulldev - deviance(b)
+  k <- b$df
+  n <- b$nobs
+  IC <- switch(criterion,
+    "AICc" = -tLL + 2*k + 2*k*(k + 1)/(n - k - 1),
+    "BIC" = -tLL + k * log(n),
+    "AIC" = -tLL + 2 * k
+  )
+  i <- which.min(IC)
+
+  x$state$parameters <- set.par(x$state$parameters, as.numeric(b$lambda[i]), "tau2")
+  cb <- as.numeric(coef(b, s = b$lambda[i])[-1])
+  x$state$parameters <- set.par(x$state$parameters, cb, "b")
+  x$state$fitted.values <- x$X %*% cb
+  x$state$edf <- b$df[i]
+
+  return(x$state)
+}
+
 
 ## Updating based on optim.
 bfit_optim <- function(x, family, y, eta, id, weights, criterion, ...)
@@ -1675,9 +1713,10 @@ bfit_optim <- function(x, family, y, eta, id, weights, criterion, ...)
       return(drop(-1 * grad))
     }
   } else NULL
-  
+
   suppressWarnings(opt <- try(optim(get.par(tpar, "b"), fn = objfun, gr = grad,
-    method = "BFGS", control = list(), tau2 = get.par(tpar, "tau2"), hessian = TRUE),
+    method = "BFGS", control = list(), tau2 = get.par(tpar, "tau2"), hessian = TRUE,
+    lower = if(!is.null(x$force.positive)) 1e-10 else -Inf),
     silent = TRUE))
   
   if(!inherits(opt, "try-error")) {
@@ -1740,11 +1779,15 @@ log_posterior <- function(par, x, y, family, verbose = TRUE, digits = 3, scale =
       if(x[[j]]$smooth.construct[[sj]]$by == "NA") {
         tpar <- tpar[!grepl(":", names(tpar), fixed = TRUE)]
       }
-      x[[j]]$smooth.construct[[sj]]$state$parameters <- set.par(x[[j]]$smooth.construct[[sj]]$state$parameters, tpar, "b")
-      x[[j]]$smooth.construct[[sj]]$state$fitted.values <- x[[j]]$smooth.construct[[sj]]$fit.fun(x[[j]]$smooth.construct[[sj]]$X,
-                                                                                                 get.par(tpar, "b"))
+      bb <- get.par(tpar, "b")
+      x[[j]]$smooth.construct[[sj]]$state$parameters <- set.par(x[[j]]$smooth.construct[[sj]]$state$parameters, bb, "b")
+      x[[j]]$smooth.construct[[sj]]$state$fitted.values <- x[[j]]$smooth.construct[[sj]]$fit.fun(x[[j]]$smooth.construct[[sj]]$X, bb)
       eta[[j]] <- eta[[j]] + fitted(x[[j]]$smooth.construct[[sj]]$state)
-      lprior <- lprior + x[[j]]$smooth.construct[[sj]]$prior(c(tpar, get.state(x[[j]]$smooth.construct[[sj]], "tau2"), x[[j]]$smooth.construct[[sj]]$fixed.hyper))
+      if(any(grepl("tau2", names(tpar)))) {
+        lprior <- lprior + x[[j]]$smooth.construct[[sj]]$prior(c(tpar, x[[j]]$smooth.construct[[sj]]$fixed.hyper))
+      } else {
+        lprior <- lprior + x[[j]]$smooth.construct[[sj]]$prior(c(tpar, get.state(x[[j]]$smooth.construct[[sj]], "tau2"), x[[j]]$smooth.construct[[sj]]$fixed.hyper))
+      }
     }
   }
   ll <- family$loglik(y, family$map2par(eta))
@@ -1888,190 +1931,51 @@ xbin.fun <- function(ind, weights, e, xweights, xrres, oind, uind = NULL)
   } else {
     .Call("xbin_fun", as.integer(ind), as.numeric(weights), 
           as.numeric(e), as.numeric(xweights), as.numeric(xrres),
-          as.integer(oind))
+          as.integer(oind), PACKAGE = "bamlss")
   }
   invisible(NULL)
 }
 
 
-## Likelihood based boosting.
-#boost_logLik <- function(x, y, family, weights = NULL, offset = NULL,
-#  criterion = c("AICc", "BIC", "AIC"),
-#  nu = 1, df = 4, maxit = 100, mstop = NULL, best = TRUE,
-#  verbose = TRUE, digits = 4,
-#  eps = .Machine$double.eps^0.25, plot = TRUE, ...)
-#{
-#  if(!is.null(mstop))
-#    maxit <- mstop
-
-#  if(is.null(attr(x, "bamlss.engine.setup")))
-#    x <- bamlss.engine.setup(x, ...)
-
-#  nx <- family$names
-#  if(!all(nx %in% names(x)))
-#    stop("parameter names mismatch with family names!")
-#  criterion <- match.arg(criterion)
-
-#  np <- length(nx)
-#  y <- y[[1]]
-#  nobs <- if(is.null(dim(y))) length(y) else nrow(y)
-
-#  ## Setup boosting structure, i.e, all parametric
-#  ## terms get an entry in $smooth.construct object.
-#  ## Intercepts are initalized.
-#  x <- boost.transform(x, y, df, family, weights, offset, maxit, eps, ...)
-
-#  ## Create a list() that saves the states for
-#  ## all parameters and model terms.
-#  states <- make.state.list(x)
-
-#  ## Term selector help vectors.
-#  select <- unlist(states)
-#  term.names <- names(select)
-
-#  ## Extract actual predictor.
-#  eta <- get.eta(x)
-
-#  ## Initial parameters.
-#  parameters <- get.all.par(x)
-
-#  ## Start boosting.
-#  eps0 <- 1; iter <- 1
-#  save.ic <- save.ll <- NULL
-#  ll <- family$loglik(y, family$map2par(eta))
-#  while(iter <= maxit) {
-#    eta0 <- eta
-
-#    ## Cycle through all parameters
-#    for(i in nx) {
-#      peta <- family$map2par(eta)
-
-#      ## Compute weights.
-#      hess <- family$hess[[i]](y, peta, id = i)
-
-#      ## Score.
-#      score <- family$score[[i]](y, peta, id = i)
-
-#      ## Compute working observations.
-#      z <- eta[[i]] + 1 / hess * score
-
-#      ## Residuals.
-#      resids <- z - eta[[i]]
-
-#      for(j in names(x[[i]]$smooth.construct)) {
-#        ## Get updated parameters.
-#        states[[i]][[j]] <- boost_iwls(x[[i]]$smooth.construct[[j]], hess, resids, nu)
-
-#        ## Compute likelihood contribution.
-#        eta[[i]] <- eta[[i]] + fitted(states[[i]][[j]])
-#        select[paste(i, j, sep = ".")] <- -1 * (ll - family$loglik(y, family$map2par(eta)))
-#        eta[[i]] <- eta0[[i]]
-#      }
-#    }
-
-#    ## Which term to update.
-#    take <- strsplit(term.names[which.max(select)], ".", fixed = TRUE)[[1]]
-
-#    ## Update selected base learner.
-#    eta[[take[1]]] <- eta[[take[1]]] + fitted(states[[take[1]]][[take[2]]])
-
-#    ## Write to x.
-#    x[[take[1]]]$smooth.construct[[take[2]]]$state <- increase(x[[take[1]]]$smooth.construct[[take[2]]]$state, states[[take[1]]][[take[2]]])
-#    x[[take[1]]]$smooth.construct[[take[2]]]$selected[iter] <- 1
-#    x[[take[1]]]$smooth.construct[[take[2]]]$loglik[iter] <- max(select)
-
-#    edf <- get.edf(x, type = 2)
-
-#    eps0 <- do.call("cbind", eta)
-#    eps0 <- mean(abs((eps0 - do.call("cbind", eta0)) / eps0), na.rm = TRUE)
-#    if(is.na(eps0) | !is.finite(eps0)) eps0 <- eps + 1
-
-#    peta <- family$map2par(eta)
-#    IC <- get.ic(family, y, peta, edf, nobs, criterion)
-#    if(!is.null(save.ic) & best) {
-#      if(all(IC < save.ic))
-#        parameters <- get.all.par(x)
-#    }
-#    ll <- family$loglik(y, peta)
-
-#    save.ic <- c(save.ic, IC)
-#    save.ll <- c(save.ll, ll)
-
-#    if(verbose) {
-#      cat(if(interactive()) "\r" else "\n")
-#      vtxt <- paste(criterion, " ", fmt(IC, width = 8, digits = digits),
-#        " logLik ", fmt(ll, width = 8, digits = digits),
-#        " edf ", fmt(edf, width = 6, digits = digits),
-#        " eps ", fmt(eps0, width = 6, digits = digits + 2),
-#        " iteration ", formatC(iter, width = nchar(maxit)), sep = "")
-#      cat(vtxt)
-
-#      if(.Platform$OS.type != "unix" & interactive()) flush.console()
-#    }
-
-#    iter <- iter + 1
-#  }
-
-#  if(verbose) cat("\n")
-
-#  mstop <- which.min(save.ic)
-
-#  ## Overwrite parameter state.
-#  if(best) {
-#    for(i in nx) {
-#      rn <- NULL
-#      for(j in names(x[[i]]$smooth.construct)) {
-#        x[[i]]$smooth.construct[[j]]$state$parameters <- parameters[[i]]$s[[j]]
-#        g <- get.par(x[[i]]$smooth.construct[[j]]$state$parameters, "b")
-#        if(!is.null(tau2 <- attr(parameters[[i]]$s[[j]], "true.tau2"))) {
-#          x[[i]]$smooth.construct[[j]]$state$parameters <- set.par(x[[i]]$smooth.construct[[j]]$state$parameters,
-#            tau2, "tau2")
-#        }
-#        x[[i]]$smooth.construct[[j]]$state$edf <- attr(parameters[[i]]$s[[j]], "edf")
-#        if(is.null(x[[i]]$smooth.construct[[j]]$state$edf))
-#          x[[i]]$smooth.construct[[j]]$state$edf <- 0
-#      }
-#    }
-#  }
-
-#  if(verbose) {
-#    cat("---\n", criterion, "=", save.ic[mstop], "-> at mstop =", mstop, "\n---\n")
-#  }
-
-#  bsum <- make.boost.summary(x, mstop, criterion, save.ic)
-#  x <- boost.retransform(x)
-
-#  list("parameters" = get.all.par(x), "fitted.values" = get.eta(x), "boost.summary" = bsum)
-#}
-
-
-## Gradient boosting.
-boost <- function(x, y, family,
-  nu = 0.1, df = 4, maxit = 400, mstop = NULL,
+## Modified likelihood based boosting.
+boostm <- function(x, y, family, offset = NULL,
+  nu = 0.1, df = 3, maxit = 400, mstop = NULL,
   verbose = TRUE, digits = 4, flush = TRUE,
-  eps = .Machine$double.eps^0.25, nback = NULL, plot = TRUE,
-  initialize = TRUE, ...)
+  eps = .Machine$double.eps^0.25, plot = TRUE,
+  initialize = TRUE, stop.criterion = "BIC",
+  force.stop = !is.null(stop.criterion),
+  do.optim = TRUE, always = FALSE, ...)
 {
-  ## FIXME: hard coded.
-  weights <- offset <- NULL
-  
+  ## FIXME: hard coded!
+  offset <- weights <- NULL
+
   nx <- family$names
   if(!all(nx %in% names(x)))
     stop("parameter names mismatch with family names!")
   
   if(!is.null(mstop))
     maxit <- mstop
-  
-  if(!is.null(nback)) {
-    if(is.null(maxit))
-      maxit <- 10000
-  }
+
+  if(!is.null(stop.criterion))
+    stop.criterion <- toupper(stop.criterion)
   
   if(is.null(maxit))
     stop("please set either argument 'maxit' or 'mstop'!")
+
+  always2 <- FALSE
+  if(!is.logical(always)) {
+    if(is.character(always)) {
+      if(!is.na(pmatch(always, "best"))) {
+        always2 <- TRUE
+        always <- TRUE
+      } else {
+        always <- FALSE
+      }
+    }
+  }
   
   if(is.null(attr(x, "bamlss.engine.setup")))
-    x <- bamlss.engine.setup(x, df = df, ...)
+    x <- bamlss.engine.setup(x, df = NULL, ...)
   
   np <- length(nx)
   nobs <- nrow(y)
@@ -2083,8 +1987,13 @@ boost <- function(x, y, family,
   ## Setup boosting structure, i.e, all parametric
   ## terms get an entry in $smooth.construct object.
   ## Intercepts are initalized.
-  x <- boost.transform(x = x, y = y, df = NULL, family = family,
-    maxit = maxit, eps = eps, initialize = initialize, ...)
+  x <- boost.transform(x = x, y = y, df = df, family = family,
+    maxit = maxit, eps = eps, initialize = initialize, offset = offset,
+    weights = weights)
+  for(i in nx) {
+    for(j in names(x[[i]]$smooth.construct))
+      x[[i]]$smooth.construct[[j]]$criterion <- x[[i]]$smooth.construct[[j]]$loglik
+  }
   
   ## Create a list() that saves the states for
   ## all parameters and model terms.
@@ -2097,25 +2006,372 @@ boost <- function(x, y, family,
   select <- rep(NA, length = length(nx))
   names(select) <- nx
   loglik <- select
+
+  ## Criterion used.
+  sic <- if(is.null(stop.criterion)) "BIC" else stop.criterion
   
-  ## Save rss in list().
-  rss <- make.state.list(x, type = 2)
+  ## Save criterion in list().
+  crit <- ll.contrib <- make.state.list(x, type = 2)
   
   ## Extract actual predictor.
   eta <- get.eta(x)
+
+  if(!is.null(offset)) {
+    offset <- as.data.frame(offset)
+    for(j in nx) {
+      if(!is.null(offset[[j]]))
+        eta[[j]] <- eta[[j]] + offset[[j]]
+    }
+  }
   
   ## Print stuff.
   ia <- if(flush) interactive() else FALSE
+ 
+  ## Save edf and IC?
+  edf <- save.ic <- rep(NA, maxit)
   
   ## Env for C.
   rho <- new.env()
   
   ## Start boosting.
   eps0 <- 1; iter <- if(initialize) 2 else 1
-  save.ll <- NULL
+  save.ll <- NULL; stopped <- FALSE
   ll <- family$loglik(y, family$map2par(eta))
+  medf <- get.edf(x, type = 2) + if(initialize) length(nx) else 0
+  ic0 <- -2 * ll + medf * (if(tolower(sic) == "aic") 2 else log(nobs))
   ptm <- proc.time()
   while(iter <= maxit) {
+    eta0 <- eta
+
+    ## Actual parameters.
+    peta <- family$map2par(eta)
+    
+    ## Cycle through all parameters and terms.
+    for(i in nx) {
+      ## Actual gradient.
+      grad <- process.derivs(family$score[[i]](y, peta, id = i), is.weight = FALSE)
+
+      ## Actual hessian.
+      hess <- process.derivs(family$score[[i]](y, peta, id = i), is.weight = FALSE)
+
+      ## Working response.
+      z <- eta[[i]] + 1 / hess * grad
+ 
+      for(j in names(x[[i]]$smooth.construct)) {
+        if(always) {
+          if(j == "(Intercept)") {
+            crit[[i]][j] <- -Inf
+            next
+          }
+        }
+
+        ## Get update.
+        states[[i]][[j]] <- if(is.null(x[[i]]$smooth.construct[[j]][["boostm.fit"]])) {
+          boostm_fit(x[[i]]$smooth.construct[[j]], grad, hess, z, nu, stop.criterion,
+            family, y, eta, medf, id = i, do.optim = do.optim, ...)
+        } else {
+          x[[i]]$smooth.construct[[j]][["boostm.fit"]](x[[i]]$smooth.construct[[j]],
+            grad = grad, hess = hess, z = z, nu = nu, criterion = stop.criterion,
+            family = family, y = y, eta = eta, edf = medf, id = i,
+            do.optim = do.optim, iteration = iter, ...)
+        }
+        
+        ## Get contribution.
+        eta[[i]] <- eta[[i]] + fitted(states[[i]][[j]]) - fitted(x[[i]]$smooth.construct[[j]]$state)
+        tll <- family$loglik(y, family$map2par(eta))
+        if(is.null(stop.criterion)) {
+          crit[[i]][j] <- -1 * (ll - tll)
+        } else {
+          tedf <- medf - x[[i]]$smooth.construct[[j]]$state$edf + states[[i]][[j]]$edf
+          ic1 <- -2 * tll + tedf * (if(tolower(stop.criterion) == "aic") 2 else log(nobs))
+          crit[[i]][j] <- ic1
+        }
+        ll.contrib[[i]][j] <- tll - ll
+        eta[[i]] <- eta0[[i]]
+      }
+      
+      ## Which one is best?
+      select[i] <- which.min(crit[[i]])
+    }
+
+    i <- which.min(sapply(crit, function(x) { min(x) }))
+    
+    ## Which term to update.
+    take <- c(nx[i], names(crit[[i]])[select[i]])
+
+    ## Update selected term.
+    eta[[take[1]]] <- eta[[take[1]]] + fitted(states[[take[1]]][[take[2]]]) - fitted(x[[take[1]]]$smooth.construct[[take[2]]]$state)
+
+    ## Save parameters.
+    parm[[take[1]]][[take[2]]][iter, ] <- get.par(states[[take[1]]][[take[2]]]$parameters, "b") - get.par(x[[take[1]]]$smooth.construct[[take[2]]]$state$parameters, "b")
+    medf <- medf - x[[take[1]]]$smooth.construct[[take[2]]]$state$edf + states[[take[1]]][[take[2]]]$edf
+
+    ## Write to x.
+    x[[take[1]]]$smooth.construct[[take[2]]]$state <- states[[take[1]]][[take[2]]]
+    x[[take[1]]]$smooth.construct[[take[2]]]$selected[iter] <- 1
+    x[[take[1]]]$smooth.construct[[take[2]]]$loglik[iter] <- ll.contrib[[take[1]]][take[2]]
+    x[[take[1]]]$smooth.construct[[take[2]]]$criterion[iter] <- -1 * crit[[take[1]]][take[2]]
+
+    ## Intercept updating.
+    if(always) {
+      nxa <- if(always2) take[1] else nx
+
+      for(ii in nxa) {
+        if("(Intercept)" %in% names(x[[ii]]$smooth.construct)) {
+          ## Actual gradient.
+          grad <- process.derivs(family$score[[ii]](y, peta, id = ii), is.weight = FALSE)
+
+          ## Actual hessian.
+          hess <- process.derivs(family$score[[ii]](y, peta, id = ii), is.weight = FALSE)
+
+          ## Working response.
+          z <- eta[[ii]] + 1 / hess * grad
+
+          ## Get update.
+          states[[ii]][["(Intercept)"]] <- boostm_fit(x[[ii]]$smooth.construct[["(Intercept)"]],
+            grad, hess, z, nu, stop.criterion, family, y, eta, medf, id = i, do.optim = do.optim, ...)
+
+          ll <- family$loglik(y, family$map2par(eta))
+
+          ## Update predictor.
+          eta[[ii]] <- eta[[ii]] + fitted(states[[ii]][["(Intercept)"]]) - fitted(x[[ii]]$smooth.construct[["(Intercept)"]]$state)
+
+          ## Save parameters.
+          parm[[ii]][["(Intercept)"]][iter, ] <- get.par(states[[ii]][["(Intercept)"]]$parameters, "b") - get.par(x[[ii]]$smooth.construct[["(Intercept)"]]$state$parameters, "b")
+          medf <- medf - x[[ii]]$smooth.construct[["(Intercept)"]]$state$edf + states[[ii]][["(Intercept)"]]$edf
+
+          tll <- family$loglik(y, family$map2par(eta))
+          ll.contrib[[ii]]["(Intercept)"] <- tll - ll
+
+          ## Write to x.
+          x[[ii]]$smooth.construct[["(Intercept)"]]$state <- states[[ii]][["(Intercept)"]]
+          x[[ii]]$smooth.construct[["(Intercept)"]]$selected[iter] <- 1
+          x[[ii]]$smooth.construct[["(Intercept)"]]$loglik[iter] <- ll.contrib[[ii]]["(Intercept)"]
+        }
+      }
+    }
+
+    edf[iter] <- medf
+    
+    ## Change.
+    eps0 <- do.call("cbind", eta)
+    eps0 <- mean(abs((eps0 - do.call("cbind", eta0)) / eps0), na.rm = TRUE)
+    if(is.na(eps0) | !is.finite(eps0)) eps0 <- eps + 1
+    
+    ll <- family$loglik(y, family$map2par(eta))
+    ic0 <- -2 * ll + medf * (if(tolower(sic) == "aic") 2 else log(nobs))
+
+    save.ll <- c(save.ll, ll)
+    save.ic[iter] <- ic0
+
+    qsel <- get.qsel(x, iter)
+    
+    if(verbose) {
+      cat(if(ia) "\r" else "\n")
+      vtxt <- paste(
+        paste(sic, " ", fmt(save.ic[iter], width = 8, digits = digits), " ", sep = ""),
+        "logLik ", fmt(ll, width = 8, digits = digits),
+        " edf ", fmt(edf[iter], width = 4, digits = digits), " ",
+        " eps ", fmt(eps0, width = 6, digits = digits + 2),
+        " iteration ", formatC(iter, width = nchar(maxit)),
+        " qsel ", qsel, sep = "")
+      cat(vtxt)
+      
+      if(.Platform$OS.type != "unix" & ia) flush.console()
+    }
+
+    if(!is.null(stop.criterion)) {
+      if(iter > 2) {
+        if(!is.na(save.ic[iter - 1]) & force.stop) {
+          if(save.ic[iter - 1] < save.ic[iter]) {
+            stopped <- TRUE
+            break
+          }
+        }
+      }
+    }
+    
+    iter <- iter + 1
+  }
+
+  elapsed <- c(proc.time() - ptm)[3]
+  
+  if(verbose) {
+    cat("\n")
+    et <- if(elapsed > 60) {
+      paste(formatC(format(round(elapsed / 60, 2), nsmall = 2), width = 5), "min", sep = "")
+    } else paste(formatC(format(round(elapsed, 2), nsmall = 2), width = 5), "sec", sep = "")
+    cat("\n elapsed time: ", et, "\n", sep = "")
+  }
+  
+  itr <- if(!stopped) maxit else (iter - 1)
+  bsum <- make.boost.summary(x, itr, save.ll, edf, FALSE, nobs)
+  bsum$criterion <- list(
+    "bic" = -2 * save.ll[1:itr] + edf[1:itr] * log(nobs),
+    "aic" = -2 * save.ll[1:itr] + edf[1:itr] * 2,
+    "edf" = edf[1:itr]
+  )
+  if(plot)
+    plot.boost.summary(bsum)
+  
+  return(list("parameters" = parm2mat(parm, itr),
+    "fitted.values" = eta, "nobs" = nobs, "boost.summary" = bsum,
+    "runtime" = elapsed))
+}
+
+
+## Gradient boosting.
+boost <- function(x, y, family, weights = NULL, offset = NULL,
+  nu = 0.1, df = 4, maxit = 400, mstop = NULL,
+  maxq = NULL, qsel.splitfactor = FALSE,
+  verbose = TRUE, digits = 4, flush = TRUE,
+  eps = .Machine$double.eps^0.25, nback = NULL, plot = TRUE,
+  initialize = TRUE, stop.criterion = NULL, select.type = 1, force.stop = TRUE,
+  hatmatrix = !is.null(stop.criterion), reverse.edf = FALSE, approx.edf = FALSE,
+  always = FALSE, ...)
+{
+  nx <- family$names
+  if(!all(nx %in% names(x)))
+    stop("parameter names mismatch with family names!")
+
+  if(reverse.edf | approx.edf)
+    hatmatrix <- FALSE
+  
+  if(!is.null(mstop))
+    maxit <- mstop
+  
+  if(!is.null(nback)) {
+    if(is.null(maxit))
+      maxit <- 10000
+  }
+
+  always2 <- FALSE
+  if(!is.logical(always)) {
+    if(is.character(always)) {
+      if(!is.na(pmatch(always, "best"))) {
+        always2 <- TRUE
+        always <- TRUE
+      } else {
+        always <- FALSE
+      }
+    }
+  }
+  
+  if(is.null(maxit))
+    stop("please set either argument 'maxit' or 'mstop'!")
+  
+  if(is.null(attr(x, "bamlss.engine.setup")))
+    x <- bamlss.engine.setup(x, df = NULL, nodf = TRUE, ...)
+  
+  np <- length(nx)
+  nobs <- nrow(y)
+
+  yname <- names(y)
+
+  if(is.data.frame(y)) {
+    if(ncol(y) < 2)
+      y <- y[[1]]
+  }
+
+  if(!is.null(offset))
+    initialize <- FALSE
+  
+  ## Setup boosting structure, i.e, all parametric
+  ## terms get an entry in $smooth.construct object.
+  ## Intercepts are initalized.
+  x <- boost.transform(x = x, y = y, df = df, family = family,
+    maxit = maxit, eps = eps, initialize = initialize, offset = offset,
+    weights = weights, ...)
+
+  if(!is.null(list(...)$ret.x)) {
+    if(list(...)$ret.x)
+      return(x)
+  }
+
+  ## Create a list() that saves the states for
+  ## all parameters and model terms.
+  states <- make.state.list(x)
+  
+  ## Matrix of all parameters.
+  parm <- make.par.list(x, iter = maxit)
+
+  ## Term selector help vectors.
+  select <- rep(NA, length = length(nx))
+  names(select) <- nx
+  loglik <- select
+  
+  ## Save rss in list().
+  rss <- make.state.list(x, type = 2)
+  
+  ## Extract actual predictor.
+  eta <- get.eta(x)
+
+  if(!is.null(offset)) {
+    offset <- as.data.frame(offset)
+    for(j in nx) {
+      if(!is.null(offset[[j]]))
+        eta[[j]] <- eta[[j]] + offset[[j]]
+    }
+  }
+
+  W <- NULL
+  if(!is.null(weights)) {
+    if(attr(weights, "identical"))
+      W <- as.numeric(weights[, 1])
+  }
+  
+  ## Print stuff.
+  ia <- if(flush) interactive() else FALSE
+ 
+  ## Hat matrix?
+  HatMat <- list()
+  edf <- Imat <- save.ic <- NULL
+  if(hatmatrix) {
+    for(i in nx)
+      HatMat[[i]] <- diag(length(eta[[1]]))
+    edf <- rep(0, maxit)
+    if(!is.null(stop.criterion))
+      save.ic <- rep(NA, maxit)
+    Imat <- diag(nobs)
+  }
+  if(reverse.edf | approx.edf) {
+    edf <- rep(0, maxit)
+    if(!is.null(stop.criterion))
+      save.ic <- rep(NA, maxit)
+  }
+  selectfun <- list(...)$selectfun
+  selectmodel <- list(...)$selectmodel
+  if(is.null(selectmodel))
+    selectmodel <- TRUE
+  if(!is.null(selectfun))
+    save.ic <- rep(NA, maxit)
+
+  if(!is.null(selectfun))
+    stop.criterion <- "userIC"
+  
+  ## Env for C.
+  rho <- new.env()
+
+  if(is.null(maxq))
+    maxq <- Inf
+  qsel <- 0
+  
+  ## Start boosting.
+  eps0 <- 1; iter <- if(initialize) 2 else 1
+  save.ll <- NULL
+  ll <- if(is.null(W)) {
+    family$loglik(y, family$map2par(eta))
+  } else {
+    sum(family$d(y, family$map2par(eta)) * W)
+  }
+  redf <- if(initialize) length(nx) else 0
+  loglik <- loglik2 <- NULL
+  iter_ll2 <- 0
+  ptm <- proc.time()
+  while(iter <= maxit & qsel < maxq) {
+    if(iter > 2)
+      loglik2 <- loglik
+
     eta0 <- eta
     
     ## Cycle through all parameters
@@ -2127,29 +2383,130 @@ boost <- function(x, y, family,
       
       ## Fit to gradient.
       for(j in names(x[[i]]$smooth.construct)) {
+        if(always) {
+          if(j == "(Intercept)") {
+            rss[[i]][j] <- Inf
+            next
+          }
+        }
+
         ## Get updated parameters.
+        nu2 <- if(inherits(x[[i]]$smooth.construct[[j]], "nnet.boost")) nu else nu
         states[[i]][[j]] <- if(is.null(x[[i]]$smooth.construct[[j]][["boost.fit"]])) {
-          .Call("boost_fit", x[[i]]$smooth.construct[[j]], grad, nu, rho, PACKAGE = "bamlss")
+          if(hatmatrix) {
+            boost_fit(x[[i]]$smooth.construct[[j]], grad, nu2,
+              hatmatrix = hatmatrix, weights = if(!is.null(weights)) weights[, i] else NULL)
+          } else {
+            .Call("boost_fit", x[[i]]$smooth.construct[[j]], grad, nu2,
+              if(!is.null(weights)) as.numeric(weights[, i]) else numeric(0), rho, PACKAGE = "bamlss")
+          }
         } else {
-          x[[i]]$smooth.construct[[j]][["boost.fit"]](x[[i]]$smooth.construct[[j]], grad, nu, rho)
+          x[[i]]$smooth.construct[[j]][["boost.fit"]](x = x[[i]]$smooth.construct[[j]],
+            y = grad, nu = nu2, hatmatrix = hatmatrix,
+            weights = if(!is.null(weights)) weights[, i] else NULL,
+            rho = rho)
         }
         
         ## Get rss.
-        rss[[i]][j] <- states[[i]][[j]]$rss
+        if(is.null(selectfun)) {
+          if(is.null(stop.criterion)) {
+            rss[[i]][j] <- states[[i]][[j]]$rss
+          } else {
+            if(select.type == 1) {
+              rss[[i]][j] <- states[[i]][[j]]$rss
+            } else {
+              teta <- eta
+              teta[[i]] <- teta[[i]] + fitted(states[[i]][[j]])
+              if(is.null(W))
+                tll <- family$loglik(y, family$map2par(teta))
+              else
+                tll <- sum(family$d(y, family$map2par(teta), log = TRUE) * W)
+              if(approx.edf) {
+                tredf <- redf
+                if(!is.null(x[[i]]$smooth.construct[[j]]$is.model.matrix) | inherits(x[[i]]$smooth.construct[[j]], "nnet.boost")) {
+                  if(x[[i]]$smooth.construct[[j]]$state$init.edf < 1)
+                    tredf <- tredf + 1
+                } else {
+                  if(inherits(x[[i]]$smooth.construct[[j]], "lasso.smooth") | inherits(x[[i]]$smooth.construct[[j]], "nnet.smooth")) {
+                    if(iter < 2) {
+                      aset <- if(x[[i]]$smooth.construct[[j]]$fuse) {
+                        sum(abs(unique.fuse(get.par(states[[i]][[j]]$parameters, "b"))) > 1e-10)
+                      } else {
+                        sum(abs(get.par(states[[i]][[j]]$parameters, "b")) > 1e-10)
+                      }
+                      tredf <- tredf + aset
+                    } else {
+                      aset0 <- apply(parm[[i]][[j]][1:(iter - 1L), , drop = FALSE], 2, sum)
+                      aset1 <- apply(rbind(parm[[i]][[j]][1:(iter - 1L), , drop = FALSE],
+                        get.par(states[[i]][[j]]$parameters, "b")), 2, sum)
+                      if(x[[i]]$smooth.construct[[j]]$fuse) {
+                        aset0 <- sum(abs(unique.fuse(aset0)) > 1e-10)
+                        aset1 <- sum(abs(unique.fuse(aset1)) > 1e-10)
+                      } else {
+                        aset0 <- sum(abs(aset0) > 1e-10)
+                        aset1 <- sum(abs(aset1) > 1e-10)
+                      }
+                      aset <- aset1 - aset0
+                      tredf <- tredf + aset
+                    }
+                  } else {
+                    tredf <- tredf + nu * x[[i]]$smooth.construct[[j]]$state$init.edf
+                  }
+                }
+                rss[[i]][j] <- -2 * tll + tredf * (if(tolower(stop.criterion) == "aic") 2 else log(nobs))
+              } else {
+                if(reverse.edf) {
+                  states[[i]][[j]]$redf <- reverse_edf(x = x[[i]]$smooth.construct[[j]], bn = get.par(states[[i]][[j]]$parameters, "b"),
+                    bmat = parm[[i]][[j]][1:iter, , drop = FALSE], nobs, grad, teta[[i]])
+                  tredf <- redf + states[[i]][[j]]$redf$edf
+                  rss[[i]][j] <- -2 * tll + tredf * (if(tolower(stop.criterion) == "aic") 2 else log(nobs))
+                } else {
+                  ## tedf0 <- sum(diag(Imat - HatMat[[i]] %*% (Imat - states[[i]][[j]]$hat)))
+                  tedf <- hatmat_trace(HatMat[[i]], states[[i]][[j]]$hat)
+                  if(length(nxr <- nx[nx != i])) {
+                    for(ii in nxr)
+                      tedf <- tedf + hatmat_sumdiag(HatMat[[i]])
+                  }
+                  rss[[i]][j] <- -2 * tll + tedf * (if(tolower(stop.criterion) == "aic") 2 else log(nobs))
+                }
+              }
+            }
+          }
+        } else {
+          rss[[i]][j] <- selfun(iter = iter, i = i, j = j, state = states[[i]][[j]],
+            parm = parm, x = x, family = family, sfun = selectfun, yname = yname, weights = weights,
+            selectmodel = selectmodel)
+        }
       }
       
       ## Which one is best?
+      if(always & (length(rss[[i]]) < 2)) {
+        if(names(rss[[i]]) == "(Intercept)")
+          next
+      }
       select[i] <- which.min(rss[[i]])
       
       ## Compute likelihood contribution.
       eta[[i]] <- eta[[i]] + fitted(states[[i]][[select[i]]])
-      llf <- family$loglik(y, family$map2par(eta))
+      llf <- if(is.null(W)) {
+        family$loglik(y, family$map2par(eta))
+      } else {
+        sum(family$d(y, family$map2par(eta), log = TRUE) * W)
+      }
       loglik[i] <- -1 * (ll - llf)
       
       eta[[i]] <- eta0[[i]]
     }
-    
-    i <- which.max(loglik)
+
+    if(is.null(stop.criterion) & is.null(selectfun)) {
+      i <- which.max(loglik)
+    } else {
+      i <- if(select.type == 1) {
+        which.max(loglik)
+      } else {
+        which.min(sapply(rss, function(x) { min(x) }))
+      }
+    }
     
     ## Which term to update.
     take <- c(nx[i], names(rss[[i]])[select[i]])
@@ -2158,30 +2515,175 @@ boost <- function(x, y, family,
     eta[[take[1]]] <- eta[[take[1]]] + states[[take[1]]][[take[2]]]$fitted.values
     
     ## Write to x.
-    x[[take[1]]]$smooth.construct[[take[2]]]$state <- increase(x[[take[1]]]$smooth.construct[[take[2]]]$state, states[[take[1]]][[take[2]]])
+    if(is.null(x[[take[1]]]$smooth.construct[[take[2]]][["increase"]])) {
+      x[[take[1]]]$smooth.construct[[take[2]]]$state <- increase(x[[take[1]]]$smooth.construct[[take[2]]]$state,
+        states[[take[1]]][[take[2]]])
+    } else {
+      x[[take[1]]]$smooth.construct[[take[2]]]$state <- x[[take[1]]]$smooth.construct[[take[2]]][["increase"]](x[[take[1]]]$smooth.construct[[take[2]]]$state,
+        states[[take[1]]][[take[2]]])
+    }
     x[[take[1]]]$smooth.construct[[take[2]]]$selected[iter] <- 1
     x[[take[1]]]$smooth.construct[[take[2]]]$loglik[iter] <- loglik[i]
     
     ## Save parameters.
     parm[[take[1]]][[take[2]]][iter, ] <- get.par(states[[take[1]]][[take[2]]]$parameters, "b")
+
+    ## Intercept updating.
+    if(always) {
+      ll <- if(is.null(W)) {
+        family$loglik(y, family$map2par(eta))
+      } else {
+        sum(family$d(y, family$map2par(eta), log = TRUE) * W)
+      }
+      nxa <- if(always2) take[1] else nx
+      for(ii in nxa) {
+        if("(Intercept)" %in% names(x[[ii]]$smooth.construct)) {
+          peta <- family$map2par(eta)
+      
+          ## Actual gradient.
+          grad <- process.derivs(family$score[[ii]](y, peta, id = ii), is.weight = FALSE)
+
+          ## Update.
+          states[[ii]][["(Intercept)"]] <- if(hatmatrix) {
+            boost_fit(x[[ii]]$smooth.construct[["(Intercept)"]], grad, nu,
+              hatmatrix = hatmatrix, weights = if(!is.null(weights)) weights[, ii] else NULL)
+          } else {
+            .Call("boost_fit", x[[ii]]$smooth.construct[["(Intercept)"]], grad, nu,
+              if(!is.null(weights)) as.numeric(weights[, ii]) else numeric(0), rho, PACKAGE = "bamlss")
+          }
+          eta[[ii]] <- eta[[ii]] + fitted(states[[ii]][["(Intercept)"]])
+          x[[ii]]$smooth.construct[["(Intercept)"]]$state <- increase(x[[ii]]$smooth.construct[["(Intercept)"]]$state,
+            states[[ii]][["(Intercept)"]])
+          x[[ii]]$smooth.construct[["(Intercept)"]]$selected[iter] <- 1
+          x[[ii]]$smooth.construct[["(Intercept)"]]$loglik[iter] <- -1 * (ll - family$loglik(y, family$map2par(eta)))
+          if(approx.edf) {
+            if(x[[ii]]$smooth.construct[["(Intercept)"]]$state$init.edf < 1) {
+              redf <- redf + 1
+              x[[ii]]$smooth.construct[["(Intercept)"]]$state$init.edf <- 1
+            }
+          }
+        }
+      }
+    }
+
     eps0 <- do.call("cbind", eta)
     eps0 <- mean(abs((eps0 - do.call("cbind", eta0)) / eps0), na.rm = TRUE)
     if(is.na(eps0) | !is.finite(eps0)) eps0 <- eps + 1
     
     peta <- family$map2par(eta)
-    ll <- family$loglik(y, peta)
-    
+    ll <- if(is.null(W)) {
+      family$loglik(y, peta)
+    } else {
+      sum(family$d(y, peta, log = TRUE) * W)
+    }
     save.ll <- c(save.ll, ll)
+
+    if(hatmatrix) {
+      HatMat[[take[1]]] <- HatMat[[take[1]]] %*% (Imat - x[[take[1]]]$smooth.construct[[take[2]]]$state$hat)
+      for(i in nx)
+        edf[iter] <- edf[iter] + hatmat_sumdiag(HatMat[[i]])
+      if(!is.null(stop.criterion)) {
+        save.ic[iter] <- -2 * ll + edf[iter] * (if(tolower(stop.criterion) == "aic") 2 else log(nobs))
+        if(iter > (if(initialize) 2 else 1)) {
+          if(!is.na(save.ic[iter - 1]) & force.stop) {
+            if(save.ic[iter - 1] < save.ic[iter]) {
+              nback <- TRUE
+              break
+            }
+          }
+        }
+      }
+    }
+
+    if(reverse.edf | approx.edf) {
+      if(approx.edf) {
+        if(!is.null(x[[take[1]]]$smooth.construct[[take[2]]]$is.model.matrix) | inherits(x[[take[1]]]$smooth.construct[[take[2]]], "nnet.boost")) {
+          if(x[[take[1]]]$smooth.construct[[take[2]]]$state$init.edf < 1) {
+            redf <- redf + 1
+            x[[take[1]]]$smooth.construct[[take[2]]]$state$init.edf <- 1
+          }
+        } else {
+          if(inherits(x[[take[1]]]$smooth.construct[[take[2]]], "lasso.smooth") | inherits(x[[take[1]]]$smooth.construct[[take[2]]], "nnet.smooth")) {
+            if(iter < 2) {
+              aset <- if(x[[take[1]]]$smooth.construct[[take[2]]]$fuse) {
+                  sum(abs(unique.fuse(parm[[take[1]]][[take[2]]][iter, ])) > 1e-10)
+                } else {
+                  sum(abs(parm[[take[1]]][[take[2]]][iter, ]) > 1e-10)
+                }
+              redf <- redf + aset
+            } else {
+              aset0 <- apply(parm[[take[1]]][[take[2]]][1:(iter - 1L), , drop = FALSE], 2, sum)
+              aset1 <- apply(parm[[take[1]]][[take[2]]][1:iter, , drop = FALSE], 2, sum)
+              if(x[[take[1]]]$smooth.construct[[take[2]]]$fuse) {
+                aset0 <- sum(abs(unique.fuse(aset0)) > 1e-10)
+                aset1 <- sum(abs(unique.fuse(aset1)) > 1e-10)
+              } else {
+                aset0 <- sum(abs(aset0) > 1e-10)
+                aset1 <- sum(abs(aset1) > 1e-10)
+              }
+              aset <- aset1 - aset0
+              redf <- redf + aset
+            }
+          } else {
+            redf <- redf + nu * x[[take[1]]]$smooth.construct[[take[2]]]$state$init.edf
+          }
+        }
+      } else {
+        if(is.null(stop.criterion))
+          stop("reverse.edf not implemented!")
+        redf <- redf + states[[take[1]]][[take[2]]]$redf$edf
+      }
+      edf[iter] <- redf
+      if(!is.null(stop.criterion)) {
+        save.ic[iter] <- -2 * ll + edf[iter] * (if(tolower(stop.criterion) == "aic") 2 else log(nobs))
+        if(iter > ((if(initialize) 2 else 1) * 100)) {
+          if(!is.na(save.ic[iter - 1]) & force.stop) {
+            if(save.ic[iter - 1] < save.ic[iter]) {
+              nback <- TRUE
+              break
+            }
+          }
+        }
+      }
+    }
+
+    if(!is.null(selectfun)) {
+      save.ic[iter] <- min(unlist(rss))
+      if(force.stop & (iter > (if(initialize) 2 else 1))) {
+        if(save.ic[iter - 1] < save.ic[iter]) {
+          nback <- TRUE
+          break
+        }
+      }
+    }
+
+    ## Compute number of selected base learners.
+    qsel <- get.qsel(x, iter, qsel.splitfactor = qsel.splitfactor)
     
     if(verbose) {
       cat(if(ia) "\r" else "\n")
       vtxt <- paste(
-        " logLik ", fmt(ll, width = 8, digits = digits),
+        if(!is.null(stop.criterion)) paste(stop.criterion, " ", fmt(save.ic[iter], width = 8, digits = digits), " ", sep = "") else NULL,
+        "logLik ", fmt(ll, width = 8, digits = digits),
+        if(hatmatrix | reverse.edf | approx.edf) paste(" edf ", fmt(edf[iter], width = 4, digits = digits), " ", sep = "") else NULL,
         " eps ", fmt(eps0, width = 6, digits = digits + 2),
-        " iteration ", formatC(iter, width = nchar(maxit)), sep = "")
+        " iteration ", formatC(iter, width = nchar(maxit)),
+        " qsel ", qsel, sep = "")
       cat(vtxt)
       
       if(.Platform$OS.type != "unix" & ia) flush.console()
+    }
+
+    if((iter > 2) & all(loglik2 == loglik)) {
+      warning("no more improvements in the log-likelihood, setting nu = nu * 0.5!")
+      nu <- nu * 0.5
+      iter_ll2 <- iter_ll2 + 1
+    }
+
+    if(iter_ll2 > 10) {
+      nback <- TRUE
+      warning("no more improvements in the log-likelihood, stopped!")
+      break
     }
     
     iter <- iter + 1
@@ -2196,7 +2698,6 @@ boost <- function(x, y, family,
       }
     }
   }
-  
   elapsed <- c(proc.time() - ptm)[3]
   
   if(verbose) {
@@ -2207,12 +2708,191 @@ boost <- function(x, y, family,
     cat("\n elapsed time: ", et, "\n", sep = "")
   }
   
-  bsum <- make.boost.summary(x, if(is.null(nback)) maxit else (iter - 1), save.ll)
+  bsum <- make.boost.summary(x, if(is.null(nback)) maxit else (iter - 1), save.ll, edf,
+    (hatmatrix | approx.edf | reverse.edf), length(eta[[1]]))
   if(plot)
     plot.boost.summary(bsum)
+
+  if(!is.null(selectfun)) {
+    if(is.null(bsum$criterion))
+      bsum$criterion <- list()
+    bsum$criterion$userIC <- save.ic[1:(if(is.null(nback)) maxit else (iter - 1))]
+  }
   
   return(list("parameters" = parm2mat(parm, if(is.null(nback)) maxit else (iter - 1)),
-    "fitted.values" = get.eta(x), "nobs" = nobs, "boost.summary" = bsum, "runtime" = elapsed))
+    "fitted.values" = eta, "nobs" = nobs, "boost.summary" = bsum, "runtime" = elapsed))
+}
+
+
+reverse_edf <- function(x, bn, bmat, nobs, y, eta, approx = TRUE)
+{
+  beta <- bn + apply(bmat, 2, sum)
+
+  fit <- x$X %*% beta
+  y <- y + fit
+
+  tX <- t(x$X)
+  XX <- crossprod(x$X)
+
+  objfun <- function(tau2) {
+    if(!x$fixed) {
+      S <- 0
+      for(j in seq_along(x$S))
+        S <- S + 1/tau2[j] * if(is.function(x$S[[j]])) x$S[[j]](beta) else x$S[[j]]
+    } else {
+      S <- 1/tau2 * diag(1, ncol(x$X))
+    }
+    beta2 <- matrix_inv(XX + S, index = x$sparse.setup) %*% tX %*% y
+    mean((fit - x$X %*% beta2)^2)
+  }
+
+  tau2 <- tau2.optim(objfun, start = x$boost.tau2, maxit = 100)
+
+  if(!x$fixed) {
+    S <- 0
+    for(j in seq_along(x$S))
+      S <- S + 1/tau2[j] * if(is.function(x$S[[j]])) x$S[[j]](beta) else x$S[[j]]
+  } else {
+    I <- diag(1, ncol(x$X))
+    S <- 1/tau2 * I
+  }
+
+  P <- matrix_inv(XX + S, index = x$sparse.setup)
+  edf <- sum_diag(XX %*% P)
+
+  return(list("edf" = edf - x$state$edf, "tau2" = tau2, "fedf" = edf))
+}
+
+
+unique.fuse <- function(x, digits = 4) {
+  unique(round(x, digits = digits))
+}
+
+
+if(FALSE) {
+  n <- 1000
+  d <- data.frame("x" = runif(n, -3, 3))
+  d$y <- 1.2 + sin(d$x) + rnorm(n, sd = 0.3)
+  plot(d)
+
+  b1 <- bamlss(y ~ s(x,k=50), data = d, sampler = FALSE, optimizer = boost, stop.criterion = "AIC", reverse = TRUE)
+  b1 <- bamlss(y ~ s(x,k=50), data = d, sampler = FALSE, optimizer = boost, stop.criterion = "AIC", reverse = FALSE)
+
+  d$p1 <- predict(b1, model = "mu")
+  d$p2 <- predict(b1, model = "mu")
+
+  plot2d(p1 ~ x, data = d)
+  plot2d(p2 ~ x, data = d, add = TRUE, col.lines = "blue")
+  plot2d(I(1.2 + sin(x)) ~ x, data = d, add = TRUE, col.lines = "red")
+
+  b1 <- bamlss(y ~ s(x,k=50), data = d, sampler = FALSE)
+}
+
+selfun <- function(iter, i, j, state, parm, x, family, sfun, yname, weights, selectmodel = TRUE)
+{
+  if(is.null(selectmodel))
+    selectmodel <- FALSE
+  parm[[i]][[j]][iter, ] <- get.par(state$parameters, "b")
+  parm <- parm2mat(parm, mstop = iter, fixed = iter)
+  if(!selectmodel) {
+    formula <- list()
+    for(i in names(x))
+      formula[[i]] <- x[[i]][c("formula", "fake.formula")]
+    class(formula) <- c("bamlss.formula", "list")
+    environment(formula) <- environment(formula[[1]]$formula)
+    attr(formula, "response.name") <- yname
+    m <- list("formula" = formula, "x" = x, "family" = family, "parameters" = parm)
+    class(m) <- c("bamlss", "bamlss.frame", "list")
+    return(sfun(m))
+  } else {
+    return(sfun(parm))
+  }
+}
+
+
+boost.frame <- function(formula, train, test, family = "gaussian", ...)
+{
+  if(!all(names(test) == names(train)))
+    stop("test and training data must contain the same variables!")
+
+  bf <- bamlss.frame(formula, data = train, family = family, ...)
+
+  for(i in names(bf$x)) {
+    for(j in seq_along(bf$x[[i]]$smooth.construct)) {
+      if(!inherits(bf$x[[i]]$smooth.construct[[j]], "no.mgcv") & !inherits(bf$x[[i]]$smooth.construct[[j]], "special")) {
+        if(!is.null(bf$x[[i]]$smooth.construct[[j]]$is.refund)) {
+          rfcall <- bf$x[[i]]$smooth.construct[[j]]$refund.call
+          tfm <- eval(parse(text = rfcall), envir = test)
+          tfme <- eval(tfm$call, envir = tfm$data)
+          bf$x[[i]]$smooth.construct[[j]]$X <- smoothCon(tfme, data = tfm$data, n = nrow(tfm$data[[1L]]),
+            knots = NULL, absorb.cons = TRUE)[[1]]$X
+          rm(tfm)
+          rm(tfme)
+        } else {
+          bf$x[[i]]$smooth.construct[[j]]$X <- PredictMat(bf$x[[i]]$smooth.construct[[j]], test)
+        }
+      } else {
+        if(is.null(bf$x[[i]]$smooth.construct[[j]]$PredictMat)) {
+          bf$x[[i]]$smooth.construct[[j]]$X <- PredictMat(bf$x[[i]]$smooth.construct[[j]], test)
+        } else {
+          bf$x[[i]]$smooth.construct[[j]]$X <- bf$x[[i]]$smooth.construct[[j]]$PredictMat(bf$x[[i]]$smooth.construct[[j]], test)
+        }
+      }
+    }
+    if(!is.null(bf$x[[i]]$model.matrix)) {
+      sc <- attr(bf$x[[i]]$model.matrix, "scale")
+      bf$x[[i]]$model.matrix <- model.matrix(drop.terms.bamlss(bf$x[[i]]$terms,
+        sterms = FALSE, keep.response = FALSE, data = test), data = test)
+      if(ncol(bf$x[[i]]$model.matrix) > 0) {
+        if(!is.null(sc)) {
+          for(name in unique(unlist(lapply(sc, names)))) {
+            bf$x[[i]]$model.matrix[,name] <- (bf$x[[i]]$model.matrix[,name] - sc$center[name] ) / sc$scale[name]
+          }
+        }
+      } else bf$x[[i]]$model.matrix <- NULL
+    }
+  }
+
+  yname <- names(bf$y)
+  family <- bf$family
+
+  bf <- boost(x = bf$x, y = bf$y, family = bf$family,
+    weights = model.weights(bf$model.frame),
+    offset = model.offset(bf$model.frame), ret.x = TRUE, initialize = FALSE, ...)
+
+  formula <- list()
+  for(i in names(bf))
+    formula[[i]] <- bf[[i]][c("formula", "fake.formula")]
+  class(formula) <- c("bamlss.formula", "list")
+  environment(formula) <- environment(formula[[1]]$formula)
+  attr(formula, "response.name") <- yname
+
+  bf <- list("formula" = formula, "x" = bf, "family" = family)
+  class(bf) <- c("boost.frame", "list")
+
+  bf
+}
+
+predict.boost.frame <- function(object, type = c("link", "parameter"), ...)
+{
+  type <- match.arg(type)
+  object$x <- set.starting.values(object$x, object$parameters)
+  fit <- get.eta(object$x, expand = TRUE)
+  if(type == "parameter")
+    fit <- object$family$map2par(fit)
+  return(fit)
+}
+
+
+## Updating the hat-matrix.
+hatmat_trace <- function(H0, H1)
+{
+  .Call("hatmat_trace", H0, H1, PACKAGE = "bamlss")
+}
+
+hatmat_sumdiag <- function(H)
+{
+  .Call("hatmat_sumdiag", H, PACKAGE = "bamlss")
 }
 
 
@@ -2223,17 +2903,121 @@ boost.transform <- function(x, y, df = NULL, family,
 {
   np <- length(x)
   nx <- names(x)
-  
+
   ## Initialize select indicator and intercepts.
   for(j in 1:np) {
+    nid <- NULL
     for(sj in seq_along(x[[nx[j]]]$smooth.construct)) {
-      if(!is.null(df))
-        x[[nx[j]]]$smooth.construct[[sj]] <- assign.df(x[[nx[j]]]$smooth.construct[[sj]], df)
-      if(!is.null(x[[nx[j]]]$smooth.construct[[sj]]$fxsp)) {
-        if(!x[[nx[j]]]$smooth.construct[[sj]]$fxsp & !x[[nx[j]]]$smooth.construct[[sj]]$fixed) {
-          x[[nx[j]]]$smooth.construct[[sj]]$old.optimize <- x[[nx[j]]]$smooth.construct[[sj]]$state$do.optim
-          x[[nx[j]]]$smooth.construct[[sj]]$state$do.optim <- FALSE
-          x[[nx[j]]]$smooth.construct[[sj]]$do.optim <- FALSE
+      if(!inherits(x[[nx[j]]]$smooth.construct[[sj]], "nnet.smooth")) {
+        if(!is.null(df)) {
+          if(inherits(x[[nx[j]]]$smooth.construct[[sj]], "lasso.smooth"))
+            x[[nx[j]]]$smooth.construct[[sj]]$xt$df <- df
+          x[[nx[j]]]$smooth.construct[[sj]] <- assign.df(x[[nx[j]]]$smooth.construct[[sj]], df, do.part = TRUE)
+        }
+        if(!is.null(x[[nx[j]]]$smooth.construct[[sj]]$fxsp)) {
+          if(!x[[nx[j]]]$smooth.construct[[sj]]$fxsp & !x[[nx[j]]]$smooth.construct[[sj]]$fixed) {
+            x[[nx[j]]]$smooth.construct[[sj]]$old.optimize <- x[[nx[j]]]$smooth.construct[[sj]]$state$do.optim
+            x[[nx[j]]]$smooth.construct[[sj]]$state$do.optim <- FALSE
+            x[[nx[j]]]$smooth.construct[[sj]]$do.optim <- FALSE
+          }
+        }
+      } else {
+        nid <- c(nid, sj)
+      }
+    }
+    if(!is.null(nid)) {
+      NNETS <- list(); nosplit <- NULL
+      for(sj in nid) {
+        if(!x[[nx[j]]]$smooth.construct[[sj]]$split) {
+          nosplit <- c(nosplit, sj)
+        } else {
+          nnets <- list()
+          g0 <- get.par(x[[nx[j]]]$smooth.construct[[sj]]$state$parameters, "b")
+          for(k in 1:ncol(x[[nx[j]]]$smooth.construct[[sj]]$X)) {
+            nnets[[k]] <- list()
+            nnets[[k]]$label <- paste0(x[[nx[j]]]$smooth.construct[[sj]]$label, ".", k)
+            nnets[[k]]$term <- paste0("n.", sj, ".", k)
+            nnets[[k]]$X <- x[[nx[j]]]$smooth.construct[[sj]]$X[, k, drop = FALSE]
+            colnames(nnets[[k]]$X) <- NULL
+            nnets[[k]]$binning <- x[[nx[j]]]$smooth.construct[[sj]]$binning
+            nnets[[k]]$nobs <- x[[nx[j]]]$smooth.construct[[sj]]$nobs
+            nnets[[k]]$fixed <- TRUE
+            nnets[[k]]$fxsp <- FALSE
+            nnets[[k]]$weights <- x[[nx[j]]]$smooth.construct[[sj]]$weights
+            nnets[[k]]$rres <- x[[nx[j]]]$smooth.construct[[sj]]$rres
+            nnets[[k]]$fit.reduced <- x[[nx[j]]]$smooth.construct[[sj]]$fit.reduced
+            nnets[[k]]$fit.fun <- x[[nx[j]]]$smooth.construct[[sj]]$fit.fun
+            nnets[[k]]$state <- list("parameters" = g0[k])
+            nnets[[k]]$state$fitted.values <- nnets[[k]]$fit.fun(nnets[[k]]$X, g0[k])
+            nnets[[k]]$state$edf <- 0
+            nnets[[k]]$state$rss <- 0
+            nnets[[k]]$state$do.optim <- FALSE
+            nnets[[k]]$is.nnet <- TRUE
+            nnets[[k]]$selected <- rep(0, length = maxit)
+            nnets[[k]]$sparse.setup <- sparse.setup(nnets[[k]]$X, S = NULL)
+            nnets[[k]]$upper <- Inf
+            nnets[[k]]$lower <- -Inf
+            nnets[[k]]$init.edf <- 0
+            class(nnets[[k]]) <- "nnet.boost"
+          }
+          names(nnets) <- paste0(x[[nx[j]]]$smooth.construct[[sj]]$label, ".[].", 1:ncol(x[[nx[j]]]$smooth.construct[[sj]]$X))
+          NNETS <- c(NNETS, nnets)
+        }
+      }
+      if(!is.null(nosplit))
+        nid <- nid[!(nid %in% nosplit)]
+      if(length(nid) > 0) {
+        x[[nx[j]]]$smooth.construct[nid] <- NULL
+        x[[nx[j]]]$smooth.construct <- c(x[[nx[j]]]$smooth.construct, NNETS)
+        rm(NNETS, nnets)
+      }
+      if(!is.null(nosplit)) {
+        for(sj in nosplit) {
+          x[[nx[j]]]$smooth.construct[[sj]]$N <- apply(x[[nx[j]]]$smooth.construct[[sj]]$X, 2,
+            function(x) {
+              return((1/crossprod(x)) %*% t(x))
+            })
+          x[[nx[j]]]$smooth.construct[[sj]]$boost.fit <- function(x, y, nu, hatmatrix = FALSE, weights = NULL, ...) {
+            ## process weights.
+            if(!is.null(weights))
+              stop("weights is not supported!")
+
+            bf <- boost_fit_nnet(nu, x$X, x$N, y, x$binning$match.index)
+
+            j <- which.min(bf$rss)
+            g2 <- rep(0, length(bf$g))
+            g2[j] <- bf$g[j]
+
+#if(g2[j] > 100) {
+
+#apply(x$X, 2, range)
+
+#  Y <<- y
+#  BF <<- bf
+#  NU <<- nu
+#  X <<- x$X
+#  N <<- x$N
+#  id <<- x$binning$match.index
+
+#            G2 <<- g <- nu * apply(x$N[x$binning$match.index, , drop = FALSE] * y, 2, sum)
+#            fit <- t(t(x$X) * g)
+#            rss2 <<- apply((fit[x$binning$match.index, , drop = FALSE] - y)^2, 2, sum)
+
+#  stop()
+#}
+  
+            ## Finalize.
+            x$state$parameters <- set.par(x$state$parameters, g2, "b")
+            x$state$fitted.values <- bf$fit[, j]
+
+            x$state$rss <- bf$rss[j]
+
+            if(hatmatrix) {
+              x$state$hat <- nu * x$X[, j] %*% (1/crossprod(x$X[, j])) %*% t(x$X[, j])
+            }
+  
+            return(x$state)
+          } 
         }
       }
     }
@@ -2243,6 +3027,7 @@ boost.transform <- function(x, y, df = NULL, family,
       cn <- colnames(x[[nx[j]]]$smooth.construct[[ii]]$X)
       g0 <- get.par(x[[nx[j]]]$smooth.construct[[ii]]$state$parameters, "b")
       nm <- NULL
+      assign <- attr(x[[nx[j]]]$smooth.construct[[ii]]$X, "assign")
       for(pj in 1:ncol(x[[nx[j]]]$smooth.construct[[ii]]$X)) {
         model.matrix[[pj]] <- list()
         model.matrix[[pj]]$label <- cn[pj]
@@ -2268,45 +3053,68 @@ boost.transform <- function(x, y, df = NULL, family,
         model.matrix[[pj]]$sparse.setup <- sparse.setup(model.matrix[[pj]]$X, S = model.matrix[[pj]]$S)
         model.matrix[[pj]]$upper <- Inf
         model.matrix[[pj]]$lower <- -Inf
+        model.matrix[[pj]]$assign <- assign[pj]
         class(model.matrix[[pj]]) <- class(x[[nx[j]]]$smooth.construct[[ii]])
       }
       names(model.matrix) <- cn
       x[[nx[j]]]$smooth.construct[[ii]] <- NULL
       x[[nx[j]]]$smooth.construct <- c(model.matrix, x[[nx[j]]]$smooth.construct)
+      attr(x[[nx[j]]], "assign") <- assign
     }
   }
   
   ## Save more info.
   for(j in 1:np) {
     for(sj in seq_along(x[[nx[j]]]$smooth.construct)) {
-      if(!inherits(x[[nx[j]]]$smooth.construct[[sj]], "nnet.smooth")) {
-        x[[nx[j]]]$smooth.construct[[sj]]$state$edf <- 0
-        nc <- ncol(x[[nx[j]]]$smooth.construct[[sj]]$X)
-        nr <- nrow(x[[nx[j]]]$smooth.construct[[sj]]$X)
-        x[[nx[j]]]$smooth.construct[[sj]]$XWX <- matrix(0, nc, nc)
-        x[[nx[j]]]$smooth.construct[[sj]]$XW <- matrix(0, nc, nr)
-      }
+      x[[nx[j]]]$smooth.construct[[sj]]$state$init.edf <- x[[nx[j]]]$smooth.construct[[sj]]$state$edf
+      x[[nx[j]]]$smooth.construct[[sj]]$state$edf <- 0
+      nc <- ncol(x[[nx[j]]]$smooth.construct[[sj]]$X)
+      nr <- nrow(x[[nx[j]]]$smooth.construct[[sj]]$X)
+      x[[nx[j]]]$smooth.construct[[sj]]$XWX <- matrix(0, nc, nc)
+      x[[nx[j]]]$smooth.construct[[sj]]$XW <- matrix(0, nc, nr)
       x[[nx[j]]]$smooth.construct[[sj]]$selected <- rep(0, length = maxit)
       x[[nx[j]]]$smooth.construct[[sj]]$loglik <- rep(0, length = maxit)
       x[[nx[j]]]$smooth.construct[[sj]]$state$rss <- 0
+      if(is.null(x[[nx[j]]]$smooth.construct[[sj]]$is.model.matrix))
+        x[[nx[j]]]$smooth.construct[[sj]]$boost.tau2 <- get.par(x[[nx[j]]]$smooth.construct[[sj]]$state$parameters, "tau2")
+      else
+        x[[nx[j]]]$smooth.construct[[sj]]$boost.tau2 <- 1000
       if(!is.null(x[[nx[j]]]$smooth.construct[[sj]]$S))
         x[[nx[j]]]$smooth.construct[[sj]]$penaltyFunction <- as.integer(sapply(x[[nx[j]]]$smooth.construct[[sj]]$S, is.function))
       else
         x[[nx[j]]]$smooth.construct[[sj]]$penaltyFunction <- 0L
+      if(inherits(x[[nx[j]]]$smooth.construct[[sj]], "nnet.smooth"))
+        x[[nx[j]]]$smooth.construct[[sj]]$fuse <- FALSE
     }
   }
   
   if(initialize) {
     eta <- get.eta(x)
     eta <- init.eta(eta, y, family, nobs)
+    if(!is.null(offset)) {
+      offset <- as.data.frame(offset)
+      for(j in nx) {
+        if(!is.null(offset[[j]]))
+          eta[[j]] <- eta[[j]] + offset[[j]]
+      }
+    }
     nobs <- length(eta[[1]])
     start <- unlist(lapply(eta, mean, na.rm = TRUE))
-    
+
+    W <- NULL
+    if(!is.null(weights)) {
+      if(attr(weights, "identical"))
+        W <- as.numeric(weights[, 1])
+    }
+
     objfun <- function(par) {
       eta <- list()
       for(i in seq_along(nx))
         eta[[nx[i]]] <- rep(par[i], length = nobs)
-      ll <- family$loglik(y, family$map2par(eta))
+      if(!is.null(W))
+        ll <- sum(family$d(y, family$map2par(eta), log = TRUE) * W, na.rm = TRUE)
+      else
+        ll <- family$loglik(y, family$map2par(eta))
       return(ll)
     }
     
@@ -2329,11 +3137,19 @@ boost.transform <- function(x, y, df = NULL, family,
       if(!is.null(x[[i]]$smooth.construct[["(Intercept)"]])) {
         x[[i]]$smooth.construct[["(Intercept)"]]$state$parameters[1] <- opt$par[i]
         x[[i]]$smooth.construct[["(Intercept)"]]$state$fitted.values <- rep(opt$par[i], length = nobs)
+        x[[i]]$smooth.construct[["(Intercept)"]]$state$edf <- 1
+        x[[i]]$smooth.construct[["(Intercept)"]]$state$init.edf <- 1
       }
     }
   }
   
   return(x)
+}
+
+
+boost_fit_nnet <- function(nu, X, N, y, ind)
+{
+  .Call("boost_fit_nnet", nu, X, N, y, ind)
 }
 
 
@@ -2382,6 +3198,8 @@ make.par.list <- function(x, iter)
         rval[[j]][1, ] <- get.par(x$smooth.construct[[j]]$state$parameters, "b")
         if(!is.null(x$smooth.construct[[j]]$is.model.matrix))
           attr(rval[[j]], "is.model.matrix") <- TRUE
+        if(inherits(x$smooth.construct[[j]], "nnet.boost"))
+          class(rval[[j]]) <- "nnet.boost"
       }
     }
   } else {
@@ -2393,22 +3211,34 @@ make.par.list <- function(x, iter)
   return(rval)
 }
 
-parm2mat <- function(x, mstop)
+parm2mat <- function(x, mstop, fixed = NULL)
 {
   nx <- names(x)
   for(i in seq_along(x)) {
-    is.mm <- NULL
+    is.mm <- is.nnet <- NULL
     for(j in names(x[[i]])) {
       if(!is.null(attr(x[[i]][[j]], "is.model.matrix")))
         is.mm <- c(is.mm, j)
+      if(inherits(x[[i]][[j]], "nnet.boost"))
+        is.nnet <- c(is.nnet, j)
       cn <- colnames(x[[i]][[j]])
       x[[i]][[j]] <- apply(x[[i]][[j]][1:mstop, , drop = FALSE], 2, cumsum)
+      if(!is.matrix(x[[i]][[j]]))
+        x[[i]][[j]] <- matrix(x[[i]][[j]], ncol = length(cn))
       colnames(x[[i]][[j]]) <- cn
     }
     if(!is.null(is.mm)) {
       x[[i]][["p"]] <- do.call("cbind", x[[i]][is.mm])
       colnames(x[[i]][["p"]]) <- is.mm
       x[[i]][is.mm[is.mm != "p"]] <- NULL
+    }
+    if(!is.null(is.nnet)) {
+      if(length(is.nnet) > 1) {
+        is.nnet2 <- unique(sapply(strsplit(is.nnet, ".[]", fixed = TRUE), function(x) { x[1] }))
+        for(j in is.nnet2) {
+          x[[i]][[j]] <- do.call("cbind", x[[i]][grep(j, is.nnet, fixed = TRUE)])
+        }
+      }
     }
     sm <- names(x[[i]])
     sm <- sm[sm != "p"]
@@ -2430,6 +3260,8 @@ parm2mat <- function(x, mstop)
     x[[i]] <- do.call("cbind", x[[i]])
   }
   x <- do.call("cbind", x)
+  if(!is.null(fixed))
+    x <- x[fixed, ]
   return(x)
 }
 
@@ -2582,20 +3414,25 @@ boost_iwls <- function(x, hess, resids, nu)
 
 
 ## Boosting gradient fit.
-boost_fit <- function(x, y, nu)
+boost_fit <- function(x, y, nu, hatmatrix = TRUE, weights = NULL, ...)
 {
+  ## process weights.
+  if(is.null(weights))
+    weights <- rep(1, length = length(y))
+
   ## Compute reduced residuals.
-  xbin.fun(x$binning$sorted.index, rep(1, length = length(y)), y, x$weights, x$rres, x$binning$order)
+  xbin.fun(x$binning$sorted.index, weights, y, x$weights, x$rres, x$binning$order)
   
   ## Compute mean and precision.
   XWX <- do.XWX(x$X, 1 / x$weights, x$sparse.setup$matrix)
+
   if(x$fixed) {
     P <- matrix_inv(XWX, index = x$sparse.setup)
   } else {
     S <- 0
     tau2 <- get.state(x, "tau2")
     for(j in seq_along(x$S))
-      S <- S + 1 / tau2[j] * x$S[[j]]
+      S <- S + 1 / tau2[j] * if(is.function(x$S[[j]])) x$S[[j]](x$state$parameters) else x$S[[j]]
     P <- matrix_inv(XWX + S, index = x$sparse.setup)
   }
   
@@ -2605,7 +3442,15 @@ boost_fit <- function(x, y, nu)
   ## Finalize.
   x$state$parameters <- set.par(x$state$parameters, g, "b")
   x$state$fitted.values <- x$fit.fun(x$X, get.state(x, "b"))
-  x$state$rss <- sum((x$state$fitted.values - y)^2)
+
+if(any(is.na(x$state$fitted.values))) {
+  stop("why?")
+}
+
+  x$state$rss <- sum((x$state$fitted.values - y)^2 * weights)
+
+  if(hatmatrix)
+    x$state$hat <- nu * x$X %*% P %*% t(x$X)
   
   return(x$state)
 }
@@ -2622,16 +3467,72 @@ increase <- function(state0, state1)
   attr(state0$parameters, "true.tau2") <- attr(state1$parameters, "true.tau2")
   attr(state0$parameters, "edf") <- attr(state1$parameters, "edf")
   state0$special <- state1$special
+  state0$hat <- state1$hat
+  if(!is.null(state1$redf)) {
+    state0$boost.tau2 <- state1$redf$tau2
+    state0$edf <- state1$redf$fedf
+  }
   state0
 }
 
 
+## Extract number of selected base learners
+get.qsel <- function(x, iter, qsel.splitfactor = FALSE)
+{
+  rval <- 0
+  for(i in names(x)) {
+    assign  <- as.character(attr(x[[i]], "assign"))
+    uassign <- unique(assign)
+    facID   <- sapply(uassign, function(x) { sum(assign == x) > 1 })
+    assign  <- uassign[facID]
+    asssel  <- list()
+    for(m in assign)
+      asssel[[m]] <- 0
+
+    for(j in names(x[[i]]$smooth.construct)) {
+      if(inherits(x[[i]]$smooth.construct[[j]], "nnet.smooth")) {
+        rval <- rval + sum(abs(get.par(x[[i]]$smooth.construct[[j]]$state$parameters, "b")) > 1e-10)
+        next
+      }
+      rval <- rval + 1 * (any(x[[i]]$smooth.construct[[j]]$selected[1:iter] > 0) &
+                          j != "(Intercept)")
+
+      if(!is.null(x[[i]]$smooth.construct[[j]]$assign)) {
+        m <- as.character(x[[i]]$smooth.construct[[j]]$assign)
+        if(m %in% assign) {
+          asssel[[m]] <- asssel[[m]] +
+            1 * any(x[[i]]$smooth.construct[[j]]$selected[1:iter] > 0)
+        }
+      }
+    }
+    
+    if(!qsel.splitfactor) {
+        for(m in assign) {
+            rval <- rval - max(0, asssel[[m]] - 1)
+        }
+    }
+
+    rm(asssel)
+  }
+  rval
+}
+
+get.maxq <- function(x)
+{
+  rval <- 0
+  for(i in names(x)) {
+    rval <- rval + length(names(x[[i]]$smooth.construct))
+  }
+  rval
+}
+
+
 ## Extract summary for boosting.
-make.boost.summary <- function(x, mstop, save.ic)
+make.boost.summary <- function(x, mstop, save.ic, edf, hatmatrix, nobs)
 {
   nx <- names(x)
   labels <- NULL
-  ll.contrib <- NULL
+  ll.contrib <- crit.contrib <- NULL
   bsum <- lmat <- list()
   for(i in nx) {
     rn <- NULL
@@ -2641,6 +3542,8 @@ make.boost.summary <- function(x, mstop, save.ic)
       bsum[[i]] <- rbind(bsum[[i]], sum(x[[i]]$smooth.construct[[j]]$selected[1:mstop]) / mstop * 100)
       lmat[[i]] <- rbind(lmat[[i]], sum(x[[i]]$smooth.construct[[j]]$loglik[1:mstop]))
       ll.contrib <- cbind(ll.contrib, cumsum(x[[i]]$smooth.construct[[j]]$loglik[1:mstop]))
+      if(!is.null(x[[i]]$smooth.construct[[j]]$criterion))
+        crit.contrib <- cbind(crit.contrib, cumsum(x[[i]]$smooth.construct[[j]]$criterion[1:mstop]))
     }
     if(!is.matrix(bsum[[i]])) bsum[[i]] <- matrix(bsum[[i]], nrow = 1)
     bsum[[i]] <- cbind(bsum[[i]], lmat[[i]])
@@ -2650,9 +3553,19 @@ make.boost.summary <- function(x, mstop, save.ic)
     bsum[[i]] <- bsum[[i]][order(bsum[[i]][, 2], decreasing = TRUE), , drop = FALSE]
   }
   colnames(ll.contrib) <- labels
+  if(!is.null(crit.contrib))
+    colnames(crit.contrib) <- labels
   names(bsum) <- nx
   bsum <- list("summary" = bsum, "mstop" = mstop,
-               "ic" = save.ic[1:mstop], "loglik" = ll.contrib)
+    "ic" = save.ic[1:mstop], "loglik" = ll.contrib)
+  if(hatmatrix) {
+    bsum$criterion <- list()
+    bsum$criterion$bic <- -2 * bsum$ic + edf[1:mstop] * log(nobs)
+    bsum$criterion$aic <- -2 * bsum$ic + edf[1:mstop] * 2
+    bsum$criterion$edf <- edf[1:mstop]
+  }
+  if(!is.null(crit.contrib))
+    bsum$crit.contrib <- crit.contrib
   class(bsum) <- "boost.summary"
   return(bsum)
 }
@@ -2668,8 +3581,8 @@ boost.summary <- function(object, ...)
 
 ## Smallish print function for boost summaries.
 print.boost.summary <- function(x, summary = TRUE, plot = TRUE,
-                                which = c("loglik", "loglik.contrib"), intercept = TRUE,
-                                spar = TRUE, ...)
+  which = c("loglik", "loglik.contrib"), intercept = TRUE,
+  spar = TRUE, ...)
 {
   if(inherits(x, "bamlss"))
     x <- x$model.stats$optimizer$boost.summary
@@ -2678,7 +3591,7 @@ print.boost.summary <- function(x, summary = TRUE, plot = TRUE,
   if(summary) {
     np <- length(x$summary)
     cat("\n")
-    cat("logLik. =", x$ic[x$mstop], "-> at mstop =", x$mstop, "\n---\n")
+    cat("logLik. =", if(is.na(x$ic[x$mstop])) x$ic[x$mstop - 1] else x$ic[x$mstop], "-> at mstop =", x$mstop, "\n---\n")
     for(j in 1:np) {
       if(length(x$summary[[j]]) < 2) {
         print(round(x$summary[[j]], digits = 4))
@@ -2691,10 +3604,10 @@ print.boost.summary <- function(x, summary = TRUE, plot = TRUE,
   
   if(plot) {
     if(!is.character(which)) {
-      which <- c("loglik", "loglik.contrib", "parameters")[as.integer(which)]
+      which <- c("loglik", "loglik.contrib", "parameters", "aic", "bic", "user")[as.integer(which)]
     } else {
       which <- tolower(which)
-      which <- match.arg(which, several.ok = TRUE)
+      which <- match.arg(which, c("loglik", "loglik.contrib", "parameters", "aic", "bic", "user"), several.ok = TRUE)
     }
     
     if(spar) {
@@ -2718,13 +3631,33 @@ print.boost.summary <- function(x, summary = TRUE, plot = TRUE,
           j <- grep("(Intercept)", colnames(x$loglik), fixed = TRUE)
           x$loglik <- x$loglik[, -j]
         }
+        args <- list(...)
+        if(!is.null(args$name)) {
+          x$loglik <- x$loglik[, grep2(args$name, colnames(x$loglik), fixed = TRUE), drop = FALSE]
+        }
         xn <- sapply(strsplit(colnames(x$loglik), ".", fixed = TRUE), function(x) { x[length(x)] })
         cols <- rainbow_hcl(length(unique(xn)))
         matplot(x$loglik, type = "l", lty = 1,
-                xlab = "Iteration", ylab = "LogLik contribution", col = cols[as.factor(xn)], ...)
+                xlab = "Iteration", ylab = "LogLik contribution", col = cols[as.factor(xn)])
         abline(v = x$mstop, lwd = 3, col = "lightgray")
         axis(4, at = x$loglik[nrow(x$loglik), ], labels = colnames(x$loglik), las = 1)
         axis(3, at = x$mstop, labels = paste("mstop =", x$mstop))
+      }
+      if(w %in% c("aic", "bic", "user")) {
+        if(!is.null(x$criterion)) {
+          if(spar)
+            par(mar = c(5.1, 4.1, 2.1, 2.1))
+          args <- list()
+          if(is.null(args$xlab))
+            args$xlab <- "Iteration"
+          if(is.null(args$ylab))
+            args$ylab <- if(w == "user") "User IC" else toupper(w)
+          plot(x$criterion[[if(w == "user") "userIC" else w]], type = "l", xlab = args$xlab, ylab = args$ylab)
+          i <- which.min(x$criterion[[w]])
+          abline(v = i, lwd = 3, col = "lightgray")
+          if(!is.null(x$criterion$edf))
+            axis(3, at = i, labels = paste("mstop = ", i, ", edf = ", round(x$criterion$edf[i], digits = 2), sep = ""))
+        }
       }
     }
   }
@@ -2738,8 +3671,8 @@ plot.boost.summary <- function(x, ...)
   print.boost.summary(x, summary = FALSE, plot = TRUE, ...) 
 }
 
-boost.plot <- function(x, which = c("loglik", "loglik.contrib", "parameters"),
-                       intercept = TRUE, spar = TRUE, mstop = NULL, name = NULL, labels = NULL, color = NULL, ...)
+boost.plot <- function(x, which = c("loglik", "loglik.contrib", "parameters", "aic", "bic", "user"),
+  intercept = TRUE, spar = TRUE, mstop = NULL, name = NULL, drop = NULL, labels = NULL, color = NULL, ...)
 {
   if(!is.character(which)) {
     which <- c("loglik", "loglik.contrib", "parameters")[as.integer(which)]
@@ -2761,16 +3694,19 @@ boost.plot <- function(x, which = c("loglik", "loglik.contrib", "parameters"),
   x$model.stats$optimizer$boost.summary$loglik <- x$model.stats$optimizer$boost.summary$loglik[1:mstop, , drop = FALSE]
   
   for(w in which) {
-    if(w %in% c("loglik", "loglik.contrib")) {
+    if(w %in% c("loglik", "loglik.contrib", "aic", "bic", "user")) {
       if((w == "loglik") & spar)
         par(mar = c(5.1, 4.1, 2.1, 2.1))
       if((w == "loglik.contrib") & spar)
         par(mar = c(5.1, 4.1, 2.1, 10.1))
-      plot.boost.summary(x, which = w, spar = FALSE, intercept = intercept, ...)
+      plot.boost.summary(x, which = w, spar = FALSE, intercept = intercept, name = name, ...)
     }
     if(w == "parameters") {
       if(spar)
         par(mar = c(5.1, 4.1, 2.1, 10.1))
+      if(!is.null(drop)) {
+        x$parameters <- x$parameters[, -grep2(drop, colnames(x$parameters), fixed = TRUE), drop = FALSE]
+      }
       if(!is.null(name)) {
         x$parameters <- x$parameters[, grep2(name, colnames(x$parameters), fixed = TRUE), drop = FALSE]
       }
@@ -2792,19 +3728,36 @@ boost.plot <- function(x, which = c("loglik", "loglik.contrib", "parameters"),
           rep(color, length.out = length(unique(xn)))
         }
       }
-      
+
       if(is.null(labels)) {
-        labs <- colnames(x$parameters)
+        labs <- labs0 <- colnames(p)
+        plab <- p[nrow(p), ]
+        o <- order(plab, decreasing = TRUE)
+        labs <- labs[o]
+        plab <- plab[o]
+        rplab <- diff(range(plab))
+        for(i in 1:(length(plab) - 1)) {
+          dp <- abs(plab[i] - plab[i + 1]) / rplab
+          if(is.na(dp))
+            dp <- 0
+          if(dp <= 0.02) {
+            labs[i + 1] <- paste(c(labs[i], labs[i + 1]), collapse = ",")
+            labs[i] <- ""
+          }
+        }
+        labs <- labs[order(o)]
         if(!is.null(name)) {
           for(j in seq_along(name))
             labs <- gsub(name[j], "", labs, fixed = TRUE)
         }
-      } else labs <- rep(labels, length.out = ncol(x$parameters))
+      } else labs <- rep(labels, length.out = ncol(p))
+      at <- p[nrow(p), ]
+      at <- at[labs != ""]
+      labs <- labs[labs != ""]
       
-      matplot(p, type = "l", lty = 1, col = cols[as.factor(xn)], xlab = "Iteration",
-              ylab = "Value", ...)
+      matplot(p, type = "l", lty = 1, col = cols[as.factor(xn)], xlab = "Iteration", ...)
       abline(v = mstop, lwd = 3, col = "lightgray")
-      axis(4, at = p[nrow(p), ], labels = labs, las = 1)
+      axis(4, at = at, labels = labs, las = 1)
       axis(3, at = mstop, labels = paste("mstop =", mstop))
     }
   }
@@ -2846,15 +3799,23 @@ set.starting.values <- function(x, start)
                 names(tau2) <- gsub(paste(id, "p.", sep = "."), "", names(tau2), fixed = TRUE)
                 tpar <- c(tpar, tau2)
               }
-              x[[id]]$smooth.construct$model.matrix$state$parameters <- tpar
-              x[[id]]$smooth.construct$model.matrix$state$fitted.values <- x[[id]]$smooth.construct$model.matrix$fit.fun(x[[id]]$smooth.construct$model.matrix$X, x[[id]]$smooth.construct$model.matrix$state$parameters)
+              if(all(names(tpar) %in% names(x[[id]]$smooth.construct$model.matrix$state$parameters))) {
+                x[[id]]$smooth.construct$model.matrix$state$parameters[names(tpar)] <- tpar
+                x[[id]]$smooth.construct$model.matrix$state$fitted.values <- x[[id]]$smooth.construct$model.matrix$fit.fun(x[[id]]$smooth.construct$model.matrix$X, x[[id]]$smooth.construct$model.matrix$state$parameters)
+              }
             }
           }
         }
         for(j in seq_along(x[[id]]$smooth.construct)) {
           tl <- x[[id]]$smooth.construct[[j]]$label
-          take <- grep(tl <- paste(id, "s", tl, sep = "."),
-                       nstart[tns %in% id], fixed = TRUE, value = TRUE)
+          tl <- paste(id, "s", tl, sep = ".")
+          if(inherits(x[[id]]$smooth.construct[[j]], "nnet.boost")) {
+            take <- tl
+          } else {
+            take <- grep(tl, nstart[tns %in% id], fixed = TRUE, value = TRUE)
+          }
+          if(is.null(x[[id]]$smooth.construct[[j]]$by))
+            x[[id]]$smooth.construct[[j]]$by <- "NA"
           if(x[[id]]$smooth.construct[[j]]$by == "NA") {
             take <- take[!grepl(paste(tl, ":", sep = ""), take, fixed = TRUE)]
           }
@@ -3090,6 +4051,7 @@ lasso.transform <- function(x, zeromodel, nobs = NULL, ...)
             w[ff] <- w[ff] * 1 / abs(t(Af[, ff]) %*% beta)
           }
           names(w) <- paste("lasso", 1:length(w), sep = "")
+          w[!is.finite(w)] <- 1e10
           x[[i]]$smooth.construct[[j]]$fixed.hyper <- w
         }
       }
@@ -3156,6 +4118,13 @@ lasso.plot <- function(x, which = c("criterion", "parameters"), spar = TRUE, mod
   if(is.null(model))
     model <- x$family$names
   model <- x$family$names[pmatch(model, x$family$names)]
+  if(any(is.na(model))) {
+    model <- model[!is.na(model)]
+    if(!length(model))
+      stop("argument model is spcified wrong")
+    else
+      warning("argument model is spcified wrong")
+  }
   if(!is.character(which)) {
     which <- c("criterion", "parameters")[as.integer(which)]
   } else {
@@ -3165,16 +4134,15 @@ lasso.plot <- function(x, which = c("criterion", "parameters"), spar = TRUE, mod
   if(is.null(mstop))
     mstop <- 1:nrow(x$parameters)
   if(retrans)
-    x$parameters <- lasso.coef(x, mstop = mstop)
+    x$parameters <- lasso.coef(x)
   npar <- colnames(x$parameters)
   for(j in c("Intercept", ".edf", ".lambda", ".tau"))
     npar <- npar[!grepl(j, npar, fixed = TRUE)]
-  x$parameters <- x$parameters[mstop, npar, drop = FALSE]
+  x$parameters <- x$parameters[, npar, drop = FALSE]
   ic <- x$model.stats$optimizer$lasso.stats
   multiple <- attr(ic, "multiple")
   log_lambda <- log(ic[, grep("lambda", colnames(ic))])
   nic <- grep("ic", colnames(ic), value = TRUE, ignore.case = TRUE)
-  
   if(spar) {
     op <- par(no.readonly = TRUE)
     on.exit(par(op))
@@ -3185,7 +4153,6 @@ lasso.plot <- function(x, which = c("criterion", "parameters"), spar = TRUE, mod
       n <- n + length(model)
     par(mfrow = n2mfrow(n), mar = c(5.1, 5.1, 4.1, 1.1))
   }
-  
   at <- pretty(1:nrow(ic))
   at[at == 0] <- 1
   
@@ -3272,6 +4239,9 @@ lasso.plot <- function(x, which = c("criterion", "parameters"), spar = TRUE, mod
       }
       if(!is.null(name))
         tpar <- tpar[, grep2(name, colnames(tpar), fixed = TRUE), drop = FALSE]
+      if(max(mstop) > nrow(tpar))
+        mstop <- nrow(tpar)
+      tpar <- tpar[if(length(mstop) < 2) 1:mstop else mstop, , drop = FALSE]
       xn <- sapply(strsplit(colnames(tpar), ".", fixed = TRUE), function(x) { x[1] })
       if(length(unique(xn)) < 2)
         xn <- sapply(strsplit(colnames(tpar), ".", fixed = TRUE), function(x) { x[3] })
@@ -3285,40 +4255,45 @@ lasso.plot <- function(x, which = c("criterion", "parameters"), spar = TRUE, mod
           rep(color, length.out = length(unique(xn)))
         }
       }
-    
+      add <- if(is.null(list(...)$add)) FALSE else list(...)$add
+      nolabels <- if(is.null(list(...)$nolabels)) FALSE else list(...)$nolabels
       matplot(tpar, type = "l", lty = 1, col = cols[as.factor(xn)],
-        xlab = expression(log(lambda)), ylab = expression(beta[j]), axes = FALSE)
-      if(is.null(labels)) {
-        labs <- labs0 <- colnames(tpar)
-        plab <- tpar[nrow(tpar), ]
-        o <- order(plab, decreasing = TRUE)
-        labs <- labs[o]
-        plab <- plab[o]
-        rplab <- diff(range(plab))
-        for(i in 1:(length(plab) - 1)) {
-          dp <- abs(plab[i] - plab[i + 1]) / rplab
-          if(dp <= 0.02) {
-            labs[i + 1] <- paste(c(labs[i], labs[i + 1]), collapse = ",")
-            labs[i] <- ""
+        xlab = expression(log(lambda)), ylab = expression(beta[j]), axes = FALSE, add = add,
+        lwd = list(...)$lwd)
+      if(!nolabels) {
+        if(is.null(labels)) {
+          labs <- labs0 <- colnames(tpar)
+          plab <- tpar[nrow(tpar), ]
+          o <- order(plab, decreasing = TRUE)
+          labs <- labs[o]
+          plab <- plab[o]
+          rplab <- diff(range(plab))
+          for(i in 1:(length(plab) - 1)) {
+            dp <- abs(plab[i] - plab[i + 1]) / rplab
+            if(dp <= 0.02) {
+              labs[i + 1] <- paste(c(labs[i], labs[i + 1]), collapse = ",")
+              labs[i] <- ""
+            }
           }
-        }
-        labs <- labs[order(o)]
-        if(!is.null(name)) {
-          for(j in seq_along(name))
-            labs <- gsub(name[j], "", labs, fixed = TRUE)
-        }
-      } else labs <- rep(labels, length.out = ncol(tpar))
-      at <- tpar[nrow(tpar), ]
-      at <- at[labs != ""]
-      labs <- labs[labs != ""]
-      axis(4, at = at, labels = labs, las = 1)
+          labs <- labs[order(o)]
+          if(!is.null(name)) {
+            for(j in seq_along(name))
+              labs <- gsub(name[j], "", labs, fixed = TRUE)
+          }
+        } else labs <- rep(labels, length.out = ncol(tpar))
+        at <- tpar[nrow(tpar), ]
+        at <- at[labs != ""]
+        labs <- labs[labs != ""]
+        axis(4, at = at, labels = labs, las = 1, cex.axis = list(...)$labcex)
+      }
       at <- pretty(1:nrow(tpar))
       at[at == 0] <- 1
       axis(1, at = at, labels = as.numeric(fmt(log_lambda[take, paste("lambda", m, sep = ".")][at], digits)))
       axis(2)
       if(show.lambda) {
         i <- which.min(ic[take, nic])
-        abline(v = i, col = "lightgray", lwd = 2, lty = 2)
+        abline(v = i, col = "lightgray", lwd = 1, lty = 2)
+        cat(colnames(tpar)[abs(tpar[i, ]) > 0.009], "\n")
         val <- round(lambda_min[paste("lambda", m, sep = ".")], digits)
         if(multiple) {
           lval <- parse(text = paste('paste(lambda[', m, '], "=", ', val, ')', sep = ''))
@@ -3350,5 +4325,329 @@ lasso.stop <- function(x)
   i <- which.min(x[, nic])
   attr(i, "stats") <- x[i, ]
   i
+}
+
+
+## Deep learning bamlss.
+dl.bamlss <- function(object, offset = NULL, weights = NULL,
+  eps = .Machine$double.eps^0.25, maxit = 100, force.stop = TRUE,
+  epochs = 30, optimizer = NULL,
+  batch_size = NULL, keras.model = NULL, verbose = TRUE, digits = 4, ...)
+{
+  stopifnot(requireNamespace("keras"))
+
+  if(!inherits(object, "bamlss")) {
+    object <- bamlss.frame(object, smooth.construct = FALSE, model.matrix = FALSE, ...)
+  } else {
+    if(is.null(offset))
+      offset <- predict(object, drop = FALSE, FUN = mean)
+  }
+  if(is.null(offset))
+    offset <- model.offset(object$model.frame)
+  if(is.null(weights))
+    weights <- model.weights(object$model.frame)
+
+  y <- object$y
+  nobs <- nrow(y)
+  if(is.data.frame(y)) {
+    if(ncol(y) < 2)
+      y <- y[[1]]
+  }
+
+  nx <- names(object$formula)
+  X <- eta <- itcpt <- fits <- list()
+  for(i in nx) {
+    ff <- formula(as.Formula(object$formula[[i]]$fake.formula), lhs = FALSE)
+    X[[i]] <- model.matrix(ff, data = object$model.frame)
+    if(length(j <- grep("(Intercept)", colnames(X[[i]]), fixed = TRUE)))
+      X[[i]] <- X[[i]][, -j, drop = FALSE]
+    eta[[i]] <- fits[[i]] <- rep(0, nobs)
+    if(ncol(X[[i]]) < 1)
+      itcpt[[i]] <- 0
+  }
+
+  family <- family(object)
+  
+  if(!is.null(weights))
+    weights <- as.data.frame(weights)
+  if(!is.null(offset)) {
+    for(j in nx) {
+      if(!is.null(offset[[j]])) {
+        if(!is.null(dim(offset[[j]]))) {
+          if(length(mj <- grep("mean", tolower(colnames(offset[[j]])), fixed = TRUE))) {
+            offset[[j]] <- offset[[j]][, mj[1]]
+          } else {
+            offset[[j]] <- offset[[j]][, 1]
+          }
+        }
+        eta[[j]] <- eta[[j]] + offset[[j]]
+      }
+    }
+  }
+
+  if(is.null(keras.model)) {
+    keras_model <- list()
+    if(is.null(optimizer))
+      optimizer <- keras::optimizer_rmsprop(lr = 0.0001)
+    if(is.character(optimizer)) {
+      optimizer <- match.arg(optimizer, c("adam", "sgd", "rmsprop", "adagrad", "adadelta", "adamax", "nadam"))
+    }
+    for(j in nx) {
+      if(ncol(X[[j]]) > 0) {
+        kmt <- keras::keras_model_sequential()
+        kmt <- keras::layer_dense(kmt, units = 100, activation = 'relu', input_shape = c(ncol(X[[j]])))
+        kmt <- keras::layer_dropout(kmt, rate = 0.1)
+        kmt <- keras::layer_dense(kmt, units = 100, activation = 'relu')
+        kmt <- keras::layer_dropout(kmt, rate = 0.1)
+        kmt <- keras::layer_dense(kmt, units = 100, activation = 'relu')
+        kmt <- keras::layer_dropout(kmt, rate = 0.1)
+        kmt <- keras::layer_dense(kmt, units = 1, activation = 'linear')
+        kmt <- keras::compile(kmt,
+            loss = 'mse',
+            optimizer = optimizer,
+            metrics = 'mse'
+        )
+        keras_model[[j]] <- kmt
+      }
+    }
+  } else {
+    keras_model <- rep(list(keras_model), length.out = length(nx))
+    names(keras_model) <- nx
+  }
+
+  ia <- interactive()
+  I <- rep(1, nobs)
+  iter <- 0
+  eps0 <- eps + 1
+  ll <- family$loglik(y, family$map2par(eta))
+  ptm <- proc.time()
+  while((eps0 > eps) & (iter < maxit)) {
+    eta0 <- eta
+    for(j in nx) {
+      peta <- family$map2par(eta)
+
+      ## Compute weights.
+      hess <- process.derivs(family$hess[[j]](y, peta, id = j), is.weight = TRUE)
+
+      if(!is.null(weights)) {
+        if(!is.null(weights[[j]]))
+          hess <- hess * weights[[j]]
+      }
+            
+      ## Score.
+      score <- process.derivs(family$score[[j]](y, peta, id = j), is.weight = FALSE)
+
+      ## Working response.
+      z <- eta[[j]] + 1 / hess * score
+
+      ## Fit with keras.
+      if(ncol(X[[j]]) > 0) {
+        keras_model[[j]]$stop_training <- keras::fit(keras_model[[j]], X[[j]],
+          matrix(if(!is.null(offset[[j]])) z - eta[[j]] else z, ncol = 1),
+          epochs = epochs, batch_size = batch_size, verbose = 0, sample_weight = array(1/hess))
+        fit <- as.numeric(predict(keras_model[[j]], X[[j]]))
+        eta2 <- eta
+        eta2[[j]] <- eta2[[j]] - fits[[j]] + fit
+        ll2 <- family$loglik(y, family$map2par(eta2))
+        if(ll2 > ll) {
+          fits[[j]] <- fit
+          eta[[j]] <- eta2[[j]]
+        }
+      } else {
+        itcpt[[j]] <- as.numeric((1 / (t(I / hess) %*% I)) %*% t(I / hess) %*% (z - eta[[j]]))
+        eta[[j]] <- eta[[j]] - fits[[j]] + itcpt[[j]]
+        fits[[j]] <- itcpt[[j]]
+      }
+    }
+    eps0 <- do.call("cbind", eta)
+    eps0 <- mean(abs((eps0 - do.call("cbind", eta0)) / eps0), na.rm = TRUE)
+    iter <- iter + 1
+    ll <- family$loglik(y, family$map2par(eta))
+    if(verbose) {
+      cat(if(ia) "\r" else if(iter > 1) "\n" else NULL)
+      vtxt <- paste(
+        "logLik ", fmt(ll, width = 8, digits = digits),
+        " eps ", fmt(eps0, width = 6, digits = digits + 2),
+        " iteration ", formatC(iter, width = nchar(maxit)), sep = "")
+      cat(vtxt)
+        
+      if(.Platform$OS.type != "unix" & ia) flush.console()
+    }
+
+    if(!force.stop)
+      eps0 <- eps + 1
+  }
+
+  elapsed <- c(proc.time() - ptm)[3]
+  
+  if(verbose) {
+    cat("\n")
+    et <- if(elapsed > 60) {
+      paste(formatC(format(round(elapsed / 60, 2), nsmall = 2), width = 5), "min", sep = "")
+    } else paste(formatC(format(round(elapsed, 2), nsmall = 2), width = 5), "sec", sep = "")
+    cat("\n elapsed time: ", et, "\n", sep = "")
+  }
+
+  object$deepnet <- list(
+    "fitted.values" = fits,
+    "model" = keras_model,
+    "intercepts" = itcpt
+  )
+  class(object) <- "dl.bamlss"
+
+  return(object)
+}
+
+
+## Extractor functions.
+fitted.dl.bamlss <- function(object, ...) { object$deepnet$fitted.values }
+family.dl.bamlss <- function(object) { object$family }
+residuals.dl.bamlss <- residuals.bamlss
+
+
+## Predict function.
+predict.dl.bamlss <- function(object, newdata, model = NULL, drop = TRUE, ...)
+{
+  ## If data have been scaled (scale.d = TRUE)
+  if (!missing(newdata) & ! is.null(attr(object$model.frame,'scale')) ) {
+    sc <- attr(object$model.frame, 'scale')
+    for ( name in unique(unlist(lapply(sc,names))) ) {
+      newdata[,name] <- (newdata[,name] - sc$center[name] ) / sc$scale[name]
+    }
+  }
+  if(missing(newdata))
+    newdata <- NULL
+  if(is.null(newdata)) {
+    newdata <- model.frame.bamlss.frame(object)
+  } else {
+    if(is.character(newdata)) {
+      if(file.exists(newdata <- path.expand(newdata)))
+        newdata <- read.table(newdata, header = TRUE, ...)
+      else stop("cannot find newdata")
+    }
+    if(is.matrix(newdata) || is.list(newdata))
+      newdata <- as.data.frame(newdata)
+  }
+
+  nx <- names(object$formula)
+  if(!is.null(model)) {
+    if(is.character(model))
+      nx <- nx[grep(model, nx)[1]]
+    else
+      nx <- nx[as.integer(model)]
+  }
+  pred <- list()
+  for(i in nx) {
+    ff <- formula(as.Formula(object$formula[[i]]$fake.formula), lhs = FALSE)
+    X <- model.matrix(ff, data = newdata)
+    if(length(j <- grep("(Intercept)", colnames(X), fixed = TRUE)))
+      X <- X[, -j, drop = FALSE]
+    if(ncol(X) > 0) {
+      pred[[i]] <- predict(object$deepnet$model[[i]], X)
+    } else {
+      pred[[i]] <- object$deepnet$intercepts[[i]]
+    }
+  }
+
+  if((length(pred) < 2) & drop)
+    pred <- pred[[1L]]
+
+  return(pred)
+}
+
+
+## Most likely transformations.
+mlt.mode <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
+  criterion = c("AICc", "BIC", "AIC"),
+  eps = .Machine$double.eps^0.25, maxit = 400,
+  verbose = TRUE, digits = 4, flush = TRUE, nu = NULL, stop.nu = NULL, ...)
+{
+  nx <- family$names
+  if(!all(nx %in% names(x)))
+    stop("design construct names mismatch with family names!")
+  
+  if(is.null(attr(x, "bamlss.engine.setup")))
+    x <- bamlss.engine.setup(x, ...)
+
+  nobs <- nrow(y)
+  if(is.data.frame(y)) {
+    if(ncol(y) < 2)
+      y <- y[[1]]
+  }
+
+  Fy <- ecdf(y)
+  Fy <- Fy(y)
+  Fy[Fy > 0.9999] <- 0.999
+  Fy[Fy < 0.0001] <- 0.001
+  Yhat <- family$distr$q(Fy)
+
+  opt <- bfit(x = x, y = data.frame("y" = Yhat),
+    family = complete.bamlss.family(Gaussian_bamlss()),
+    eps = eps, maxit = maxit, nu = nu, update = bfit_optim())
+  
+  criterion <- match.arg(criterion)
+  np <- length(nx)
+  
+  if(!is.null(nu)) {
+    if(nu < 0)
+      nu <- NULL
+  }
+  
+  if(!is.null(start))
+    x <- set.starting.values(x, start)
+  else
+    x <- set.starting.values(x, opt$parameters)
+  eta <- get.eta(x)
+  
+  if(!is.null(weights))
+    weights <- as.data.frame(weights)
+  if(!is.null(offset)) {
+    offset <- as.data.frame(offset)
+    for(j in nx) {
+      if(!is.null(offset[[j]]))
+        eta[[j]] <- eta[[j]] + offset[[j]]
+    }
+  } else {
+    if(is.null(start))
+      eta <- init.eta(eta, y, family, nobs)
+  }
+  
+  ia <- if(flush) interactive() else FALSE
+
+  eps0 <- eps + 1; iter <- 0
+  edf <- get.edf(x, type = 2)
+  ptm <- proc.time()
+  while(eps0 > eps & iter < maxit) {
+    eta0 <- eta
+    ## Cycle through all terms.
+    for(sj in seq_along(x$mu$smooth.construct)) {
+      ## Get updated parameters.
+      p.state <- mlt_update(x$mu$smooth.construct[[sj]],
+        family$distr, y, eta, edf = edf, weights = weights$mu,
+        iteration = iter, criterion = criterion)
+    }
+  }
+
+  stop("here!")
+}
+
+mlt_update <- function(x, distr, y, eta, edf, weights, iteration, criterion)
+{
+  beta <- get.par(x$state$parameters, "b")
+  score <- t(x$X) %*% (distr$dd(eta$mu) / distr$d(eta$mu))
+  if(inherits(x, "mlt.smooth"))
+    score <- score + t(x$dX) %*% as.numeric((1 / (x$dX %*% beta + 1e-10)))
+  w <- distr$ddd(eta$mu) / distr$d(eta$mu) - (distr$dd(eta$mu) / distr$d(eta$mu))^2
+  hess <- crossprod(x$X * w, x$X)
+  if(inherits(x, "mlt.smooth"))
+    hess <- hess - crossprod(x$dX * as.numeric(1 / (x$dX %*% beta + 1e-10)^2), x$dX)
+
+print(beta)
+
+  beta <- beta + hess %*% score
+
+print(beta)
+
+  stop("yess!\n")
 }
 

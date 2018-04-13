@@ -1,30 +1,33 @@
 Package: bamlss
-Version: 0.1-2
-Date: 2017-04-13
+Version: 1.0-0
+Date: 2018-04-13
 Title: Bayesian Additive Models for Location Scale and Shape (and
         Beyond)
 Authors@R: c(person(given = "Nikolaus", family = "Umlauf", role = c("aut", "cre"), email = "Nikolaus.Umlauf@uibk.ac.at"),
   person(given = "Nadja", family = "Klein", role = "aut", email = "nklein@uni-goettingen.de"),
-  person(given = "Achim", family = "Zeileis", role = "aut", email = "Achim.Zeileis@R-project.org"),
-  person(given = "Meike", family = "Koehler", role = "aut", email = "Meike.Koehler@helmholtz-muenchen.de"))
+  person(given = "Achim", family = "Zeileis", role = "aut", email = "Achim.Zeileis@R-project.org",
+         comment = c(ORCID = "0000-0003-0918-3766")),
+  person(given = "Meike", family = "Koehler", role = "aut", email = "Meike.Koehler@helmholtz-muenchen.de"),
+  person(given = "Thorsten", family = "Simon", role = "ctb", email = "thorsten.simon@uibk.ac.at"))
 Description: Infrastructure for estimating probabilistic distributional regression models in a Bayesian framework.
   The distribution parameters may capture location, scale, shape, etc. and every parameter may depend
   on complex additive terms (fixed, random, smooth, spatial, etc.) similar to a generalized additive model.
   The conceptual and computational framework is introduced in Umlauf, Klein, Zeileis (2017)
-  <http://EconPapers.RePEc.org/RePEc:inn:wpaper:2017-05>.
+  <doi:10.1080/10618600.2017.1407325>.
 Depends: R (>= 3.2.3), coda, colorspace, mgcv
-Imports: Formula, MBA, mvtnorm, sp, spam, Matrix, survival, methods,
-        parallel
+Imports: Formula, MBA, mvtnorm, sp, Matrix, survival, methods, parallel
 Suggests: akima, bit, fields, gamlss, geoR, rjags, BayesX, BayesXsrc,
-        mapdata, maps, maptools, raster, spatstat, spdep, zoo
+        mapdata, maps, maptools, raster, spatstat, spdep, zoo, keras,
+        splines2, sdPrior, glogis, glmnet
 License: GPL-2 | GPL-3
 LazyLoad: yes
 NeedsCompilation: yes
-Packaged: 2017-04-14 03:24:01 UTC; nik
+Packaged: 2018-04-13 09:41:16 UTC; nik
 Author: Nikolaus Umlauf [aut, cre],
   Nadja Klein [aut],
-  Achim Zeileis [aut],
-  Meike Koehler [aut]
+  Achim Zeileis [aut] (<https://orcid.org/0000-0003-0918-3766>),
+  Meike Koehler [aut],
+  Thorsten Simon [ctb]
 Maintainer: Nikolaus Umlauf <Nikolaus.Umlauf@uibk.ac.at>
 Repository: CRAN
-Date/Publication: 2017-04-14 14:05:48 UTC
+Date/Publication: 2018-04-13 10:23:32 UTC

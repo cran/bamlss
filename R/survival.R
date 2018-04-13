@@ -442,10 +442,16 @@ cox.mcmc <- function(x, y, family, start, weights, offset,
     ## Cycle through time-varying part. ##
     ######################################
     for(sj in names(x$lambda$smooth.construct)) {
-      p.state <- propose_surv_tv(x$lambda$smooth.construct[[sj]], y, eta, eta_timegrid, width, sub, nu)
+      p.state <- try(propose_surv_tv(x$lambda$smooth.construct[[sj]], y, eta, eta_timegrid, width, sub, nu), silent = TRUE)
 
       ## If accepted, set current state to proposed state.
-      accepted <- if(is.na(p.state$alpha)) FALSE else log(runif(1)) <= p.state$alpha
+      if(inherits(p.state, "try-error")) {
+        accepted <- FALSE
+        p.state <- list("alpha" = log(0))
+        warning("time varying proposal function encountered an error!")
+      } else {
+        accepted <- if(is.na(p.state$alpha)) FALSE else log(runif(1)) <= p.state$alpha
+      }
 
       if(accepted) {
         eta_timegrid <- eta_timegrid - x$lambda$smooth.construct[[sj]]$state$fitted_timegrid + p.state$fitted_timegrid
@@ -472,10 +478,16 @@ cox.mcmc <- function(x, y, family, start, weights, offset,
     ## Cycle through time-independent part. ##
     ##########################################
     for(sj in names(x$gamma$smooth.construct)) {
-      p.state <- propose_surv_tc(x$gamma$smooth.construct[[sj]], y, eta, int)
+      p.state <- try(propose_surv_tc(x$gamma$smooth.construct[[sj]], y, eta, int), silent = TRUE)
 
       ## If accepted, set current state to proposed state.
-      accepted <- if(is.na(p.state$alpha)) FALSE else log(runif(1)) <= p.state$alpha
+      if(inherits(p.state, "try-error")) {
+        accepted <- FALSE
+        p.state <- list("alpha" = log(0))
+        warning("time constant proposal function encountered an error!")
+      } else {
+        accepted <- if(is.na(p.state$alpha)) FALSE else log(runif(1)) <= p.state$alpha
+      }
 
       if(accepted) {
         eta$gamma <- eta$gamma - fitted(x$gamma$smooth.construct[[sj]]$state) + fitted(p.state)
@@ -1321,16 +1333,26 @@ param_Xtimegrid <- function(formula, data, grid, yname, type = 1, derivMat = FAL
   }
   if(length(i <- grep("s.", ec))) {
     for(j in enames2[i]) {
-      if(!inherits(x[[j]], "no.mgcv") & !inherits(x[[j]], "special")) {
-        X <- sm_Xtimegrid(x[[j]], newdata, grid, yname, derivMat = derivMat)
-        sn <- snames[grep2(paste(id, "s", j, sep = "."), snames, fixed = TRUE)]
-        eta <- if(is.null(eta)) {
-          fitted_matrix(X, samps[, sn, drop = FALSE])
+      for(jj in grep(j, names(x), fixed = TRUE, value = TRUE)) {
+        if(!inherits(x[[jj]], "no.mgcv") & !inherits(x[[jj]], "special")) {
+          X <- sm_Xtimegrid(x[[jj]], newdata, grid, yname, derivMat = derivMat)
+          sn <- snames[grep2(paste(id, "s", jj, sep = "."), snames, fixed = TRUE)]
+          random <- if(!is.null(x[[jj]]$margin)) {
+              any(sapply(x[[jj]]$margin, function(z) { inherits(z, "random.effect") }))
+          } else inherits(x[[jj]], "random.effect")
+          ok <- if(random) {
+            if(ncol(X) == length(samps[, sn, drop = FALSE])) TRUE else FALSE
+          } else TRUE
+          if(ok) {
+            eta <- if(is.null(eta)) {
+              fitted_matrix(X, samps[, sn, drop = FALSE])
+            } else {
+              eta + fitted_matrix(X, samps[, sn, drop = FALSE])
+            }
+          }
         } else {
-          eta + fitted_matrix(X, samps[, sn, drop = FALSE])
+          stop("no predictions for special terms available yet!")
         }
-      } else {
-        stop("no predictions for special terms available yet!")
       }
     }
   }

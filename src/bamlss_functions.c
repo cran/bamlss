@@ -509,8 +509,8 @@ SEXP block_inverse(SEXP X, SEXP IND, SEXP DIAGONAL)
             }
           }
 
-          F77_CALL(dpotrf)("Upper", &ni, Xiptr, &ni, &info);
-          F77_CALL(dpotri)("Upper", &ni, Xiptr, &ni, &info);
+          F77_CALL(dpotrf)("U", &ni, Xiptr, &ni, &info);
+          F77_CALL(dpotri)("U", &ni, Xiptr, &ni, &info);
 
           for(j = 0; j < ni; j++) {
             for(jj = j; jj < ni; jj++) {
@@ -3223,17 +3223,24 @@ SEXP rho_score_mvnorm(SEXP Y, SEXP PAR, SEXP N, SEXP K, SEXP MJ, SEXP SJ, SEXP R
 
 
 /* Boosting updater. */
-SEXP boost_fit(SEXP x, SEXP y, SEXP nu, SEXP rho)
+SEXP boost_fit(SEXP x, SEXP y, SEXP nu, SEXP W, SEXP rho)
 {
   int i, j, k;
   int nProtected = 0;
-  int n          = length(y);
-  int fixed      = LOGICAL(getListElement(x, "fixed"))[0];
+  int n = length(y);
+  int fixed = LOGICAL(getListElement(x, "fixed"))[0];
 
-  SEXP state       = PROTECT(duplicate(getListElement(x, "state")));
+  SEXP state = PROTECT(duplicate(getListElement(x, "state")));
   ++nProtected;
   double *thetaptr = REAL(getListElement(state, "parameters"));
   int *penFun = INTEGER(getListElement(x, "penaltyFunction"));
+
+  int nW = length(W);
+  if(nW > 1) {
+    if(nW != n)
+      nW = 1;
+  }
+  double *Wptr = REAL(W);
 
   /* Reto: changes */
   /* This was the main change: Reto 2017-01-24 */
@@ -3260,19 +3267,19 @@ SEXP boost_fit(SEXP x, SEXP y, SEXP nu, SEXP rho)
   /* More pointers needed. */
   double *eptr = REAL(y);
   double *xweightsptr = REAL(getListElement(x, "weights"));
-  double *xrresptr    = REAL(getListElement(x, "rres"));
-  double *XWptr       = REAL(getListElement(x, "XW"));
-  double *XWXptr      = REAL(getListElement(x, "XWX"));
-  double *Xptr        = REAL(PROTECT(VECTOR_ELT(x, X_ind))); ++nProtected;
+  double *xrresptr = REAL(getListElement(x, "rres"));
+  double *XWptr = REAL(getListElement(x, "XW"));
+  double *XWXptr = REAL(getListElement(x, "XWX"));
+  double *Xptr = REAL(PROTECT(VECTOR_ELT(x, X_ind))); ++nProtected;
   /* Reto: changes, setting empty pointer to 0 */
   double *Sptr = 0;
-  int    *idptr       = INTEGER(getListElement(getListElement(x, "binning"), "match.index"));
-  int    *indptr      = INTEGER(getListElement(getListElement(x, "binning"), "sorted.index"));
-  int    *orderptr    = INTEGER(getListElement(getListElement(x, "binning"), "order"));
+  int    *idptr = INTEGER(getListElement(getListElement(x, "binning"), "match.index"));
+  int    *indptr = INTEGER(getListElement(getListElement(x, "binning"), "sorted.index"));
+  int    *orderptr = INTEGER(getListElement(getListElement(x, "binning"), "order"));
 
   /* Handling fitted.values. */
   double *fitrptr = REAL(getListElement(x, "fit.reduced"));
-  double *fitptr  = REAL(getListElement(state, "fitted.values"));
+  double *fitptr = REAL(getListElement(state, "fitted.values"));
 
   /* Start. */
   xweightsptr[0] = 0.0;
@@ -3288,12 +3295,17 @@ SEXP boost_fit(SEXP x, SEXP y, SEXP nu, SEXP rho)
       }
       ++j;
       xweightsptr[j] = 0.0;
-      xrresptr[j]    = 0.0;
+      xrresptr[j] = 0.0;
     }
     k = orderptr[i] - 1;
 
-    xweightsptr[j] += 1.0;
-    xrresptr[j] += eptr[k];
+    if(nW > 0) {
+      xweightsptr[j] += Wptr[k];
+      xrresptr[j] += eptr[k] * Wptr[k];
+    } else {
+      xweightsptr[j] += 1.0;
+      xrresptr[j] += eptr[k];
+    }
   }
 
   for(jj = 0; jj < nc; jj++) {
@@ -3389,7 +3401,11 @@ SEXP boost_fit(SEXP x, SEXP y, SEXP nu, SEXP rho)
   for(i = 0; i < n; i++) {
     k = idptr[i] - 1;
     fitptr[i] = fitrptr[k];
-    rss += pow(fitptr[i] - yptr[i], 2.0);
+    if(nW > 0) {
+      rss += (pow(fitptr[i] - yptr[i], 2.0) * Wptr[i]);
+    } else {
+      rss += pow(fitptr[i] - yptr[i], 2.0);
+    }
   }
   REAL(getListElement(state, "rss"))[0] = rss;
 
@@ -3750,3 +3766,466 @@ SEXP rho_score_mvnormAR1(SEXP Y, SEXP PAR, SEXP N, SEXP K, SEXP MJ, SEXP SJ, SEX
   return d;
 }
 
+/* Neural net fit fun. */
+SEXP nnet_fitfun(SEXP X, SEXP b, SEXP NODES)
+{
+  int i, j, jj, n = nrows(X);
+  int k = ncols(X);
+  int nodes = INTEGER(NODES)[0];
+
+  double *Xptr = REAL(X);
+  double *bptr = REAL(b);
+
+  SEXP fit;
+  PROTECT(fit = allocVector(REALSXP, n));
+  double *fitptr = REAL(fit);
+
+  int l = 0;
+  double ftmp = 0.0;
+
+  for(i = 0; i < n; i++) {
+    fitptr[i] = 0.0;
+    for(j = 0; j < nodes; j++) {
+      ftmp = 0.0;
+      l = 0;
+      for(jj = (j * (k + 1) + 1); jj < (j * (k + 1) + k + 1); jj++) {
+        ftmp += Xptr[i + l * n] * bptr[jj];
+        l = l + 1;
+      }
+      fitptr[i] += bptr[j * (k + 1)] / (1.0 + exp(-ftmp));
+    }
+  }
+
+  UNPROTECT(1);
+  return(fit);
+}
+
+/*    fit <- 0*/
+/*    for(j in seq_along(nid)) {*/
+/*      f <- X %*% b[nid[[j]]][-1]*/
+/*      fit <- fit + b[nid[[j]]][1] / (1 + exp(-f))*/
+/*    }*/
+/*    if(!is.null(object$binning$match.index) & expand)*/
+/*      f <- f[object$binning$match.index]*/
+/*    fit <- fit - mean(fit, na.rm = TRUE)*/
+
+
+/* Fast hat-matrix trace. */
+SEXP hatmat_trace(SEXP H0, SEXP H1)
+{
+  int i, j, n = nrows(H1);
+  double *h0ptr = REAL(H0);
+  double *h1ptr = REAL(H1);
+  double sum1 = 0.0;
+  double sum2 = 0.0;
+  for(i = 0; i < n; i++) {
+    for(j = 0; j < n; j++) {
+      sum2 += h0ptr[i + n * j] * h1ptr[j + n * i];
+    }
+    sum1 += h0ptr[i + n * i];
+  }
+  SEXP trace;
+  PROTECT(trace = allocVector(REALSXP, 1));
+  REAL(trace)[0] = n - sum1 + sum2;
+  UNPROTECT(1);
+  return trace;
+}
+
+SEXP hatmat_sumdiag(SEXP H)
+{
+  int i, n = nrows(H);
+  double *hptr = REAL(H);
+  double sum = 0.0;
+  for(i = 0; i < n; i++) {
+    sum += (1.0 - hptr[i + n * i]);
+  }
+  SEXP trace;
+  PROTECT(trace = allocVector(REALSXP, 1));
+  REAL(trace)[0] = sum;
+  UNPROTECT(1);
+  return trace;
+}
+
+
+SEXP boost_fit_nnet(SEXP nu, SEXP X, SEXP N, SEXP y, SEXP ind)
+{
+  int i, j;
+  int n = nrows(X);
+  int k = ncols(X);
+
+  SEXP g;
+  PROTECT(g = allocVector(REALSXP, k));
+
+  SEXP fit;
+  PROTECT(fit = allocMatrix(REALSXP, n, k));
+
+  SEXP rss;
+  PROTECT(rss = allocVector(REALSXP, k));
+
+  double *Xptr = REAL(X);
+  double *Nptr = REAL(N);
+  double *yptr = REAL(y);
+  int *indptr = INTEGER(ind);
+  double *gptr = REAL(g);
+  double *fitptr = REAL(fit);
+  double *rssptr = REAL(rss);
+
+  double nu2 = REAL(nu)[0];
+
+  for(j = 0; j < k; j++) {
+    gptr[j] = 0.0;
+    rssptr[j] = 0.0;
+    for(i = 0; i < n; i++) {
+      gptr[j] += Nptr[(indptr[i] - 1) + n * j] * yptr[i];
+    }
+    gptr[j] = nu2 * gptr[j];
+    for(i = 0; i < n; i++) {
+      fitptr[i + n * j] = Xptr[(indptr[i] - 1) + n * j] * gptr[j];
+      rssptr[j] += pow(fitptr[i + n * j] - yptr[i], 2.0);
+    }
+  }
+
+  SEXP rval;
+  PROTECT(rval = allocVector(VECSXP, 3));
+
+  SEXP nrval;
+  PROTECT(nrval = allocVector(STRSXP, 3));
+
+  SET_VECTOR_ELT(rval, 0, g);
+  SET_VECTOR_ELT(rval, 1, fit);
+  SET_VECTOR_ELT(rval, 2, rss);
+
+  SET_STRING_ELT(nrval, 0, mkChar("g"));
+  SET_STRING_ELT(nrval, 1, mkChar("fit"));
+  SET_STRING_ELT(nrval, 2, mkChar("rss"));
+        
+  setAttrib(rval, R_NamesSymbol, nrval);
+
+  UNPROTECT(5);
+
+  return rval;
+}
+
+
+/* ============ GENERALIZED LOGISTIC DISTRIBUTION ========================== */
+
+/* Helper function for bamlss_glogis_quantile */
+double bamlss_glogis_qfun( double p, double mu, double sigma, double alpha )
+{
+   double res;
+   p   = pow(p,1. / alpha);
+   res = mu - sigma * log( 1. / p - 1 );
+   return res;
+}
+
+/* C-function to compute the quantiles of the generalized logistic
+   tyle I distribution. Tested March 2017, Reto                    */
+SEXP bamlss_glogis_quantile(SEXP p, SEXP mu, SEXP sigma, SEXP alpha) {
+
+   int i, n = length(mu);
+
+   double *pptr     = REAL(p);
+   double *muptr    = REAL(mu);
+   double *sigmaptr = REAL(sigma);
+   double *alphaptr = REAL(alpha);
+
+   SEXP rval = PROTECT(allocVector(REALSXP,n));
+   double *rvalptr = REAL(rval);
+
+   for ( i = 0; i < n; i++ ) {
+      rvalptr[i] = bamlss_glogis_qfun(pptr[i],muptr[i],sigmaptr[i],alphaptr[i]);   
+   }
+
+   UNPROTECT(1);
+   return rval;
+}
+
+/* C-function to compute the empirical mean (first order moment) of the
+   of the generalized logistic tyle I distribution based on equidistant
+   probabilities. Tested March 2017, Reto
+   @todo check if still needed! I assume we are using the analytical 
+      empirical moments now within the family.
+   @param n integer number quantiles to pick (based on equidistant
+      probabilities).
+   @param mu: location of the distribution.
+   @param sigma: scale of the distribution.
+   @param alpha: shape (skewness) of the distribution.
+   @returns Returns a double vector of length(mu)/length(sigma) with the
+      corresponding first order momemnt of the distribution as
+      specified by mu, sigma, and alpha.
+*/
+SEXP bamlss_glogis_mean(SEXP n, SEXP mu, SEXP sigma, SEXP alpha) {
+
+   int i, p, imax = length(mu);
+
+   int *nptr = INTEGER(n);
+   double *muptr    = REAL(mu);
+   double *sigmaptr = REAL(sigma);
+   double *alphaptr = REAL(alpha);
+   double step;
+
+   SEXP rval = PROTECT(allocVector(REALSXP,imax));
+   double *rvalptr = REAL(rval);
+
+   step = 1. / (nptr[0]+2);
+
+   for ( i = 0; i < imax; i++ ) {
+      rvalptr[i] = 0.0;
+      for ( p = 0; p < nptr[0]; p++ ) {
+         rvalptr[i] += bamlss_glogis_qfun( (p+1) * step,muptr[i],sigmaptr[i],alphaptr[i]);   
+      }
+      rvalptr[i] = rvalptr[i] / nptr[0];
+   }
+
+   UNPROTECT(1);
+   return rval;
+}
+
+
+/* C-function to compute the density of a glogis (generalized logistic
+   distribution type I) distribution given mu/sigma/alpha parameters
+   and the corresponding observed value.
+   Created: 2017-01-17, Reto Stauffer.
+
+   @param y: observations where to evaluate the density
+   @param mu: location parameter of the glogis distribution
+   @param sigma: scale parameter of the glogis distribution
+   @param alpha: shape parameter of the glogis distribution
+   @return Returns double array of length(y) with the densities.
+*/ 
+SEXP bamlss_glogis_density(SEXP y, SEXP mu, SEXP sigma, SEXP alpha, SEXP logarithm )
+{
+   int i, n = length(y);
+
+   int *logptr = INTEGER(logarithm);
+   double *yptr     = REAL(y);
+   double *muptr    = REAL(mu);
+   double *sigmaptr = REAL(sigma);
+   double *alphaptr = REAL(alpha);
+   double x, logalpha, logsigma, logexp;
+   double lim = 1000.;
+
+   SEXP rval = PROTECT(allocVector(REALSXP,n));
+   double *rvalptr = REAL(rval);
+
+   for(i = 0; i < n; i++) {
+      x = (muptr[i]-yptr[i])/sigmaptr[i];
+
+      // Trying to avoid infinity
+      logalpha = log(alphaptr[i]);
+      logsigma = log(sigmaptr[i]);
+      logexp   = log(1. + exp(x));
+      if ( logalpha > lim ) { logalpha = lim; } else if ( logalpha < -lim ) { logalpha = -lim; }
+      if ( logsigma > lim ) { logsigma = lim; } else if ( logsigma < -lim ) { logsigma = -lim; }
+      if ( logexp   > lim ) { logexp   = lim; } else if ( logexp   < -lim ) { logexp   = -lim; }
+      rvalptr[i] = logalpha - logsigma + x - (alphaptr[i] + 1.) * logexp;
+
+      /* Returns logarithm if requested */
+      if ( logptr[0] == 0 ) { rvalptr[i] = exp(rvalptr[i]); }
+   }
+
+   UNPROTECT(1);
+   return rval;
+}
+
+/* Compute the log-likelihood sum for glogis (generalized logistic type I)
+   distribution.
+
+   @param y: observations where to evaluate the density
+   @param mu: location parameter of the glogis distribution
+   @param sigma: scale parameter of the glogis distribution
+   @param alpha: shape parameter of the glogis distribution
+   @return Returns a single double with the sum over all log-likelihoods.
+*/
+SEXP bamlss_glogis_loglik(SEXP y, SEXP mu, SEXP sigma, SEXP alpha )
+{
+   int i, n = length(y);
+
+   double *yptr     = REAL(y);
+   double *muptr    = REAL(mu);
+   double *sigmaptr = REAL(sigma);
+   double *alphaptr = REAL(alpha);
+   double x, logalpha, logsigma, logexp;
+   double lim = 1000.;
+
+   double ll = 0.; 
+   SEXP rval = PROTECT(allocVector(REALSXP,1));
+   double *rvalptr = REAL(rval);
+   rvalptr[0] = 0.;
+
+   for(i = 0; i < n; i++) {
+      x = (muptr[i]-yptr[i])/sigmaptr[i];
+
+      // Trying to avoid infinity
+      logalpha = log(alphaptr[i]);
+      logsigma = log(sigmaptr[i]);
+      logexp   = log(1. + exp(x));
+      if ( logalpha > lim ) { logalpha = lim; } else if ( logalpha < -lim ) { logalpha = -lim; }
+      if ( logsigma > lim ) { logsigma = lim; } else if ( logsigma < -lim ) { logsigma = -lim; }
+      if ( logexp   > lim ) { logexp   = lim; } else if ( logexp   < -lim ) { logexp   = -lim; }
+      ll += logalpha - logsigma + x - (alphaptr[i] + 1.) * logexp;
+
+   }
+
+   rvalptr[0] = ll;
+   //Rprintf("   Return likelihood: %f\n",rvalptr[0]);
+   UNPROTECT(1);
+   return rval;
+}
+
+/* Distribution function (CDF) for glogis (generalized logistic type I)
+   distribution.
+
+   @param y: observations where to evaluate the density
+   @param mu: location parameter of the glogis distribution
+   @param sigma: scale parameter of the glogis distribution
+   @param alpha: shape parameter of the glogis distribution
+   @return Returns a double vector of length(y) with CDF evaluated
+      at y given mu/sigma/alpha.
+*/
+SEXP bamlss_glogis_distr(SEXP y, SEXP mu, SEXP sigma, SEXP alpha )
+{
+   int i, n = length(y);
+
+   double *yptr     = REAL(y);
+   double *muptr    = REAL(mu);
+   double *sigmaptr = REAL(sigma);
+   double *alphaptr = REAL(alpha);
+   double x;
+
+   SEXP rval = PROTECT(allocVector(REALSXP,n));
+   double *rvalptr = REAL(rval);
+
+   for(i = 0; i < n; i++) {
+      x = (muptr[i] - yptr[i]) / sigmaptr[i];
+      rvalptr[i] = exp( - alphaptr[i] * log( 1. + exp(x)));
+   }
+   UNPROTECT(1);
+   return rval;
+}
+
+
+
+
+/* C-function to compute the score function of a generalized
+   logistic type I) distribution. Score function is the first
+   derivate with respect to the linear predictor
+   Links used here: identity link for mu, log-link for sigma and alpha.
+
+   @param which: integer, 1 for location "mu", 2 for scale "sigma", and
+        3 for shape "alpha". Depending on input which the corresponding
+        score vectors will be computed. 
+   @param mu: location parameter of the glogis distribution
+   @param sigma: scale parameter of the glogis distribution
+   @param alpha: shape parameter of the glogis distribution
+   @return Returns a double vector of length(y) with corresponding
+        score values. 
+*/
+SEXP bamlss_glogis_score(SEXP which, SEXP y, SEXP mu, SEXP sigma, SEXP alpha )
+{
+   int i, n = length(y);
+
+   int    *whichptr = INTEGER(which);
+   double *yptr     = REAL(y);
+   double *muptr    = REAL(mu);
+   double *sigmaptr = REAL(sigma);
+   double *alphaptr = REAL(alpha);
+
+   SEXP rval = PROTECT(allocVector(REALSXP,n));
+   double *rvalptr = REAL(rval);
+   
+   /* Input which == 1 corresponds to "mu" */
+   if ( whichptr[0] == 1 ) {
+      double foo, invsigma;
+      for ( i=0; i<n; i++ ) {
+         foo = exp((muptr[i] - yptr[i]) / sigmaptr[i]);
+         invsigma = 1./sigmaptr[i];
+         rvalptr[i] = invsigma - (alphaptr[i] + 1.) * (foo * invsigma / (1. + foo ));
+      }
+   }
+
+   /* Input which == 1 corresponds to "sigma" */
+   if ( whichptr[0] == 2 ) {
+      double foo, expfoo;
+      for ( i=0; i<n; i++ ) {
+         foo =  (muptr[i] - yptr[i]) / sigmaptr[i];
+         expfoo = exp(foo);
+         rvalptr[i] = - 1. - foo + (alphaptr[i] + 1.) * expfoo * foo / (1. + expfoo);
+      }
+   }
+
+   /* Input which == 3 corresponds to "alpha" */
+   if ( whichptr[0] == 3 ) {
+      for ( i=0; i<n; i++ ) {
+         rvalptr[i] = 1. - alphaptr[i] * log(1 + exp( (muptr[i]-yptr[i])/sigmaptr[i] ));
+      }
+   }
+
+   UNPROTECT(1);
+   return rval;
+}
+
+
+
+/* C-function to compute the score function of a generalized
+   logistic type I) distribution. Hesse function is the first
+   derivate with respect to the linear predictor
+   Links used here: identity link for mu, log-link for sigma and alpha.
+
+   @param which: integer, 1 for location "mu", 2 for scale "sigma", and
+        3 for shape "alpha". Depending on input which the corresponding
+        score vectors will be computed. 
+   @param mu: location parameter of the glogis distribution
+   @param sigma: scale parameter of the glogis distribution
+   @param alpha: shape parameter of the glogis distribution
+   @return Returns a double vector of length(y) with corresponding
+        hesse values. 
+*/
+SEXP bamlss_glogis_hesse(SEXP which, SEXP y, SEXP mu, SEXP sigma, SEXP alpha )
+{
+   int i, n = length(y);
+
+   int    *whichptr = INTEGER(which);
+   double *yptr     = REAL(y);
+   double *muptr    = REAL(mu);
+   double *sigmaptr = REAL(sigma);
+   double *alphaptr = REAL(alpha);
+
+   SEXP rval = PROTECT(allocVector(REALSXP,n));
+   double *rvalptr = REAL(rval);
+
+   /* Input which == 1 corresponds to "mu" */
+   if ( whichptr[0] == 1 ) {
+      double foo, bar, expfoo, invsigma;
+      for ( i=0; i<n; i++ ) {
+         foo = (muptr[i] - yptr[i]) / sigmaptr[i];
+         expfoo = exp(foo);
+         invsigma = 1. / sigmaptr[i];
+         bar = expfoo * invsigma / (1. + expfoo);
+         rvalptr[i] = (alphaptr[i] + 1.) * (expfoo * invsigma * invsigma / (1. + expfoo) - bar * bar);
+      }
+   }
+
+   /* Input which == 1 corresponds to "sigma" */
+   if ( whichptr[0] == 2 ) {
+      double foo, foo2, bar, expfoo;
+      for ( i=0; i<n; i++ ) {
+         rvalptr[i] = 0.;
+         foo = (muptr[i] - yptr[i]) / sigmaptr[i];
+         foo2 = foo * foo;
+         expfoo = exp(foo);
+         bar = expfoo / sigmaptr[i] / (1. + expfoo);
+         rvalptr[i] = - foo - (alphaptr[i] + 1) * (bar*bar - (expfoo * foo + expfoo * foo2) / (1 + expfoo));
+      }
+   }
+
+   /* Input which == 3 corresponds to "alpha" */
+   if ( whichptr[0] == 3 ) {
+         for ( i=0; i<n; i++ ) {
+            rvalptr[i] = alphaptr[i] * log(1 + exp( (muptr[i] - yptr[i]) / sigmaptr[i] ));
+         }
+   }
+
+   UNPROTECT(1);
+   return rval;
+}

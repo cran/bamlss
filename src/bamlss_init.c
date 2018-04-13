@@ -2,6 +2,12 @@
 #include <Rinternals.h>
 #include <R_ext/Rdynload.h>
 
+SEXP bamlss_glogis_score(SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP bamlss_glogis_hesse(SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP bamlss_glogis_density(SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP bamlss_glogis_loglik(SEXP, SEXP, SEXP, SEXP);
+SEXP bamlss_glogis_distr(SEXP, SEXP, SEXP, SEXP);
+SEXP bamlss_glogis_quantile(SEXP, SEXP, SEXP, SEXP);
 SEXP block_inverse(SEXP, SEXP);
 SEXP bivnorm_loglik(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP boost_fit(SEXP, SEXP, SEXP, SEXP);
@@ -24,8 +30,11 @@ SEXP gpareto_hess_sigma(SEXP, SEXP, SEXP);
 SEXP gpareto_hess_xi(SEXP, SEXP, SEXP);
 SEXP gpareto_score_sigma(SEXP, SEXP, SEXP);
 SEXP gpareto_score_xi(SEXP, SEXP, SEXP);
+SEXP hatmat_trace(SEXP, SEXP);
+SEXP hatmat_sumdiag(SEXP);
 SEXP log_dmvnorm(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP mu_score_mvnorm(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP nnet_fitfun(SEXP, SEXP, SEXP);
 SEXP process_derivs(SEXP, SEXP);
 SEXP quick_quantiles(SEXP, SEXP);
 SEXP rho_score_mvnorm(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -44,6 +53,12 @@ SEXP sigma_score_mvnormAR1(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP rho_score_mvnormAR1(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 
 static R_CallMethodDef callMethods[] = {
+  {"bamlss_glogis_score", (DL_FUNC) &bamlss_glogis_score, 5},
+  {"bamlss_glogis_hesse", (DL_FUNC) &bamlss_glogis_hesse, 5},
+  {"bamlss_glogis_density", (DL_FUNC) &bamlss_glogis_density, 5},
+  {"bamlss_glogis_loglik", (DL_FUNC) &bamlss_glogis_loglik, 4},
+  {"bamlss_glogis_distr", (DL_FUNC) &bamlss_glogis_distr, 4},
+  {"bamlss_glogis_quantile", (DL_FUNC) &bamlss_glogis_quantile, 4},
   {"block_inverse", (DL_FUNC) &block_inverse, 2},
   {"bivnorm_loglik", (DL_FUNC) &bivnorm_loglik, 7},
   {"boost_fit", (DL_FUNC) &boost_fit, 4},
@@ -66,8 +81,11 @@ static R_CallMethodDef callMethods[] = {
   {"gpareto_hess_xi", (DL_FUNC) &gpareto_hess_xi, 3},
   {"gpareto_score_sigma", (DL_FUNC) &gpareto_score_sigma, 3},
   {"gpareto_score_xi", (DL_FUNC) &gpareto_score_xi, 3},
+  {"hatmat_trace", (DL_FUNC) &hatmat_trace, 2},
+  {"hatmat_sumdiag", (DL_FUNC) &hatmat_sumdiag, 1},
   {"log_dmvnorm", (DL_FUNC) &log_dmvnorm, 7},
   {"mu_score_mvnorm", (DL_FUNC) &mu_score_mvnorm, 8},
+  {"nnet_fitfun", (DL_FUNC) &nnet_fitfun, 3},
   {"process_derivs", (DL_FUNC) &process_derivs, 2},
   {"quick_quantiles", (DL_FUNC) &quick_quantiles, 2},
   {"rho_score_mvnorm", (DL_FUNC) &rho_score_mvnorm, 9},

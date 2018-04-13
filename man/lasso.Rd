@@ -158,12 +158,13 @@ p1 <- predict(b1, mstop = lasso.stop(b1))
 ## Full MCMC, needs lasso.transform() to assign the
 ## adaptive weights from unpenalized model b0.
 b2 <- bamlss(f, optimizer = FALSE, transform = lasso.transform,
-  zeromodel = b0, nobs = length(y), start = coef(b1, mstop = lasso.stop(b1)))
+  zeromodel = b0, nobs = length(y), start = coef(b1, mstop = lasso.stop(b1)),
+  n.iter = 4000, burnin = 1000)
 summary(b2)
 plot(b2)
 
 ci <- confint(b2, model = "mu", pterms = FALSE, sterms = TRUE)
-lasso.plot(b1, which = 2, model = "mu", name = "s.la(id).id", spar = FALSE)
+lasso.plot(b1, which = 2, model = "mu", name = "mu.s.la(id).id", spar = FALSE)
 for(i in 1:8) {
   abline(h = ci[i, 1], lty = 2, col = "red")
   abline(h = ci[i, 2], lty = 2, col = "red")

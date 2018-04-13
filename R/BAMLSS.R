@@ -56,6 +56,10 @@ bamlss.frame <- function(formula, data = NULL, family = "gaussian",
       }
       attr(bf$y, "reference") <- cf$reference
       family$names <- names(formula)
+      if(!is.null(family$bayesx)) {
+        family$bayesx <- rep(family$bayesx, length(family$names))
+        names(family$bayesx) <- family$names
+      }
       family$links <- rep(family$links, length.out = length(formula))
       names(family$links) <- names(formula)
       attr(formula, "orig.formula") <- orig.formula
@@ -280,10 +284,15 @@ design.construct <- function(formula, data = NULL, knots = NULL,
       tx <- drop.terms.bamlss(obj$terms,
         pterms = FALSE, keep.response = FALSE, data = data, specials = specials)
       sid <- unlist(attr(tx, "specials"))
+      smt <- NULL
+      fterms <- NULL
+      if(any(fj <- names(sid) %in% c("lf", "af",  "lf.vd", "re", "peer", "fpc"))) {
+        fterms <- attr(tx, "term.labels")[sid[fj]]
+        sid <- sid[!fj]
+      }
       if(!length(sid))
         sid <- NULL
-      smt <- NULL
-      if(!is.null(sid)) {
+      if(!is.null(sid) | !is.null(fterms)) {
         sterms <- sterm_labels <- attr(tx, "term.labels")[sid]
         sterms <- lapply(sterms, function(x) { eval(parse(text = x)) })
         nst <- NULL
@@ -406,6 +415,34 @@ design.construct <- function(formula, data = NULL, knots = NULL,
             }
           }
         }
+        if(!is.null(fterms)) {
+          for(j in seq_along(fterms)) {
+            nenv <- new.env()
+            for(nd in names(data))
+              assign(nd, data[[nd]], envir = nenv)
+            vars <- all.vars(as.formula(paste("~", fterms[j])))
+            if(length(vars) > 1) {
+              for(vj in vars[-1]) {
+                tmp <- get(vj, envir = .GlobalEnv)
+                assign(vj, tmp, envir = nenv)
+              }
+            }
+            tfm <- eval(parse(text = fterms[j]), envir = nenv)
+            rm(nenv)
+            tfme <- eval(tfm$call, envir = tfm$data)
+            smt <- smoothCon(tfme, data = tfm$data, n = nrow(tfm$data[[1L]]),
+              knots = knots, absorb.cons = TRUE)
+            lab <- all.labels.formula(as.formula(paste("~", fterms[j])))
+            for(jj in seq_along(smt)) {
+              smt[[jj]]$model.frame <- tfm$data
+              smt[[jj]]$orig.label <- smt[[jj]]$label
+              smt[[jj]]$label <- lab
+              smt[[jj]]$is.refund <- TRUE
+              smt[[jj]]$refund.call <- fterms[j]
+            }
+            smooth <- c(smooth, smt)
+          }
+        }
         if(length(smooth) > 0) {
           if(gam.side) {
             if(is.null(obj$model.matrix)) {
@@ -462,6 +499,7 @@ design.construct <- function(formula, data = NULL, knots = NULL,
       }
       if(length(unique(sl)) < length(sl)) {
         sld <- sl[duplicated(sl)]
+        k <- 1
         for(j in seq_along(sld)) {
           for(jj in which(sl == sld[j])) {
             clj <- class(obj$smooth.construct[[jj]])
@@ -469,6 +507,8 @@ design.construct <- function(formula, data = NULL, knots = NULL,
             if(clj == "random")
               clj <- "re"
             sl[jj] <- paste(sl[jj], clj, sep = ":")
+            sl[jj] <- gsub(paste0("):", clj), paste0(",id='", clj, k, "')"), sl[jj], fixed = TRUE)
+            k <- k + 1
           }
         }
       }
@@ -599,19 +639,7 @@ sparse.matrix.index <- function(x, ...)
   index
 }
 
-
-## Bandwidth minimization permutation.
-sparse.matrix.ordering <- function(x, ...)
-{
-  x <- as.spam(x)
-  i <- try(ordering(chol.spam(x)), silent = TRUE)
-  if(inherits(i, "try-error"))
-    i <- 1:nrow(x)
-  return(i)
-}
-
-
-## Setup sparse indeces for various algorithms.
+## Setup sparse indices for various algorithms.
 sparse.setup <- function(x, S = NULL, ...)
 {
   symmetric <- nrow(x) == ncol(x)
@@ -631,10 +659,17 @@ sparse.setup <- function(x, S = NULL, ...)
     "crossprod" = index.crossprod
   )
   if(!is.null(index.crossprod)) {
-    idf <- as.factor(apply(setup$crossprod, 1, paste, collapse = ","))
-    if((nlevels(idf) > 1) & (nlevels(idf) < nrow(setup$crossprod))) {
-      setup$block.index <- split(as.integer(1:nrow(setup$crossprod)), idf)
-      setup$is.diagonal <- all(sapply(setup$block.index, length) == 1)
+    # make block.index only if coefficients do not overlap
+    tmp <- setup$crossprod[!duplicated(setup$crossprod), , drop = FALSE]
+    l <- nrow(tmp)
+    if(any(unique(tmp[duplicated(tmp, MARGIN = 0)]) > 0)){
+      return(setup)
+    } else {
+      if((l > 1) & (l <= nrow(setup$crossprod))) {
+        setup$block.index <- split(tmp, 1:l)
+        setup$block.index <- lapply(1:l, function(i) setup$block.index[[i]][setup$block.index[[i]] > 0])
+        setup$is.diagonal <- all(sapply(setup$block.index, length) == 1)
+      }
     }
   }
   return(setup)
@@ -760,7 +795,7 @@ make.fit.fun <- function(x, type = 1)
     if(!is.null(names(b))) {
       b <- if(!is.null(x$pid)) b[x$pid$b] else get.par(b, "b")
     }
-    if(inherits(X, "spam") | inherits(X, "Matrix")) {
+    if(inherits(X, "Matrix")) {
       f <- as.matrix(X %*% b)
     } else {
       what <- if(type < 2) "matrix" else "grid.matrix"
@@ -792,7 +827,7 @@ make.prior <- function(x, sigma = 0.1)
     prior <- x$xt$prior
     if(is.character(x$xt$prior)) {
       prior <- tolower(prior)
-      if(!(prior %in% c("ig", "hc", "sd", "hn", "hn.lasso")))
+      if(!(prior %in% c("ig", "hc", "sd", "hn", "hn.lasso", "u")))
         stop(paste('smoothing variance prior "', prior, '" not supported!', sep = ''))
     }
   } else {
@@ -827,13 +862,15 @@ make.prior <- function(x, sigma = 0.1)
       theta <- switch(prior,
         "sd" = 0.00877812,
         "hc" = 0.01034553,
-        "hn" = 0.1457644
+        "hn" = 0.1457644,
+        "u" = 0.2723532
       )
     }
 
     fixed <- if(is.null(x$fixed)) FALSE else x$fixed
 
     igs <- log((b^a)) - log(gamma(a))
+
     var_prior_fun <- switch(prior,
       "ig" = function(tau2) { igs + (-a - 1) * log(tau2) - b / tau2 },
       "hc" = function(tau2) { -log(1 + tau2 / (theta^2)) - 0.5 * log(tau2) - log(theta^2) },
@@ -843,6 +880,9 @@ make.prior <- function(x, sigma = 0.1)
       "hn.lasso" = function(tau2) {
         theta <- sqrt(pi) / (sigma * sqrt(2))
         log(2 * theta / pi) - (tau2^2 * theta^2) / pi
+      },
+      "u" = function(tau2) {
+        1 - tau2 - exp(tau2 * 3 / theta - 3) / (1 + exp(tau2 * 3 / theta - 3))
       }
     )
     
@@ -955,6 +995,7 @@ model.frame.bamlss <- model.frame.bamlss.frame <- function(formula, ...)
     fcall <- formula$call
     fcall[[1L]] <- quote(bamlss.model.frame)
     fcall[names(nargs)] <- nargs
+    formula$formula <- as.formula(formula$formula)
     env <- environment(formula$formula)
     if(is.null(env))
       env <- parent.frame()
@@ -1269,7 +1310,10 @@ parameters <- function(x, model = NULL, start = NULL, fill = c(0, 0.0001),
             tpar <- c(tpar1, tpar2)
           } else {
             nfill <- if(is.null(x[[i]]$smooth.construct[[k]]$special.npar)) {
-              ncol(x[[i]]$smooth.construct[[k]]$X)
+              if(is.null(dim(x[[i]]$smooth.construct[[k]]$X)))
+                x[[i]]$smooth.construct[[k]]$X.dim
+              else
+                ncol(x[[i]]$smooth.construct[[k]]$X)
             } else x[[i]]$smooth.construct[[k]]$special.npar
             tpar <- rep(fill[1], nfill)
             cn <- colnames(x[[i]]$smooth.construct[[k]]$X)
@@ -1381,13 +1425,14 @@ bamlss <- function(formula, family = "gaussian", data = NULL, start = NULL, knot
   ## Setup all processing functions.
   foo <- list("transform" = transform, "optimizer" = optimizer,
     "sampler" = sampler, "samplestats" = samplestats, "results" = results)
+
   nf <- names(foo)
   default_fun <- c("no.transform", "bfit", "GMCMC", "samplestats", "results.bamlss.default")
   functions <- list()
   for(j in 1:length(foo)) {
     if(is.null(foo[[nf[j]]])) {
       foo[[nf[j]]] <- if(default_fun[j] != "no.transform") {
-        get(default_fun[j], envir = asNamespace("bamlss"))
+        get(default_fun[j]) #, envir = asNamespace("bamlss"))
       } else FALSE
     }
     if(is.list(foo[[nf[j]]])) {
@@ -1399,12 +1444,17 @@ bamlss <- function(formula, family = "gaussian", data = NULL, start = NULL, knot
         do.call(fun, args)
       }
     } else functions[[nf[j]]] <- foo[[nf[j]]]
+    
     if(!is.function(functions[[nf[j]]])) {
-      if(!is.logical(functions[[nf[j]]])) {
+      if(!is.logical(functions[[nf[j]]]) & !is.null(functions[[nf[j]]])) {
         stop(paste("argument", nf[j], "is not a function!"))
       } else {
-        if(functions[[nf[j]]]) {
+        if(is.null(functions[[nf[j]]])) {
           functions[[nf[j]]] <- get(default_fun[j])
+        } else {
+          if(functions[[nf[j]]]) {
+            functions[[nf[j]]] <- get(default_fun[j])
+          }
         }
       }
     }
@@ -1455,6 +1505,7 @@ bamlss <- function(formula, family = "gaussian", data = NULL, start = NULL, knot
 
   ## Start sampling.
   if(is.function(functions$sampler)) {
+    ptm <- proc.time()
     if(is.null(cores)) {
       bf$samples <- functions$sampler(x = bf$x, y = bf$y, family = bf$family,
         weights = model.weights(bf$model.frame),
@@ -1472,6 +1523,7 @@ bamlss <- function(formula, family = "gaussian", data = NULL, start = NULL, knot
       }
       bf$samples <- parallel::mclapply(1:cores, parallel_fun, mc.cores = cores)
     }
+    elapsed <- c(proc.time() - ptm)[3]
     if(!inherits(bf$samples, "mcmc")) {
       if(!is.null(bf$samples)) {
         if(is.list(bf$samples)) {
@@ -1499,11 +1551,26 @@ bamlss <- function(formula, family = "gaussian", data = NULL, start = NULL, knot
       if(!is.null(bf$model.stats))
         bf$model.stats <- list("optimizer" = bf$model.stats)
     }
+    bf$model.stats$sampler$runtime <- elapsed
   } else {
     if(!is.null(bf$model.stats))
       bf$model.stats <- list("optimizer" = bf$model.stats)
   }
 
+  #!# adjust model.frame for joint model with nonlinear
+  args <- list(...)
+  if(!is.null(args$nonlinear)) {
+    if(args$nonlinear) {
+      if(!is.null(bf$fitted.values$mu)){
+        ## use estimated trajectories for setting up plot results
+        bf$model.frame$mu <- bf$fitted.values$mu
+      } else {
+        ## use observed trajectories for setting up plot results
+        bf$model.frame$mu <- bf$y[[1]][, "obs"]
+      }
+    }
+  }
+  
   ## Compute results.
   if(is.function(functions$results))
     bf$results <- try(functions$results(bf, bamlss = TRUE,  ...))
@@ -1534,8 +1601,8 @@ bamlss <- function(formula, family = "gaussian", data = NULL, start = NULL, knot
     }
     bf$y <- NULL
     bf$fitted.values <- NULL
-    attr(bf$formula, ".Environment") <- NULL
-    attr(bf$terms, ".Environment") <- NULL
+    bf$formula <- as.character(bf$formula)
+    bf$terms <- as.character(bf$terms)
   }
 
   bf$call <- match.call()
@@ -1545,6 +1612,53 @@ bamlss <- function(formula, family = "gaussian", data = NULL, start = NULL, knot
   bf
 }
 
+as.character.bamlss.formula <- as.character.bamlss.terms <- function(x, ...)
+{
+  if(inherits(x, "bamlss.formula.character"))
+    return(x)
+  for(i in seq_along(x)) {
+    if(!is.null(names(x[[i]]))) {
+      if(all(c("formula", "fake.formula") %in% names(x[[i]]))) {
+        x[[i]]$formula <- deparse(x[[i]]$formula)
+        x[[i]]$fake.formula <- deparse(x[[i]]$fake.formula)
+      } else {
+        x[[i]] <- as.character.bamlss.formula(x[[i]])
+      }
+    }
+  }
+  attr(x, ".Environment") <- capture.output(attr(x, ".Environment"))
+  class(x) <- c("bamlss.formula.character", "list")
+  return(x)
+}
+
+formula.bamlss.formula.character <- function(x, ...)
+{
+  if(inherits(x, "bamlss.formula"))
+    return(x)
+  env <- attr(x, ".Environment")
+  env <- if(grepl("globalenv", env, ignore.case = TRUE)) .GlobalEnv else NULL
+  for(i in seq_along(x)) {
+    if(!is.null(names(x[[i]]))) {
+      if(all(c("formula", "fake.formula") %in% names(x[[i]]))) {
+        x[[i]]$formula <- as.formula(x[[i]]$formula, env = env)
+        x[[i]]$fake.formula <- as.formula(x[[i]]$fake.formula)
+      } else {
+        x[[i]] <- formula.bamlss.formula.character(x[[i]], ...)
+      }
+    }
+  }
+  class(x) <- c("bamlss.formula", "list")
+  attr(x, ".Environment") <- env
+  return(x)
+}
+
+formula.bamlss.formula <- function(x, ...)
+{
+  if(inherits(x, "bamlss.formula"))
+    return(x)
+  if(inherits(x, "bamlss.formula.character"))
+    return(formula(x))
+}
 
 ## Basic engine setup transformer.
 bamlss.setup <- function(x, ...)
@@ -1573,6 +1687,11 @@ get.all.parnames <- function(x, rename.p = TRUE)
 samplestats <- function(samples, x = NULL, y = NULL, family = NULL, logLik = FALSE, ...)
 {
   if(inherits(samples, "bamlss")) {
+    if(inherits(samples$formula, "bamlss.formula.character")) {
+      samples$x <- design.construct(samples)
+      samples$formula <- as.formula(samples$formula)
+      samples$y <- model.frame(samples)[, attr(samples$formula, "response.name")]
+    }
     if(is.null(samples$samples))
       stop("no samples in 'bamlss' object!")
     x <- if(is.null(samples$x)) smooth.construct(samples) else samples$x
@@ -1612,8 +1731,10 @@ samplestats <- function(samples, x = NULL, y = NULL, family = NULL, logLik = FAL
         par <- rep(list(0), length = length(x))
         names(par) <- nx
         mpar <- par
-        for(i in nx)
-          par[[i]] <- make.link2(family$links[i])$linkinv(.fitted.bamlss(i, x[[i]], samples))
+        for(i in nx) {
+          par[[i]] <- .fitted.bamlss(i, x[[i]], samples)
+          par[[i]] <- make.link2(family$links[i])$linkinv(par[[i]])
+        }
         msamples <- matrix(apply(samples, 2, mean, na.rm = TRUE), nrow = 1)
         colnames(msamples) <- pn
         for(i in nx)
@@ -1739,6 +1860,7 @@ bamlss.model.frame <- function(formula, data, family = gaussian_bamlss(),
       return(formula$model.frame)
     fcall <- formula$call
     fcall[[1L]] <- quote(bamlss.model.frame)
+    formula$formula <- as.formula(formula$formula)
     env <- environment(formula$formula)
     if(is.null(env))
       env <- parent.frame()
@@ -1803,9 +1925,11 @@ bamlss.model.frame <- function(formula, data, family = gaussian_bamlss(),
 
   ## Process weights and offset.
   if(!is.null(weights)) {
+    wident <- FALSE
     if(!is.list(weights)) {
       weights <- rep(list(weights), length = length(family$names))
       names(weights) <- family$names
+      wident <- TRUE
     }
     weights <- do.call("cbind", weights)
     colnames(weights) <- names(formula)[1:ncol(weights)]
@@ -1818,6 +1942,7 @@ bamlss.model.frame <- function(formula, data, family = gaussian_bamlss(),
       weights <- do.call(rbind, replicate(nrow(data), weights, simplify = FALSE))
     for(j in 1:ncol(weights))
       weights[weights[, j] == 0, j] <- .Machine$double.eps
+    attr(weights, "identical") <- wident
     data[["(weights)"]] <- weights
   }
   if(!is.null(offset)) {
@@ -1940,8 +2065,16 @@ complete.bamlss.family <- function(family)
   }
 
   if(is.null(family$loglik)) {
-    if(!is.null(family$d))
-      family$loglik <- function(y, par, ...) { sum(family$d(y, par, log = TRUE), na.rm = TRUE) }
+    if(!is.null(family$d)) {
+      family$loglik <- function(y, par, ...) {
+        logdens <- family$d(y, par, log = TRUE)
+        if(any(i <- !is.finite(logdens))) {
+          logdens[i] <- 0
+          warning("non finite log density!")
+        }
+        return(sum(logdens, na.rm = TRUE))
+      }
+    }
   }
 
   err01 <- .Machine$double.eps^(1/3)
@@ -1949,10 +2082,10 @@ complete.bamlss.family <- function(family)
   err11 <- .Machine$double.eps^(1/4)
   err12 <- err11 * 2
 
-  if(is.null(family$score))
+  if(is.null(family$score) & !is.null(family$d))
     family$score <- list()
   for(i in family$names) {
-    if(is.null(family$score[[i]])) {
+    if(is.null(family$score[[i]]) & !is.null(family$d)) {
       fun <- c(
         "function(y, par, ...) {",
         paste("  eta <- linkfun[['", i, "']](par[['", i, "']]);", sep = ""),
@@ -1968,10 +2101,10 @@ complete.bamlss.family <- function(family)
     }
   }
 
-  if(is.null(family$hess))
+  if(is.null(family$hess) & !is.null(family$d))
     family$hess <- list()
   for(i in family$names) {
-    if(is.null(family$hess[[i]])) {
+    if(is.null(family$hess[[i]]) & !is.null(family$d)) {
       fun <- if(!is.null(attr(family$score[[i]], "dnum"))) {
         c(
           "function(y, par, ...) {",
@@ -2037,7 +2170,7 @@ as.list.Formula <- function(x)
 bamlss.formula <- function(formula, family = NULL, specials = NULL, env = NULL, ...)
 {
   if(is.null(specials))
-    specials <- c("s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n")
+    specials <- c("s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n", "h", "lf", "af", "lf.vd", "re", "peer", "fpc")
   if(inherits(formula, "bamlss.formula"))
     return(formula)
   if(!is.list(formula)) {
@@ -2266,7 +2399,7 @@ make_fFormula <- function(formula)
 all.vars.formula <- function(formula, lhs = TRUE, rhs = TRUE, specials = NULL, intercept = FALSE, type = 1)
 {
   env <- environment(formula)
-  specials <- unique(c(specials, "s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n"))
+  specials <- unique(c(specials, "s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n", "h", "lf", "af", "lf.vd", "re", "peer", "fpc"))
   tf <- terms(formula, specials = specials, keep.order = TRUE)
   ## sid <- unlist(attr(tf, "specials")) - attr(tf, "response")
   tl <- attr(tf, "term.labels")
@@ -2282,13 +2415,17 @@ all.vars.formula <- function(formula, lhs = TRUE, rhs = TRUE, specials = NULL, i
       if(!length(vars))
         vars <- NULL
       for(j in tl[sid]) {
-        tcall <- parse(text = j)[[1]]
-        tcall[c("k","fx","bs","m","xt","id","sp","pc","d","mp","np")] <- NULL
-        tcall <- eval(tcall)
-        vars <- c(vars, tcall$term)
-        if(!is.null(tcall$by)) {
-          if(tcall$by != "NA")
-            vars <- c(vars, tcall$by)
+        if(any(grep2(paste0(c("af",  "lf.vd", "re", "peer", "fpc"), "("), j, fixed = TRUE)) ) {
+          vars <- c(vars, all.vars(as.formula(paste("~", j)))[1])
+        } else {
+          tcall <- parse(text = j)[[1]]
+          tcall[c("k","fx","bs","m","xt","id","sp","pc","d","mp","np","knots")] <- NULL
+          tcall <- eval(tcall)
+          vars <- c(vars, tcall$term)
+          if(!is.null(tcall$by)) {
+            if(tcall$by != "NA")
+              vars <- c(vars, tcall$by)
+          }
         }
       }
     } else {
@@ -2354,7 +2491,7 @@ terms.formula2 <- function(formula, specials, keep.order = TRUE, ...)
 all.labels.formula <- function(formula, specials = NULL, full.names = FALSE)
 {
   env <- environment(formula)
-  specials <- unique(c("s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n", specials))
+  specials <- unique(c("s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n", "h", "lf", "af", "lf.vd", "re", "peer", "fpc", specials))
   tf <- terms.formula2(formula, specials = specials, keep.order = FALSE)
   ## sid <- unlist(attr(tf, "specials")) - attr(tf, "response")
   tl <- attr(tf, "term.labels")
@@ -2375,16 +2512,25 @@ all.labels.formula <- function(formula, specials = NULL, full.names = FALSE)
       tl[-sid] <- labs
     tl[sid] <- gsub(" ", "", tl[sid])
     for(j in sid) {
-      tcall <- parse(text = tl[j])[[1]]
-      tcall[c("k","fx","bs","m","xt","sp","pc","d","mp","np")] <- NULL
-      tcall <- eval(tcall)
-      tl[j] <- gsub(" ", "", tcall$label)
-      if(!is.null(tcall$by)) {
-        if(tcall$by != "NA") {
-          if(!grepl("by=", tl[j], fixed = TRUE)) {
-            tlt <- strsplit(tl[j], "")[[1]]
-            tlt <- paste(tlt[1:(length(tlt) - 1)], collapse = "")
-            tl[j] <- paste(tlt, ",by=", tcall$by, ")", sep = "")
+      if(length(i <- grep2(paste0(c("af",  "lf.vd", "re", "peer", "fpc"), "("), tl[j], fixed = TRUE)) ) {
+        tl[j] <- paste0(c("af",  "lf.vd", "re", "peer", "fpc")[i], "(",
+          all.vars(as.formula(paste("~", tl[j])))[1], ")")
+      } else {
+        tcall <- parse(text = tl[j])[[1]]
+        tcall[c("k","fx","bs","m","xt","sp","pc","d","mp","np")] <- NULL
+        tcall <- eval(tcall)
+        if(is.null(tcall$label)) {
+          if(!is.null(tcall$call))
+            tcall <- eval(tcall$call)
+        }
+        tl[j] <- gsub(" ", "", tcall$label)
+        if(!is.null(tcall$by)) {
+          if(tcall$by != "NA") {
+            if(!grepl("by=", tl[j], fixed = TRUE)) {
+              tlt <- strsplit(tl[j], "")[[1]]
+              tlt <- paste(tlt[1:(length(tlt) - 1)], collapse = "")
+              tl[j] <- paste(tlt, ",by=", tcall$by, ")", sep = "")
+            }
           }
         }
       }
@@ -2435,6 +2581,7 @@ response.name <- function(formula, hierarchical = TRUE, keep.functions = FALSE, 
 {
   rn <- NA
   if(inherits(formula, "bamlss.frame")) {
+    formula$formula <- as.formula(formula$formula)
     if(!is.null(formula$formula)) {
       if(!is.null(attr(formula$formula, "response.name")))
         return(attr(formula$formula, "response.name"))
@@ -2749,6 +2896,15 @@ compute_s.effect <- function(x, get.X, fit.fun, psamples,
   FUN = NULL, snames, data, grid = -1, rug = TRUE)
 {
   nt <- length(x$term)
+
+  for(j in seq_along(data)) {
+    if(is.matrix(data[[j]])) {
+      data[[j]] <- if(is.numeric(data[[j]])) as.numeric(data[[j]]) else drop(data[[j]])
+    }
+  }
+  if(is.list(data))
+    data <- as.data.frame(data)
+
   if(nt > 2)
     return(NULL)
 
@@ -2772,9 +2928,11 @@ compute_s.effect <- function(x, get.X, fit.fun, psamples,
     tterms <- c(tterms, tterm)
   }
 
-  for(char in c("(", ")", "[", "]")) {
-    colnames(data) <- gsub(char, ".", colnames(data), fixed = TRUE)
-    x$by <- gsub(char, ".", x$by, fixed = TRUE)
+  if(!is.list(data)) {
+    for(char in c("(", ")", "[", "]")) {
+      colnames(data) <- gsub(char, ".", colnames(data), fixed = TRUE)
+      x$by <- gsub(char, ".", x$by, fixed = TRUE)
+    }
   }
 
   ## Data for rug plotting.
@@ -2811,14 +2969,16 @@ compute_s.effect <- function(x, get.X, fit.fun, psamples,
       data <- nd
     } else xsmall <- FALSE
   } else {
-    data0 <- data[, c(tterms, if(x$by != "NA") x$by else NULL), drop = FALSE]
-    if(nt < 2) {
-      if(x$by != "NA") {
-        if(!is.factor(data[[x$by]]))
-          data <- unique(data0)
-      } else data <- unique(data0)
-    }
-    xsmall <- if((nrow(data) != nrow(data0)) & (nt < 2)) TRUE else FALSE
+    if(!is.list(data)) {
+      data0 <- data[, c(tterms, if(x$by != "NA") x$by else NULL), drop = FALSE]
+      if(nt < 2) {
+        if(x$by != "NA") {
+          if(!is.factor(data[[x$by]]))
+            data <- unique(data0)
+        } else data <- unique(data0)
+      }
+      xsmall <- if((nrow(data) != nrow(data0)) & (nt < 2)) TRUE else FALSE
+    } else xsmall <- FALSE
   }
   if(is.null(x$special)) {
     X <- get.X(data)
@@ -2837,10 +2997,16 @@ compute_s.effect <- function(x, get.X, fit.fun, psamples,
       FUN <- c95
     }
     if(nt < 2) {
-      fsamples <- apply(psamples, 1, function(g) {
+      fsamples <- try(apply(psamples, 1, function(g) {
         f <- fit.fun(X, g, expand = FALSE, no.sparse.setup = (nrow(psamples) < 2))
         f
-      })
+      }), silent = TRUE)
+      if(inherits(fsamples, "try-error")) {
+        fsamples <- try(apply(psamples, 1, function(g) {
+          f <- X %*% g
+          f
+        }), silent = TRUE)
+      }
       smf <- t(apply(fsamples, 1, FUN))
     } else {
       smf <- 0
@@ -2855,7 +3021,10 @@ compute_s.effect <- function(x, get.X, fit.fun, psamples,
   cnames <- colnames(smf)
   smf <- as.data.frame(smf)
   for(l in 1:nt) {
-    smf <- cbind(data[[tterms[l]]], smf)
+    if(is.matrix(data[[tterms[l]]]))
+      smf <- cbind(as.numeric(data[[tterms[l]]]), smf)
+    else
+      smf <- cbind(drop(data[[tterms[l]]]), smf)
   }
   names(smf) <- c(x$term, cnames)
 
@@ -2865,7 +3034,7 @@ compute_s.effect <- function(x, get.X, fit.fun, psamples,
 
   if(x$by != "NA") { ## FIXME: hard coded fix for plotting varying coefficient terms!
     if(!is.factor(data[[x$by]])) {
-      X <- X / data[[x$by]]
+      X <- X / as.numeric(data[[x$by]])
 
       fsamples <- apply(psamples, 1, function(g) {
         fit.fun(X, g, expand = FALSE)
@@ -2876,7 +3045,11 @@ compute_s.effect <- function(x, get.X, fit.fun, psamples,
       cnames <- colnames(smf)
       smf <- as.data.frame(smf)
       for(l in 1:nt) {
-        smf <- cbind(data[[tterms[l]]], smf)
+        if(is.matrix(data[[tterms[l]]])) {
+          smf <- cbind(as.numeric(data[[tterms[l]]]), smf)
+        } else {
+          smf <- cbind(data[[tterms[l]]], smf)
+        }
       }
       names(smf) <- c(x$term, cnames)
     }
@@ -2896,7 +3069,13 @@ compute_s.effect <- function(x, get.X, fit.fun, psamples,
   attr(x, "qrc") <- NULL
   attr(smf, "specs") <- x
   class(attr(smf, "specs")) <- class(x)
-  attr(smf, "x") <- if(xsmall & nt < 2) data0[, tterms] else data[, tterms]
+  if(!is.list(data)) {
+    attr(smf, "x") <- if(xsmall & nt < 2) data0[, tterms] else data[, tterms]
+  } else {
+    for(t in tterms)
+      data[[t]] <- if(is.matrix(data[[t]])) as.numeric(data[[t]]) else drop(data[[t]])
+    attr(smf, "x") <- as.data.frame(data)[, tterms]
+  }
   attr(smf, "by.drop") <- by.drop
   attr(smf, "rug") <- rugp
 
@@ -2963,9 +3142,11 @@ predict.bamlss <- function(object, newdata, model = NULL, term = NULL, match.nam
   trans = NULL, what = c("samples", "parameters"), nsamps = NULL, verbose = FALSE, drop = TRUE,
   cores = NULL, chunks = 1, ...)
 {
+  object$formula <- as.formula(object$formula)
+
   ## If data have been scaled (scale.d=TRUE)
-  if ( ! missing(newdata) & ! is.null(attr(object$model.frame,'scale')) ) {
-    sc <- attr(object$model.frame,'scale')
+  if (!missing(newdata) & ! is.null(attr(object$model.frame,'scale')) ) {
+    sc <- attr(object$model.frame, 'scale')
     for ( name in unique(unlist(lapply(sc,names))) ) {
       newdata[,name] <- (newdata[,name] - sc$center[name] ) / sc$scale[name]
     }
@@ -3054,10 +3235,16 @@ predict.bamlss <- function(object, newdata, model = NULL, term = NULL, match.nam
   } else {
     if(is.null(object$parameters))
       stop("cannot find any parameters!")
-    samps <- parameters(object, model = model, list = FALSE, extract = TRUE, ...)
-    cn <- names(samps)
-    samps <- matrix(samps, nrow = 1)
-    colnames(samps) <- cn
+    if(!is.null(dim(object$parameters)) & !is.null(object$model.stats$optimizer$boost.summary) & is.null(list(...)$mstop)) {
+      samps <- object$parameters
+      FUN <- function(x) { x }
+      FUN2 <- function(x, ...) FUN(x)
+    } else {
+      samps <- parameters(object, model = model, list = FALSE, extract = TRUE, ...)
+      cn <- names(samps)
+      samps <- matrix(samps, nrow = 1)
+      colnames(samps) <- cn
+    }
     samps <- as.mcmc(samps)
   }
 
@@ -3257,14 +3444,24 @@ predict.bamlss <- function(object, newdata, model = NULL, term = NULL, match.nam
         } else {
           sn <- snames[grep2(paste(id, "p", j, sep = "."), snames, fixed = TRUE)]
           sn2 <- paste(sn, ".", sep = "")
-          sn <- sn[grepl(paste(id, ".p.", j, ".", sep = ""), sn2, fixed = TRUE)]
+          if(is.factor(data[[j]])) {
+            xlev <- colnames(X)
+            sn <- sn[grep2(paste(id, ".p.", xlev, ".", sep = ""), sn2, fixed = TRUE)]
+          } else {
+            sn <- sn[grepl(paste(id, ".p.", j, ".", sep = ""), sn2, fixed = TRUE)]
+          }
           sn <- sn[!grepl(":", sn, fixed = TRUE)]
         }
+        # to be checked if collision with other models
         if(!length(sn)) {
           sn <- snames[grep2(paste(id, "p.model.matrix", j, sep = "."), snames, fixed = TRUE)]
+          if(!length(sn)) {
+            sn <- snames[grep2(paste(id, "p", j, sep = "."), snames, fixed = TRUE)]
+          }
         }
         if(ncol(X) > length(sn)) {
           sn2 <- gsub(paste(id, "p.", sep = "."), "", sn, fixed = TRUE)
+          if(grepl("model.matrix.", sn2)) sn2 <- gsub("model.matrix.", "", sn2, fixed = TRUE)
           X <- X[, sn2, drop = FALSE]
         }
         eta <- eta + fitted_matrix(X, samps[, sn, drop = FALSE])
@@ -3282,8 +3479,35 @@ predict.bamlss <- function(object, newdata, model = NULL, term = NULL, match.nam
       for(jj in grep(j, names(x), fixed = TRUE, value = TRUE)) {
         sn <- snames[grep2(paste(id, "s", jj, sep = "."), snames, fixed = TRUE)]
         if(!inherits(x[[jj]], "no.mgcv") & !inherits(x[[jj]], "special")) {
-          X <- PredictMat(x[[jj]], data)
-          eta <- eta + fitted_matrix(X, samps[, sn, drop = FALSE])
+          if(is.null(x[[jj]]$mono))
+            x[[jj]]$mono <- 0
+          if(!is.null(x[[jj]]$margin)) {
+            for(mjj in seq_along(x[[jj]]$margin)) {
+              if(is.null(x[[jj]]$margin[[mjj]]$mono))
+                x[[jj]]$margin[[mjj]]$mono <- 0
+            }
+          }
+          random <- FALSE
+          if(!is.null(x[[jj]]$is.refund)) {
+            rfcall <- x[[jj]]$refund.call
+            tfm <- eval(parse(text = rfcall), envir = data)
+            tfme <- eval(tfm$call, envir = tfm$data)
+            X <- smoothCon(tfme, data = tfm$data, n = nrow(tfm$data[[1L]]),
+              knots = NULL, absorb.cons = TRUE)[[1]]$X
+            rm(tfm)
+            rm(tfme)
+          } else {
+            X <- PredictMat(x[[jj]], data)
+            random <- if(!is.null(x[[jj]]$margin)) {
+              any(sapply(x[[jj]]$margin, function(z) { inherits(z, "random.effect") }))
+            } else inherits(x[[jj]], "random.effect")
+          }
+          if(random) {
+            if(ncol(X) == ncol(samps[, sn, drop = FALSE]))
+              eta <- eta + fitted_matrix(X, samps[, sn, drop = FALSE])
+          } else {
+            eta <- eta + fitted_matrix(X, samps[, sn, drop = FALSE])
+          }
         } else {
           if(is.null(x[[jj]]$PredictMat)) {
             X <- PredictMat(x[[jj]], data)
@@ -4043,6 +4267,7 @@ smooth.construct.la.smooth.spec <- function(object, data, knots, ...)
   ridge <- if(is.null(object$xt[["ridge"]])) FALSE else object$xt[["ridge"]]
   fuse <- if(is.null(object$xt[["fuse"]])) FALSE else object$xt[["fuse"]]
   standardize <- if(is.null(object$xt[["standardize"]])) FALSE else object$xt[["standardize"]]
+  standardize01 <- if(is.null(object$xt[["standardize01"]])) FALSE else object$xt[["standardize01"]]
   fuse_type <- "nominal"
   if(is.logical(fuse)) {
     if(fuse)
@@ -4062,6 +4287,11 @@ smooth.construct.la.smooth.spec <- function(object, data, knots, ...)
   object$fuse <- fuse
   object$fuse_type <- fuse_type
   object$standardize <- standardize
+  object$standardize01 <- standardize01
+  
+  contr <- object$xt$contrast.arg
+  if(is.null(contr))
+    contr <- "contr.treatment"
   
   data <- as.data.frame(data)
   nobs <- nrow(data)
@@ -4072,7 +4302,12 @@ smooth.construct.la.smooth.spec <- function(object, data, knots, ...)
   object$lasso <- list("trans" = list())
   k <- 1
   for(j in tl) {
-    object$X[[j]] <- as.matrix(model.matrix(as.formula(paste("~", j)), data = data))
+    if(is.factor(data[[j]])) {
+      contr.list <- list()
+      contr.list[[j]] <- contr
+    } else contr.list <- NULL
+    object$X[[j]] <- as.matrix(model.matrix(as.formula(paste("~", j)), data = data,
+      contrasts = contr.list))
     if(length(i <- grep("Intercept", colnames(object$X[[j]]))))
       object$X[[j]] <- object$X[[j]][, -i, drop = FALSE]
     is_f <- is.factor(data[[j]])
@@ -4082,6 +4317,7 @@ smooth.construct.la.smooth.spec <- function(object, data, knots, ...)
       group[[j]] <- NA
     }
     k <- k + ncol(object$X[[j]])
+    j2 <- NULL
     if(grepl(":", j, fixed = TRUE)) {
       j2 <- strsplit(j, ":")[[1]]
       is_f <- any(sapply(j2, function(i) is.factor(data[[i]])))
@@ -4092,11 +4328,19 @@ smooth.construct.la.smooth.spec <- function(object, data, knots, ...)
     }
     if(!fuse | standardize) {
       if(!is_f) {
-        object$X[[j]] <- scale(object$X[[j]])
-        object$lasso$trans[[j]] <- list(
-          "center" = attr(object$X[[j]], "scaled:center"),
-          "scale" = attr(object$X[[j]], "scaled:scale")
-        )
+        if(standardize01) {
+          xmin <- apply(object$X[[j]], 2, min, na.rm = TRUE)
+          xmax <- apply(object$X[[j]], 2, max, na.rm = TRUE)
+          for(jj in 1:ncol(object$X[[j]]))
+            object$X[[j]][, jj] <- (object$X[[j]][, jj] - xmin[jj]) / (xmax[jj] - xmin[jj])
+          object$lasso$trans[[j]] <- list("xmin" = xmin, "xmax" = xmax)
+        } else {
+          object$X[[j]] <- scale(object$X[[j]])
+          object$lasso$trans[[j]] <- list(
+            "center" = attr(object$X[[j]], "scaled:center"),
+            "scale" = attr(object$X[[j]], "scaled:scale")
+          )
+        }
       } else {
         object$X[[j]] <- blockstand(object$X[[j]], n = nobs)
         object$lasso$trans[[j]] <- list("blockscale" = attr(object$X[[j]], "blockscale"))
@@ -4112,9 +4356,13 @@ smooth.construct.la.smooth.spec <- function(object, data, knots, ...)
         "scale" = 1.0
       )
       if(is.factor(data[[j]])) {
-        df[[j]] <- colSums(object$X[[j]])
+        df[[j]] <- colSums(object$X[[j]] == 1)
       } else {
-        df[[j]] <- rep(nobs, ncol(object$X[[j]]))
+        if(is.null(j2)) {
+          df[[j]] <- rep(nobs, ncol(object$X[[j]]))
+        } else {
+          df[[j]] <- colSums(object$X[[j]] == 1)
+        }
         names(df[[j]]) <- colnames(object$X[[j]])
       }
     }
@@ -4127,7 +4375,7 @@ smooth.construct.la.smooth.spec <- function(object, data, knots, ...)
   const <- object$xt$const
   if(is.null(const))
     const <- 1e-05
-  if(!fuse) {
+  if(!fuse & !ridge) {
     if(object$type == "single") {
       object$S[[1]] <- function(parameters) {
         b <- get.par(parameters, "b")
@@ -4157,7 +4405,7 @@ smooth.construct.la.smooth.spec <- function(object, data, knots, ...)
       object$S <- A
     }
   }
-  if(fuse) {
+  if(fuse & !ridge) {
     k <- ncol(object$X)
     if(fuse_type == "nominal") {
       Af <- matrix(0, ncol = choose(k, 2), nrow = k)
@@ -4213,9 +4461,9 @@ smooth.construct.la.smooth.spec <- function(object, data, knots, ...)
     attr(object$S[[ls]], "npar") <- ncol(object$X)
   }
 
-  object$xt[["prior"]] <- "ig"
-  object$xt[["a"]] <- 10
-  object$xt[["b"]] <- 1e-5
+  object$xt[["prior"]] <- "hn"
+#  object$xt[["a"]] <- 10
+#  object$xt[["b"]] <- 1e-5
   object$fixed <- if(is.null(object$xt[["fx"]])) FALSE else object$xt[["fx"]]
   priors <- make.prior(object)
   object$prior <- priors$prior
@@ -4231,9 +4479,10 @@ smooth.construct.la.smooth.spec <- function(object, data, knots, ...)
   object$lasso$const <- const
 
   if(ridge)
-    object$S <- list(diag(.Machine$double.eps, ncol(object$X)))
+    object$S <- list(diag(1, ncol(object$X)))
 
-  object$xt[["binning"]] <- TRUE
+  if(is.null(object$xt[["binning"]]))
+    object$xt[["binning"]] <- TRUE
   if(is.null(object$xt[["df"]]))
     object$xt[["df"]] <- if(!ridge) ceiling(ncol(object$X) * 0.9) else ceiling(ncol(object$X) * 0.3)
   object$ctype <- switch(object$type,
@@ -4242,9 +4491,58 @@ smooth.construct.la.smooth.spec <- function(object, data, knots, ...)
   )
   object$C <- matrix(nrow = 0, ncol = ncol(object$X))
   object$side.constrain <- FALSE
+  object$boost.fit <- boost_fit
 
   if(object$fixed)
     object$S <- NULL
+
+  if(!ridge) {
+    object$boost.fit <- function(x, y, nu, hatmatrix = TRUE, ...) {
+      ## Compute reduced residuals.
+      xbin.fun(x$binning$sorted.index, rep(1, length = length(y)), y, x$weights, x$rres, x$binning$order)
+  
+      ## Compute mean and precision.
+      XWX <- do.XWX(x$X, 1 / x$weights, x$sparse.setup$matrix)
+      if(x$fixed) {
+        P <- matrix_inv(XWX, index = x$sparse.setup)
+      } else {
+        S <- 0
+        tau2 <- 0.01 ## get.state(x, "tau2")
+        for(j in seq_along(x$S))
+          S <- S + 1 / tau2[j] * if(is.function(x$S[[j]])) x$S[[j]](c(x$state$parameters, x$fixed.hyper)) else x$S[[j]]
+        P <- matrix_inv(XWX + S, index = x$sparse.setup)
+      }
+  
+      ## New parameters.
+      g <- nu * drop(P %*% crossprod(x$X, x$rres))
+  
+      ## Finalize.
+      x$state$parameters <- set.par(x$state$parameters, g, "b")
+      x$state$parameters <- set.par(x$state$parameters, 1e-05, "tau2")
+      x$state$fitted.values <- x$fit.fun(x$X, get.state(x, "b"))
+      x$state$rss <- sum((x$state$fitted.values - y)^2)
+
+      if(hatmatrix)
+        x$state$hat <- nu * x$X %*% P %*% t(x$X)
+  
+      return(x$state)
+    }
+  }
+
+  if(is.null(object$xt$alpha))
+    object$xt$alpha <- 1
+  if(is.null(object$xt$nlambda))
+    object$xt$nlambda <- 100
+  if(is.null(object$xt$lambda.min.ratio))
+    object$xt$lambda.min.ratio <- 1e-20
+  if(is.null(object$xt$update)) {
+    object$xt$update <- bfit_iwls
+  } else {
+    if(is.character(object$xt$update)) {
+      if(object$xt$update == "glmnet")
+        object$xt$update <- bfit_glmnet
+    }
+  }
 
   class(object) <- "lasso.smooth"
 
@@ -4255,9 +4553,16 @@ Predict.matrix.lasso.smooth <- function(object, data)
 {
   data <- as.data.frame(data)
   tl <- term.labels2(terms(object$formula), intercept = FALSE, list = FALSE)
+  contr <- object$xt$contrast.arg
+  if(is.null(contr))
+    contr <- "contr.treatment"
   X <- list()
   for(j in tl) {
-    X[[j]] <- as.matrix(model.matrix(as.formula(paste("~", j)), data = data))
+    if(is.factor(data[[j]])) {
+      contr.list <- list()
+      contr.list[[j]] <- contr
+    } else contr.list <- NULL
+    X[[j]] <- as.matrix(model.matrix(as.formula(paste("~", j)), data = data, contrasts = contr.list))
     if(length(i <- grep("Intercept", colnames(X[[j]]))))
       X[[j]] <- X[[j]][, -i, drop = FALSE]
     is_f <- is.factor(data[[j]])
@@ -4272,7 +4577,14 @@ Predict.matrix.lasso.smooth <- function(object, data)
     if(is_f & is.null(object$lasso$trans[[j]]$blockscale))
       is_f <- FALSE
     if(!is_f) {
-      X[[j]] <- (X[[j]] - object$lasso$trans[[j]]$center) / object$lasso$trans[[j]]$scale
+      if(object$standardize01) {
+        xmin <- object$lasso$trans[[j]]$xmin
+        xmax <- object$lasso$trans[[j]]$xmax
+        for(jj in 1:ncol(X[[j]]))
+          X[[j]][, jj] <- (X[[j]][, jj] - xmin[jj]) / (xmax[jj] - xmin[jj])
+      } else {
+        X[[j]] <- (X[[j]] - object$lasso$trans[[j]]$center) / object$lasso$trans[[j]]$scale
+      }
     } else {
       X[[j]] <- X[[j]] %*% object$lasso$trans[[j]]$blockscale
     }
@@ -4291,291 +4603,432 @@ n <- function(..., k = 10)
     lab <- paste(c(lab[-length(lab)], paste(',node="', node, '")', sep = '')), collapse = "", sep = "")
     ret$label <- lab
   }
+  if(is.null(ret$xt$tp))
+    ret$xt$tp <- FALSE
   class(ret) <- "nnet.smooth.spec"
   ret
 }
 
-smooth.construct.nnet.smooth.spec <- function(object, data, knots, ...)
+
+n.weights <- function(nodes, k, r = NULL, s = NULL, type = c("sigmoid", "gauss"), ...)
 {
-  split <- if(is.null(object$xt$split)) FALSE else object$xt$split
-  object <- smooth.construct.la.smooth.spec(object, data, knots)
-  object[!(names(object) %in% c("formula", "term", "label", "dim", "X", "xt", "lasso"))] <- NULL
-  nodes <- if(split) 1 else object$xt$k
-  object$X <- cbind(1, object$X)
-  colnames(object$X) <- NULL
-  nc <- ncol(object$X) + 1
-  npar <- nodes * nc
-
-  nid <- split(1:npar, factor(sort(rep(1:nodes, times = nc))))
-
-  object$fit.fun <- function(X, b, ...) {
-    if(!is.null(names(b)))
-      b <- get.par(b, "b")
-    fit <- 0
-    for(j in seq_along(nid)) {
-      f <- X %*% b[nid[[j]]][-1]
-      fit <- fit + b[nid[[j]]][1] / (1 + exp(-f))
-    }
-    if(!split)
-      fit <- fit - mean(fit, na.rm = TRUE)
-    return(fit)
+  if(inherits(nodes, "bamlss")) {
+    if(!is.null(nodes$parameters)) {
+      rval <- list()
+      for(j in nodes$family$name) {
+        cb <- coef.bamlss(nodes, model = j, pterms = FALSE, hyper.parameters = FALSE, ...)
+        if(any(i <- grepl(paste0(j, ".s.n("), names(cb), fixed = TRUE))) {
+          cb <- cb[i]
+          terms <- unique(paste0(sapply(strsplit(names(cb), ").b", fixed = TRUE), function(x) { x[1] }), ")"))
+          if(length(terms) > 1) {
+            rval[[j]] <- list()
+            for(tj in terms) {
+              cb2 <- cb[grep(tj, names(cb), fixed = TRUE)]
+              id <- as.integer(sapply(strsplit(names(cb2), ").b", fixed = TRUE), function(x) { x[2] }))
+              id <- id[abs(cb2) > 1e-10]
+              rval[[j]][[tj]] <- id
+            }
+          } else {
+            id <- as.integer(sapply(strsplit(names(cb), ").b", fixed = TRUE), function(x) { x[2] }))
+            id <- id[abs(cb) > 1e-10]
+            rval[[j]] <- id
+          }
+        }
+      }
+      return(rval)
+    } else return(NULL)
   }
+  k <- k + 1
+  if(is.null(r) & is.null(s)) {
+    rint <- list(...)$rint
+    sint <- list(...)$sint
+    if(type == "sigmoid") {
+      if(is.null(rint))
+        rint <- c(0.01, 0.495)
+      if(is.null(sint))
+        sint <- c(1.01, 1000)
+    }
+    if(type == "gauss") {
+      if(is.null(rint))
+        rint <- c(0.01, 0.99)
+      if(is.null(sint))
+        sint <- c(1.01, 100)
+    }
+    sint <- sort(sint)
+    rint <- sort(rint)
+    r <- runif(nodes, rint[1], rint[2])
+    s <- runif(nodes, sint[1], sint[2])
+  }
+  if(type == "sigmoid") {
+    if(any(r >= 0.5))
+      r[r >= 0.5] <- 0.495
+  }
+  if(type == "gauss") {
+    if(any(r >= 1))
+      r[r >= 1] <- 0.99
+  }
+  if(any(r < 0))
+    r[r < 0] <- 0.01
+  if(any(s <= 1))
+    s[s <= 1] <- 1.01
+  r <- rep(r, length.out = nodes)
+  s <- rep(s, length.out = nodes)
+  type <- match.arg(type)
+  if(length(nodes) < 2) {
+    weights <- lapply(1:nodes, function(i) {
+      sw <- switch(type,
+        "sigmoid" = runif(1, log((1 - r[i])/r[i]), s[i] * log((1 - r[i])/r[i])),
+        "gauss" = runif(1, sqrt(-log(r[i])), s[i] * sqrt(-log(r[i])))
+      )
+      w <- runif(k - 1, -1, 1)
+      w <- w * sw / sum(w)
+      if(length(w) < 2)
+        w <- w * sample(c(-1, 1), size = 1)
+      b <- -1 * (t(w) %*% runif(k - 1, 0, 1))
+      w <- c(b, w)
+      names(w) <- paste0("w", 0:(k - 1))
+      w
+    })
+  } else {
+    weights <- list()
+    for(i in 1:length(nodes)) {
+      weights[[i]] <- lapply(1:nodes[i], function(ii) {
+        if(i < 2) {
+          w <- runif(k, -1, 1)
+        } else {
+          w <- runif(nodes[i - 1] + 1, -1, 1)
+        }
+        w[1] <- runif(1, 0, 1)
+        names(w) <- paste0("w", 0:(length(w) - 1))
+        w
+      })
+    }
+  }
+  return(weights)
+}
 
-  object$fixed <- FALSE
-  object$state$parameters <- rnorm(npar, sd = 0.5)
-  for(j in nid)
-    object$state$parameters[j[1]] <- rnorm(1, sd = 1e-10)
-  names(object$state$parameters) <- paste("b", 1:npar, sep = "")
-  object$state$parameters <- c(object$state$parameters, "tau21" = 1000, "tau22" = 1000)
-  object$state$fitted.values <- object$fit.fun(object$X, object$state$parameters)
-  object$special.npar <- npar
-  object$prior <- function(b) { sum(dnorm(get.par(b, "b"), sd = 1000, log = TRUE)) }
-  object$nnodes <- nodes
-
-  X <- object$X
-
-  getU <- function(b) {
-    if(!is.null(names(b)))
-      b <- get.par(b, "b")
-    k <- ncol(X)
-    U <- matrix(0, nrow(X), length(b))
-    i <- 1
-    for(j in seq_along(nid)) {
-      u <- X %*% b[nid[[j]]][-1]
-      o <- 1 / (1 + exp(-u))
-      U[, i] <- o
-      i <- i + 1
-      o2 <- b[nid[[j]]][1] * o * (1 - o)
-      U[, i] <- o2
-      i <- i + 1
-      for(jj in 2:k) {
-        U[, i] <- o2 * X[, jj]
-        i <- i + 1
+n.stabsel <- function(x, model = NULL, thr = 0.9, plot = TRUE)
+{
+  if(is.null(model))
+    model <- x$family$names
+  if(!all(model %in% x$family$names))
+    stop("model names not in family!")
+  if(plot) {
+    hold <- par(no.readonly = TRUE)
+    on.exit(par(hold))
+    par(mar = c(5, 12, 4, 2) + .1)
+  }
+  ntab0 <- names(x$table)
+  B <- x$parameter$B
+  rval <- list()
+  for(j in model) {
+    i <- grepl("n(", ntab0, fixed = TRUE) & grepl(paste0(".", j), ntab0, fixed = TRUE)
+    if(any(i)) {
+      ntab <- ntab0[i]
+      tab <- x$table[i] / B
+      rval[[j]] <- sapply(strsplit(ntab[tab >= thr], ".", fixed = TRUE), function(x) { as.integer(gsub("b", "", x[2])) })
+      if(plot) {
+        col <- rep("lightgray", length(tab))
+        col[tab >= thr] <- "yellow"
+        barplot(tab, horiz = TRUE, las = 1, col = col)
+        abline(v = thr, lty = 2)
       }
     }
-    return(U)
   }
+  rval
+}
 
-  object$S <- list()
-  object$S[[1]] <- diag(npar)
-  object$S[[2]] <- function(parameters) {
-    UU <- diag(crossprod(getU(parameters)))
-    diag(UU)
+smooth.construct.nnet.smooth.spec <- function(object, data, knots, ...)
+{
+  if(is.null(object$formula)) {
+    object$formula <- as.formula(paste("~", paste(object$term, collapse = "+")))
+    object$dim <- length(object$term)
+    object$by <- "NA"
+    object$type <- "single"
+    object$xt$fx <- FALSE
   }
-  prior <- make.prior(object)
-  object[names(prior)] <- prior
-  object$sparse.setup <- FALSE
+  tp <- if(is.null(object$xt$tp)) TRUE else object$xt$tp
+  object$standardize01 <- object$xt$standardize01 <- if(tp) FALSE else TRUE
+  object <- smooth.construct.la.smooth.spec(object, data, knots)
+  object[!(names(object) %in% c("formula", "term", "label", "dim", "X", "xt", "lasso"))] <- NULL
+  nodes <- object$xt$k
+  if(!is.null(object$xt$weights))
+    nodes <- length(object$xt$weights)
+  npen <- if(is.null(object$xt$npen)) 1 else object$xt$npen
+  object$split <- if(is.null(object$xt$split)) FALSE else object$xt$split
+  dotake <- FALSE
 
-  update_nn <- function(x, family, y, eta, id, weights, criterion, ...)
-  {
-    args <- list(...)
-  
-    peta <- family$map2par(eta)
-  
-    if(is.null(args$hess)) {
-      hess <- process.derivs(family$hess[[id]](y, peta, id = id, ...), is.weight = TRUE)
-    } else hess <- args$hess
-  
-    if(!is.null(weights))
-      hess <- hess * weights
-  
-    if(is.null(args$z)) {
-      score <- process.derivs(family$score[[id]](y, peta, id = id, ...), is.weight = FALSE)
-      z <- eta[[id]] + 1 / hess * score
-    } else z <- args$z
-  
-    e <- z - eta[[id]]
-    eta[[id]] <- eta[[id]] - fitted(x$state)
-
-    b0 <- get.state(x, "b")
-    nb <- names(b0)
-
-    U <- getU(b0)
-
-    tUW <- t(U / hess)
-    UWU <- tUW %*% U
-
-    edf0 <- args$edf - x$state$edf
-
-    objfun <- function(tau2) {
-      H <- matrix_inv(UWU + 1/tau2[1] * x$S[[1]] + 1/tau2[2] * x$S[[2]](b0))
-      b0 <- drop(b0 + H %*% tUW %*% e)
-      names(b0) <- nb
-      edf <- sum_diag(UWU %*% H)
-      eta[[id]] <- eta[[id]] + x$fit.fun(x$X, b0)
-      ic <- get.ic(family, y, family$map2par(eta), edf0 + edf, length(z), criterion)
-      ic
+  if(tp) {
+    tpcall <- eval(parse(text = paste0("s(", paste0(colnames(object$X), collapse = ","), ",bs='tp',k=", nodes, ")")))
+    form <- object$formula
+    split <- object$split
+    lasso <- object$lasso
+    dim <- ncol(object$X)
+    term <- colnames(object$X)
+    lab <- object$label
+    take <- object$xt$take
+    update <- object$xt$update
+    object <- smooth.construct.tp.smooth.spec(tpcall, as.data.frame(object$X), knots)
+    if(!is.null(take)) {
+      dotake <- TRUE
+      object$X <- object$X[, take, drop = FALSE]
+      object$S[[1]] <- object$S[[1]][take, take, drop = FALSE]
+      object$xt$take <- take
+    }
+    object$dim <- dim
+    object$tp <- tp
+    object$formula <- form
+    object$lasso <- lasso
+    object$nnterm <- term
+    object$label <- lab
+    object$split <- split
+    object$xt$update <- update
+    object$standardize01 <- object$xt$standardize01 <- FALSE
+  } else {
+    if(length(nodes) < 2) {
+      if(nodes < 0)
+        nodes <- 10
     }
 
-    tau2 <- tau2.optim(objfun, start = get.state(x, "tau2"))
+    object$X <- cbind(1, object$X)
 
-    H <- matrix_inv(UWU + 1/tau2[1] * x$S[[1]] + 1/tau2[2] * x$S[[2]](b0))
-    b0 <- drop(b0 + H %*% tUW %*% e)
-    names(b0) <- nb
+    object$xt$afun <- if(is.null(object$xt$afun)) "sigmoid" else object$xt$afun
+    type <- object$xt$afun
 
-    x$state$parameters <- set.par(x$state$parameters, b0, "b")
-    x$state$parameters <- set.par(x$state$parameters, tau2, "tau2")
-    x$state$fitted.values <- x$fit.fun(x$X, b0)
-    x$state$edf <- sum_diag(UWU %*% H)
-
-    return(x$state)
-  }
-
-#  propose_nn <- function(family, theta, id, eta, y, data, weights = NULL, ...) {
-#  }
-
-  tau2 <- get.par(object$state$parameters, "tau2")
-
-  UU <- crossprod(getU(object$state$parameters))
-  df <- min(c(length(object$state$parameters), 4))
-
-  S1 <- diag(ncol(UU))
-  S2 <- diag(diag(UU))
-
-  objfun <- function(tau2) {
-    H <- matrix_inv(UU + 1/tau2[1] * S1 + 1/tau2[2] * S2)
-    edf <- sum_diag(UU %*% H)
-    (df - edf)^2
-  }
-
-  opt <- optim(tau2, objfun, method = "L-BFGS-B", lower = rep(.Machine$double.eps^0.5, 2), upper = rep(Inf, 2))
-  tau2 <- opt$par
-  H <- matrix_inv(UU + 1/tau2[1] * diag(ncol(UU)) + 1/tau2[2] * diag(diag(UU)))
-  edf <- sum_diag(UU %*% H)
-  object$state$parameters <- set.par(object$state$parameters, tau2, "tau2")
-  object$state$edf <- edf
-  object$state$special <- object$state$parameters
-
-  object$update <- update_nn
-
-  object$boost.fit <- function(x, y, nu, ...)
-  {
-    b0 <- get.par(x$state$special, "b")
-    tau2 <- get.par(x$state$parameters, "tau2")
-    nb <- names(b0)
-
-    U <- getU(b0)
-    UU <- crossprod(U, U)
-    H <- matrix_inv(UU + 1/1000000 * x$S[[1]] + 1/1000000 * x$S[[2]](b0))
-    b1 <- nu * drop(b0 + H %*% t(U) %*% (y - x$fit.fun(x$X, b0)))
-
-    names(b1) <- nb
-    fit <- x$fit.fun(x$X, b1)
-
-    x$state$parameters <- set.par(x$state$parameters, b1, "b")
-    x$state$fitted.values <- fit
-    x$state$rss <- sum((y - fit)^2)
-    x$state$special <- x$state$parameters
-
-    return(x$state)
-  }
-
-  class(object) <- c("nnet.smooth", "no.mgcv", "special")
-
-  if(split) {
-    nodes <- object$xt$k
-    object <- rep(list(object), nodes)
-    for(j in seq_along(object)) {
-      b <- rnorm(length(get.par(object[[j]]$state$parameters, "b")), sd = 0.5)
-      b[1] <- rnorm(1, sd = 1e-10)
-      names(b) <- paste("b", 1:length(b), sep = "")
-      object[[j]]$state$parameters <- set.par(object[[j]]$state$parameters, b, "b")
-      object[[j]]$state$fitted.values <- object[[j]]$fit.fun(object[[j]]$X, object[[j]]$state$parameters)
-      object[[j]]$state$special <- object[[j]]$state$parameters
-      object[[j]]$term_id <- object[[j]]$label
-      lab <- strsplit(object[[j]]$label, "")[[1]]
-      lab <- paste(c(lab[-length(lab)], paste(',node="', j, '")', sep = '')), collapse = "", sep = "")
-      object[[j]]$label <- lab
+    if(is.character(object$xt$afun)) {
+      object$afun <- switch(object$xt$afun,
+        "relu" = function(x) {
+          x[x < 0] <- 0
+          x
+        },
+        "sigmoid" = function(x) {
+          1 / (1 + exp(-x))
+        },
+        "tanh" = tanh,
+        "sin" = sin,
+        "gauss" = function(x) { exp(-x^2) }
+      )
     }
-    class(object) <- c("nnet.smooth", "no.mgcv", "special", "smooth.list")
+
+    if(length(nodes) < 2) {
+      object$Zmat <- function(X, weights) {
+        nc <- length(weights)
+        Z <- matrix(0, nrow = nrow(X), ncol = nc)
+        for(j in 1:nc)
+          Z[, j] <- object$afun(X %*% weights[[j]])
+        return(Z)
+      }
+    } else {
+      object$Zmat <- function(X, weights) {
+        Z <- list()
+        n <- nrow(X)
+        for(i in 1:length(weights)) {
+          Z[[i]] <- matrix(0, nrow = n, ncol = length(weights[[i]]))
+          for(j in 1:length(weights[[i]])) {
+            if(i < 2) {
+              Z[[i]][, j] <- object$afun(X %*% weights[[i]][[j]])
+            } else {
+              Z[[i]][, j] <- object$afun(cbind(1, Z[[i - 1]]) %*% weights[[i]][[j]])
+            }
+          }
+        }
+        return(Z[[length(Z)]])
+      }
+    }
+
+    if(is.null(object$xt$weights)) {
+      object$n.weights <- n.weights(nodes, ncol(object$X) - 1L, rint = object$xt$rint, sint = object$xt$sint, type = type)
+    } else {
+      if(length(object$xt$weights) != nodes)
+        stop("not enough weights supplied!")
+      object$n.weights <- object$xt$weights
+    }
+
+    object$Xn <- object$X
+    object$X <- object$Zmat(object$X, object$n.weights)
+    nobs <- nrow(object$X)
+    object$X <- (diag(nobs) - 1/nobs * rep(1, nobs) %*% t(rep(1, nobs))) %*% object$X
+    d <- abs(apply(apply(object$X, 2, range), 2, diff))
+    object$Xkeep <- which(d > 1e-10)
+    object$X <- object$X[, object$Xkeep, drop = FALSE]
+
+    if(!is.null(object$xt$lowrank)) {
+      if(object$xt$lowrank) {
+        if(is.null(object$xt$K))
+          object$xt$K <- 20
+      }
+    }
+
+    if(!is.null(object$xt$prc)) {
+      if(object$xt$prc) {
+        prX <- prcomp(object$X)
+        prXs <- summary(prX)
+        i <- which(prXs$importance[3, ] <= 0.995)
+        object$X <- prX$x[, i, drop = FALSE]
+        colnames(object$X) <- NULL
+        object$prcomp <- prX
+        object$prcomp_id <- i
+      }
+    }
+
+    if(!is.null(object$xt$take)) {
+      dotake <- TRUE
+      object$X <- object$X[, object$xt$take, drop = FALSE]
+    }
+
+    pid <- sort(rep(1:npen, length.out = ncol(object$X)))
+    object$S <- list()
+    for(j in 1:npen) {
+      object$S[[j]] <- rep(1, ncol(object$X))
+      object$S[[j]][pid != j] <- 0
+      object$S[[j]] <- diag(object$S[[j]])
+    }
+    object$xt$center <- FALSE
+    object$by <- "NA"
+    object$null.space.dim <- 0
+    object$bs.dim <- ncol(object$X)
+    object$rank <- sapply(object$S, sum)
   }
+  object$xt$prior <- "ig"
+  object$fx <- object$xt$fx <- FALSE
+  object$xt$df <- 4
+
+#for(j in 1:ncol(object$X)) {
+#  plot3d(cbind(dtrain$x1, dtrain$x2, object$X[, j]))
+#  Sys.sleep(0.3)
+#}
+#stop()
+##plot2d(object$X ~ dtrain$x, col.lines = rainbow_hcl(ncol(object$X)), main = ncol(object$X))
+##Sys.sleep(2)
+##stop()
+##print(dim(object$X))
+
+  if(is.null(object$xt$alpha))
+    object$xt$alpha <- 1
+  if(is.null(object$xt$nlambda))
+    object$xt$nlambda <- 100
+  if(is.null(object$xt$lambda.min.ratio))
+    object$xt$lambda.min.ratio <- 1e-20
+  if(is.null(object$xt$update))
+    object$xt$update <- bfit_iwls
+
+  if(!is.function(object$xt$update)) {
+    if(object$xt$update == "lasso") {
+      object$no.assign.df <- TRUE
+      object$update <- if(!dotake) bfit_glmnet else bfit_iwls
+      object$xt$update <- NULL
+    }
+  }
+
+  class(object) <- c("nnet.smooth", "mgcv.smooth")
 
   object
 }
 
 Predict.matrix.nnet.smooth <- function(object, data)
 {
-  X <- cbind(1, Predict.matrix.lasso.smooth(object, data))
-  colnames(X) <- NULL
+  tp <- if(is.null(object$xt$tp)) TRUE else object$xt$tp
+  if(tp) {
+    data <- as.data.frame(Predict.matrix.lasso.smooth(object, data))
+    object$term <- object$nnterm
+    class(object) <- "tprs.smooth"
+    object$dim <- ncol(data)
+    X <- Predict.matrix.tprs.smooth(object, data)
+  } else {
+    object$standardize01 <- TRUE
+    X <- object$Zmat(cbind(1, Predict.matrix.lasso.smooth(object, data)), object$n.weights)
+    X <- X[, object$Xkeep, drop = FALSE]
+    if(!is.null(object$xt$lowrank)) {
+      if(object$xt$lowrank) {
+        E <- eigen(object$X)
+        Omega <- Re(E$values)
+        i <- order(abs(Omega), decreasing = TRUE)
+        Omega <- Omega[i]
+        V <- Re(E$vectors[, i])
+        Vk <- V[, 1:object$xt$K]
+        Omegak <- Omega[1:object$xt$K]
+        object$X <- Vk %*% diag(Omegak)
+      }
+    }
+  }
+
+  if(!is.null(object[["prcomp"]])) {
+    X <- predict(object[["prcomp"]], newdata = X)
+    X <- X[, object[["prcomp_id"]], drop = FALSE]
+  }
+
+  if(!is.null(object$xt$take))
+    X <- X[, object$xt$take, drop = FALSE]
+
+  nobs <- nrow(X)
+  X <- (diag(nobs) - 1/nobs * rep(1, nobs) %*% t(rep(1, nobs))) %*% X
+
   X
 }
 
-fit_nn <- function(X, y, weights = NULL, start = NULL,
-  nnodes = NULL, eps = .Machine$double.eps^0.25)
+
+smooth.construct.nn.smooth.spec <- function(object, data, knots, ...)
 {
-  if(is.null(nnodes))
-    nnodes <- 10
-
-  if(is.vector(X))
-    X <- matrix(X, ncol = 1)
-  X <- cbind(1, X)
-  k <- ncol(X)
-  nr <- nrow(X)
-
-  if(is.null(weights))
-    weights <- rep(1, length(y))
-
-  nc <- k + 1
-  npar <- nc * nnodes
-  nid <- split(1:npar, factor(sort(rep(1:nnodes, times = nc))))
-  b <- rnorm(npar, sd = 0.5)
-  for(j in nid)
-    b[j[1]] <- rnorm(1, sd = 1e-10)
-  names(b) <- paste("b", 1:length(b), sep = "")
-
-  getU <- function(b) {
-    U <- matrix(0, nr, npar)
-    i <- 1
-    for(j in seq_along(nid)) {
-      u <- X %*% b[nid[[j]]][-1]
-      o <- 1 / (1 + exp(-u))
-      U[, i] <- o
-      i <- i + 1
-      o2 <- b[nid[[j]]][1] * o * (1 - o)
-      U[, i] <- o2
-      i <- i + 1
-      for(jj in 2:k) {
-        U[, i] <- o2 * X[, jj]
-        i <- i + 1
-      }
-    }
-    return(U)
-  }
-
-  fit.fun <- function(b) {
-    fit <- 0
-    for(j in seq_along(nid)) {
-      f <- X %*% b[nid[[j]]][-1]
-      fit <- fit + b[nid[[j]]][1] / (1 + exp(-f))
-    }
-    return(fit - mean(fit))
-  }
-
-  I <- diag(npar)
-  f0 <- fit.fun(b)
-
-  for(i in 1:1) {
-    U <- getU(b)
-    tUW <- t(U / weights)
-    UWU <- tUW %*% U
-    H <- matrix_inv(UWU + 1/10000000000 * I + 1/10000000000 * diag(diag(UWU)))
-    b <- drop(b + H %*% tUW %*% (y - fit.fun(b)))
-  }
-  
-  plot(y ~ x)
-  plot2d(fit.fun(b) ~ x, add = TRUE, col.lines = 2)
-  plot2d(f0 ~ x, add = TRUE, col.lines = 4)
+  form <- as.formula(paste("~", paste(object$term, collapse = "+")))
+  term <- object$term
+  if(is.null(object$xt$tp))
+    object$xt$tp <- TRUE
+  object <- n(form, k = object$bs.dim, tp = object$xt$tp)
+  object$label <- paste0("s(",  paste(term, collapse = ","), ")")
+  object$formula <- form
+  object <- smooth.construct.nnet.smooth.spec(object, data, knots, ...)
+  object$plot.me <- TRUE
+  object$dim <- length(term)
+  object$fixed <- FALSE
+  object$term <- term
+  object
 }
 
 
 if(FALSE) {
   set.seed(123)
-  nobs <- 500
-  x <- runif(nobs, -3, 3)
-  y <- sin(x) + rnorm(nobs, sd = 0.1)
-  plot(x, y)
 
-  b <- fit_nn(x, y)
+  nobs <- 2000
+  d <- data.frame(
+    "x1" = runif(nobs, 0, pi),
+    "lon" = runif(nobs, -3, 3),
+    "lat" = runif(nobs, -3, 3),
+    "z1" = runif(nobs, 0, 1),
+    "z2" = runif(nobs, 0, 1),
+    "z3" = runif(nobs, 0, 1),
+    "z4" = runif(nobs, 0, 1),
+    "z5" = runif(nobs, 0, 1)
+  )
+
+  d$eta0 <- with(d, 10 * sin(x1) + 10 * cos(lon)*cos(lat))
+  d$eta1 <- with(d, 10 * sin(pi * z1 * z2) + 20 * (z3 - 0.5)^2 + 10 * z4 + 5 * z5)
+  d$eta1 <- d$eta1 - mean(d$eta1)
+
+  sigma <- sqrt(var(d$eta0 + d$eta1) / 5)
+
+  d$y <- d$eta0 + d$eta1 + rnorm(nobs, sd = sigma)
+
+  f <- y ~ s(x1,bs="cc") + s(lon,lat,k=30) + n(~z1+z2+z3+z4+z5,k=20,split=TRUE)
+
+  b <- bamlss(f, data = d, sampler = FALSE, optimizer = boost, nu = 0.1, maxit = 2000)
+
+  p <- boost.nnet.predict(b, model = "mu")
+
+  plot(p ~ d$eta1)
+  abline(a = 0, b = 1)
+
+
+  d <- GAMart()
+  b <- bamlss(num ~ n(x1) + n(x2) + n(x3), data = d, sampler = FALSE, optimizer = boost, nu = 0.01)
+
+  p1 <- boost.nnet.predict(b, model = "mu", term = "n(x1)")
+  p2 <- boost.nnet.predict(b, model = "mu", term = "n(x2)")
+  p3 <- boost.nnet.predict(b, model = "mu", term = "n(x3)")
+
+  par(mfrow = c(1, 3))
+  plot2d(p1 ~ d$x1)
+  plot2d(p2 ~ d$x2)
+  plot2d(p3 ~ d$x3)
 }
 
 
@@ -4922,6 +5375,9 @@ plot.bamlss <- function(x, model = NULL, term = NULL, which = "effects",
     on.exit(par(op))
   }
 
+  if(!is.null(list(...)$pages))
+    ask <- !(list(...)$pages == 1)
+
   ## What should be plotted?
   which.match <- c("effects", "samples", "hist-resid", "qq-resid",
     "scatter-resid", "max-acf", "param-samples", "boost.summary", "results",
@@ -4940,6 +5396,8 @@ plot.bamlss <- function(x, model = NULL, term = NULL, which = "effects",
   which <- which[which != "results"]
 
   ok <- any(c("hist-resid", "qq-resid") %in% which)
+
+  x$formula <- as.formula(x$formula)
 
   if(length(which) > 1 | ok) {
     which <- which[which %in% c("hist-resid", "qq-resid")]
@@ -4974,7 +5432,7 @@ plot.bamlss <- function(x, model = NULL, term = NULL, which = "effects",
         samps <- samps[, snames, drop = FALSE]
         macf <- apply(samps, 2, function(x) { acf(x, plot = FALSE, ...) })
         acfx <- macf[[1]]
-        acfx$acf <- array(apply(do.call("rbind", lapply(macf, function(x) { x$acf })), 2, max), dim = c(length(acfx$acf), 1L, 1L))
+        acfx$acf <- array(apply(do.call("rbind", lapply(macf, function(x) { x$acf })), 2, max, na.rm = TRUE), dim = c(length(acfx$acf), 1L, 1L))
         args <- list(...)
         if(is.null(args$main))
           args$main <- "Maximum ACF of samples"
@@ -5306,9 +5764,9 @@ plot.bamlss.effect.default <- function(x, ...) {
   limNULL <- FALSE
   if(is.null(args[[lim]])) {
     limNULL <- TRUE
-    if(all(c("2.5%", "97.5%") %in% names(x)))
+    if(all(c("2.5%", "97.5%") %in% names(x)) & (attr(x, "specs")$dim < 2)) {
       args[[lim]] <- range(x[, c("2.5%", "97.5%")], na.rm = TRUE)
-    else {
+    } else {
       if(all("50%" %in% names(x))) {
         args[[lim]] <- range(x[, "50%"], na.rm = TRUE)
       }
@@ -5506,6 +5964,7 @@ delete.NULLs <- function(x.list)
 ## Model summary functions.
 summary.bamlss <- function(object, model = NULL, FUN = NULL, parameters = TRUE, ...)
 {
+  object$formula <- as.formula(object$formula)
   if(!is.null(object$results)) {
     sfun <- try(get(paste("summary", class(object$results), sep = ".")), silent = TRUE)
     if(!inherits(sfun, "try-error"))
@@ -5573,7 +6032,9 @@ print.summary.bamlss <- function(x, digits = max(3, getOption("digits") - 3), ..
       for(j in sort(names(x$model.stats$sampler))) {
         if(length(x$model.stats$sampler[[j]]) < 2) {
           ok <- TRUE
-          cat(if(k > 1) " " else "", j, " = ", round(x$model.stats$sampler[[j]], digits), sep = "")
+          cat(if(k > 1) " " else "", j, " = ", if(is.numeric(x$model.stats$sampler[[j]])) {
+              round(x$model.stats$sampler[[j]], digits)
+            } else x$model.stats$sampler[[j]], sep = "")
           k <- k + 1
           if(k == 4) {
             k <- 1
@@ -5670,28 +6131,34 @@ DIC.bamlss <- function(object, ..., samples = TRUE, nsamps = NULL)
     }
   } else {
     for(i in 1:length(object)) {
-      family <- attr(object[[i]], "family")
-      if(is.null(family$d)) stop("no d() function available in model family object!")
+      family <- family(object[[i]])
+      if(is.null(family$d))
+        stop("no d() function available in model family object!", drop = FALSE)
+      samps <- process.chains(object[[i]]$samples)
+      if(is.null(samps))
+        stop("samples are missing in object!")
       y <- model.response2(object[[i]])
-      d0 <- -2 * sum(family$d(y, family$map2par(fitted.bamlss(object[[i]], type = "link")), log = TRUE), na.rm = TRUE)
-      eta <- fitted.bamlss(object[[i]], type = "link",
-        samples = TRUE, nsamps = nsamps,
-        FUN = function(x) { x })
-      iter <- ncol(eta[[1]])
-      d1 <- NULL
-      for(j in 1:iter) {
-        teta <- NULL
-        for(ii in 1:length(eta))
-          teta <- cbind(teta, eta[[ii]][, j])
-        teta <- as.data.frame(teta)
-        names(teta) <- names(eta)
-        d1 <- c(d1, -2 * sum(family$d(y, family$map2par(teta), log = TRUE), na.rm = TRUE))
+      msamps <- matrix(apply(samps[[1]], 2, mean, na.rm = TRUE), nrow = 1)
+      colnames(msamps) <- colnames(samps[[1]])
+      msamps <- as.mcmc.list(list(mcmc(msamps, start = 1, end = 1, thin = 1)))
+      object[[i]]$samples <- msamps
+      mpar <- predict.bamlss(object[[i]], type = "parameter", FUN = mean, nsamps = nsamps)
+      mdev <- -2 * sum(family$d(y, mpar, log = TRUE), na.rm = TRUE)
+      object[[i]]$samples <- samps
+      rm("samps")
+      par <- predict.bamlss(object[[i]], type = "parameter", FUN = function(x) { x }, nsamps = nsamps)
+      iter <- if(is.list(par)) ncol(par[[1]]) else ncol(par)
+      dev <- rep(NA, iter)
+      tpar <- mpar
+      for(i in 1:iter) {
+        for(j in seq_along(tpar))
+          tpar[[j]] <- par[[j]][, i]
+        dev[i] <- -2 * sum(family$d(y, tpar, log = TRUE), na.rm = TRUE)
       }
-      md1 <- mean(d1)
-      pd <- md1 - d0
-      dic <- md1 + pd
+      pd <- mean(dev, na.rm = TRUE) - mdev
+      DIC <- mdev + 2 * pd
       rval <- rbind(rval, data.frame(
-        "DIC" = dic,
+        "DIC" = DIC,
         "pd" = pd
       ))
     }
@@ -5746,6 +6213,12 @@ logLik.bamlss <- function(object, ..., optimizer = FALSE, samples = FALSE)
           samplestats(object[[j]])
         } else ms$optimizer
       } else ms$sampler
+      if(("boost.summary" %in% names(ms)) & is.null(mstop)) {
+        llb <- ms$boost.summary$ic
+        edfb <- ms$boost.summary$criterion$edf
+        ll <- c(ll, llb)
+        edf <- c(edf, edfb)
+      }
       if(is.null(ms) & !optimizer)
         ms <- samplestats(object[[j]])
       if(is.null(ms)) {
@@ -5785,7 +6258,8 @@ logLik.bamlss <- function(object, ..., optimizer = FALSE, samples = FALSE)
         rval <- ll[[1]]
     } else {
       rval <- cbind("logLik" = ll, "edf" = edf, "nobs" = nobs)
-      row.names(rval) <- if(nrow(rval) > 1) mn[1:nrow(rval)] else ""
+      if(length(mn) == nrow(rval))
+        row.names(rval) <- if(nrow(rval) > 1) mn[1:nrow(rval)] else ""
     }
   } else rval <- NULL
   rval
@@ -5795,7 +6269,7 @@ logLik.bamlss <- function(object, ..., optimizer = FALSE, samples = FALSE)
 ## Extract model formulas.
 formula.bamlss.frame <- formula.bamlss <- function(x, model = NULL, ...)
 {
-  f <- model.terms(x$formula, model)
+  f <- model.terms(as.formula(x$formula), model)
   class(f) <- "bamlss.formula"
   return(f)
 }
@@ -5865,13 +6339,20 @@ print.bamlss.formula <- function(x, ...) {
           cat("h", j, ": ", sep = "")
           attr(x[[i]][[j]], "name") <- NULL
           attr(x[[i]][[j]]$formula, ".Environment") <- NULL
-          print(x[[i]][[j]]$formula, showEnv = FALSE)
+          if(is.character(x[[i]][[j]]$formula)) {
+            cat(x[[i]][[j]]$formula, "\n")
+          } else print(x[[i]][[j]]$formula, showEnv = FALSE)
         }
       } else {
         attr(x[[i]], "name") <- NULL
         attr(x[[i]]$formula, "name") <- NULL
         attr(x[[i]]$formula, ".Environment") <- NULL
-        if("formula" %in% names(x[[i]])) print(x[[i]]$formula, showEnv = FALSE) else print(x[[i]])
+        if("formula" %in% names(x[[i]])) {
+          if(is.character(x[[i]]$formula))
+            cat(x[[i]]$formula, "\n")
+          else
+            print(x[[i]]$formula, showEnv = FALSE)
+        } else print(x[[i]])
       }
       if(i < length(x))
       cat("\n")
@@ -5885,7 +6366,7 @@ print.bamlss.formula <- function(x, ...) {
 drop.terms.bamlss <- function(f, pterms = TRUE, sterms = TRUE,
   specials = NULL, keep.response = TRUE, keep.intercept = TRUE, data = NULL)
 {
-  specials <- unique(c(specials, "s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n"))
+  specials <- unique(c(specials, "s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n", "h", "lf", "af", "lf.vd", "re", "peer", "fpc"))
   if(!inherits(f, "formula")) {
     if(!is.null(f$terms)) {
       f <- f$terms
@@ -5958,7 +6439,7 @@ terms.bamlss <- terms.bamlss.frame <- terms.bamlss.formula <- function(x, specia
   if(!inherits(x, "bamlss.formula"))
     x <- bamlss.formula(x, ...)
   env <- environment(x)
-  specials <- unique(c(specials, "s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n"))
+  specials <- unique(c(specials, "s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n", "h", "lf", "af", "lf.vd", "re", "peer", "fpc"))
   elmts <- c("formula", "fake.formula")
   if(!any(names(x) %in% elmts) & !inherits(x, "formula")) {
     if(!is.null(model)) {
@@ -6084,7 +6565,7 @@ has_response <- function(x)
 
 has_sterms <- function(x, specials = NULL)
 {
-  specials <- unique(c(specials, "s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n"))
+  specials <- unique(c(specials, "s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n", "h", "lf", "af", "lf.vd", "re", "peer", "fpc"))
   if(inherits(x, "formula"))
     x <- terms(x, specials = specials)
   if(!inherits(x, "terms"))
@@ -6094,7 +6575,7 @@ has_sterms <- function(x, specials = NULL)
 
 has_pterms <- function(x, specials = NULL)
 {
-  specials <- unique(c(specials, "s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n"))
+  specials <- unique(c(specials, "s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n", "h", "lf", "af", "lf.vd", "re", "peer", "fpc"))
   if(inherits(x, "formula"))
     x <- terms(x, specials = specials)
   if(!inherits(x, "terms"))
@@ -6107,7 +6588,7 @@ has_pterms <- function(x, specials = NULL)
 
 get_pterms_labels <- function(x, specials = NULL)
 {
-  specials <- unique(c(specials, "s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n"))
+  specials <- unique(c(specials, "s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n", "h", "lf", "af", "lf.vd", "re", "peer", "fpc"))
   tl <- if(has_pterms(x, specials)) {
     x <- drop.terms.bamlss(x, pterms = TRUE, sterms = FALSE,
       keep.response = FALSE, specials = specials)
@@ -6119,7 +6600,7 @@ get_pterms_labels <- function(x, specials = NULL)
 get_sterms_labels <- function(x, specials = NULL)
 {
   env <- environment(x)
-  specials <- unique(c(specials, "s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n"))
+  specials <- unique(c(specials, "s", "te", "t2", "sx", "s2", "rs", "ti", "tx", "tx2", "tx3", "la", "n", "h", "lf", "af", "lf.vd", "re", "peer", "fpc"))
   if(has_sterms(x, specials)) {
     x <- drop.terms.bamlss(x, pterms = FALSE, sterms = TRUE,
       keep.response = FALSE, specials = specials)
@@ -6142,6 +6623,8 @@ results.bamlss.default <- function(x, what = c("samples", "parameters"), grid = 
 
   if(is.null(x$x))
     stop("cannot compute results, 'x' object is missing, see design.construct()!")
+
+  x$formula <- as.formula(x$formula)
 
   what <- match.arg(what)
   if(!is.null(x$samples) & what == "samples") {
@@ -6250,8 +6733,16 @@ results.bamlss.default <- function(x, what = c("samples", "parameters"), grid = 
           ## Prediction matrix.
           get.X <- function(x) { ## FIXME: time(x)
             for(char in c("(", ")", "[", "]")) {
-              obj$smooth.construct[[j]]$term <- gsub(char, ".", obj$smooth.construct[[j]]$term, fixed = TRUE)
-              obj$smooth.construct[[j]]$by <- gsub(char, ".", obj$smooth.construct[[j]]$by, fixed = TRUE)
+                obj$smooth.construct[[j]]$term <- gsub(char, ".", obj$smooth.construct[[j]]$term, fixed = TRUE)
+                obj$smooth.construct[[j]]$by <- gsub(char, ".", obj$smooth.construct[[j]]$by, fixed = TRUE)
+            }
+            if(is.null(obj$smooth.construct[[j]]$mono))
+              obj$smooth.construct[[j]]$mono <- 0
+            if(!is.null(obj$smooth.construct[[j]]$margin)) {
+              for(mj in seq_along(obj$smooth.construct[[j]]$margin)) {
+                if(is.null(obj$smooth.construct[[j]]$margin[[mj]]$mono))
+                  obj$smooth.construct[[j]]$margin[[mj]]$mono <- 0
+              }
             }
             if(is.null(obj$smooth.construct[[j]]$PredictMat)) {
               X <- PredictMat(obj$smooth.construct[[j]], x)
@@ -6316,7 +6807,9 @@ results.bamlss.default <- function(x, what = c("samples", "parameters"), grid = 
 
           s.effects[[obj$smooth.construct[[j]]$label]] <- compute_s.effect(obj$smooth.construct[[j]],
             get.X = get.X, fit.fun = obj$smooth.construct[[j]]$fit.fun, psamples = psamples[, b, drop = FALSE],
-            FUN = NULL, snames = snames, data = mf[, tn, drop = FALSE], grid = grid)
+            FUN = NULL, snames = snames, data = if(!is.null(obj$smooth.construct[[j]]$model.frame)) {
+              obj$smooth.construct[[j]]$model.frame
+            } else mf[, tn, drop = FALSE], grid = grid)
         }
       }
     }
@@ -6384,7 +6877,7 @@ samples <- function(object, ...)
 }
 
 samples.bamlss <- samples.bamlss.frame <- function(object, model = NULL, term = NULL, combine = TRUE, drop = TRUE,
-  burnin = NULL, thin = NULL, ...)
+  burnin = NULL, thin = NULL, coef.only = FALSE, ...)
 {
   if(!inherits(object, "bamlss") & !inherits(object, "bamlss.frame"))
     stop("object is not a 'bamlss' object!")
@@ -6393,6 +6886,18 @@ samples.bamlss <- samples.bamlss.frame <- function(object, model = NULL, term = 
   tx <- terms(object, drop = FALSE)
   x <- object$samples
   x <- process.chains(x, combine, drop = FALSE)
+
+  if(coef.only) {
+    cdrop <- c(".accepted", ".alpha", "logLik", "logPost", "AIC", 
+      "BIC", "DIC", "pd", ".edf")
+    for(d in cdrop) {
+      for(k in seq_along(x)) {
+        if(length(j <- grep(d, colnames(x[[k]]), fixed = TRUE))) {
+          x[[k]] <- x[[k]][, -j, drop = FALSE]
+        }
+      }
+    }
+  }
 
   snames <- colnames(x[[1]])
   nx <- names(tx)
@@ -7104,6 +7609,11 @@ plot.bamlss.residuals <- function(x, which = c("hist-resid", "qq-resid"), spar =
   nc <- ncol(x)
   cn <- colnames(x)
 
+  if(nc > 10) {
+    nc <- 1
+    cn <- NULL
+  }
+
   if(spar) {
     op <- par(no.readonly = TRUE)
     on.exit(par(op))
@@ -7111,18 +7621,21 @@ plot.bamlss.residuals <- function(x, which = c("hist-resid", "qq-resid"), spar =
   }
 
   type <- attr(x, "type")
-  x <- x[is.finite(x)]
 
   for(j in 1:nc) {
     for(w in which) {
       args <- list(...)
       if(w == "hist-resid") {
-        rdens <- density(x)
-        rh <- hist(x, plot = FALSE)
+        rdens <- density(as.numeric(x))
+        rh <- hist(as.numeric(x), plot = FALSE)
         args$ylim <- c(0, max(c(rh$density, rdens$y)))
+        if(is.null(args$xlim)) {
+          args$xlim <- range(x[is.finite(x)], na.rm = TRUE)
+          args$xlim <- c(-1, 1) * max(args$xlim)
+        }
         args$freq <- FALSE
-        args$x <- x
-        args <- delete.args("hist.default", args, package = "graphics")
+        args$x <- as.numeric(x)
+        args <- delete.args("hist.default", args, package = "graphics", not = c("xlim", "ylim"))
         if(is.null(args$xlab))
           args$xlab <- if(is.null(type)) "Residuals" else paste(type, "residuals")
         if(is.null(args$ylab))
@@ -7135,14 +7648,56 @@ plot.bamlss.residuals <- function(x, which = c("hist-resid", "qq-resid"), spar =
         box()
       }
       if(w == "qq-resid") {
-        args$y <- x
-        args$x <- NULL
-        args <- delete.args("qqnorm.default", args, package = "stats", not = c("col", "pch"))
-        if(is.null(args$main))
-          args$main <- paste("Normal Q-Q Plot", if(!is.null(cn[j])) paste(":", cn[j]) else NULL)
-        ok <- try(do.call(qqnorm, args))
-        if(!inherits(ok, "try-error"))
-          qqline(args$y) ## abline(0,1)
+        if(ncol(x) > 10) {
+          x <- t(apply(x, 1, c95))
+
+          args$x <- NULL
+          args$plot.it <- FALSE
+          args <- delete.args("qqnorm.default", args, package = "stats", not = c("col", "pch"))
+          if(is.null(args$main))
+            args$main <- paste("Normal Q-Q Plot", if(!is.null(cn[j])) paste(":", cn[j]) else NULL)
+
+          args$y <- x[, "Mean"]
+          mean <- do.call(qqnorm, args)
+          args$y <- x[, "2.5%"]
+          lower <- do.call(qqnorm, args)
+          args$y <- x[, "97.5%"]
+          upper <- do.call(qqnorm, args)
+
+          ylim <- range(c(mean$y, lower$y, upper$y), na.rm = TRUE)
+          args$plot.it <- TRUE
+          args$ylim <- ylim
+          args$y <- x[, "Mean"]
+          mean <- do.call(qqnorm, args)
+
+          if(is.null(args$ci.col))
+            args$ci.col <- "blue"
+          if(is.null(args$ci.lty))
+            args$ci.lty <- 2
+
+          lines(lower$x[order(lower$x)], lower$y[order(lower$x)], lty = args$ci.lty, col = args$ci.col)
+          lines(upper$x[order(upper$x)], upper$y[order(upper$x)], lty = args$ci.lty, col = args$ci.col)
+
+          args$y <- x[, "Mean"]
+          qqline(args$y)
+        } else {
+          args$y <- x
+          if(is.null(args$ylim)) {
+            args$ylim <- range(x[is.finite(x)], na.rm = TRUE)
+            args$ylim <- c(-1, 1) * max(args$ylim)
+          }
+          if(is.null(args$xlim)) {
+            args$xlim <- range(x[is.finite(x)], na.rm = TRUE)
+            args$xlim <- c(-1, 1) * max(args$xlim)
+          }
+          args$x <- NULL
+          args <- delete.args("qqnorm.default", args, package = "stats", not = c("col", "pch", "xlim", "ylim"))
+          if(is.null(args$main))
+            args$main <- paste("Normal Q-Q Plot", if(!is.null(cn[j])) paste(":", cn[j]) else NULL)
+          ok <- try(do.call(qqnorm, args))
+          if(!inherits(ok, "try-error"))
+            qqline(args$y) ## abline(0,1)
+        }
       }
     }
   }
@@ -7253,15 +7808,11 @@ matrix_inv <- function(x, index = NULL, force = FALSE)
     return(1 / x)
   rn <- rownames(x)
   cn <- colnames(x)
-  if(!is.null(index) & is(x, "spam")) {
-    p <- update.spam.chol.NgPeyton(index$spam.cholFactor, x)
-  } else {
-    p <- try(chol(x), silent = TRUE)
-  }
+  p <- try(chol(x), silent = TRUE)
   p <- if(inherits(p, "try-error")) {
     try(solve(x), silent = TRUE)
   } else {
-    try(if(inherits(x, "spam")) chol2inv.spam(p) else chol2inv(p), silent = TRUE)
+    try(chol2inv(p), silent = TRUE)
   }
   if(inherits(p, "try-error")) {
     diag(x) <- jitter(diag(x), amount = 1e-5)
@@ -7273,6 +7824,35 @@ matrix_inv <- function(x, index = NULL, force = FALSE)
   rownames(p) <- rn
   colnames(p) <- cn
   return(p)
+}
+
+
+if(FALSE) {
+  set.seed(1234)
+  a <- list()
+  sparse <- list()
+  for (i in 1:4){
+    a[[i]] <- crossprod(matrix(rnorm(i^2), nrow = i))
+  }
+
+  A <- as.matrix(do.call(bdiag, a))
+
+  sparse$block.index <- list(
+    1L,
+    2L:3L,
+    4L:6L,
+    7L:10L
+  )
+  sparse$is.diagonal <- FALSE
+
+  # calculate inverse
+  inv1 <- bamlss:::matrix_inv(A, sparse)
+  attr(inv1, "dimnames") <- NULL
+  inv2 <- bamlss:::matrix_inv(A)
+
+  all.equal(inv1, inv2)
+  inv1
+  inv2
 }
 
 
@@ -7415,8 +7995,6 @@ scale_model.frame <- function(x, not = "")
 ## Sum of diagonal elements.
 sum_diag <- function(x)
 {
-  if(inherits(x, "spam"))
-    return(sum(diag.spam(x), na.rm = TRUE))
   if(inherits(x, "Matrix"))
     return(sum(diag(x), na.rm = TRUE))
   if(is.null(dx <- dim(x)))
@@ -7428,10 +8006,6 @@ sum_diag <- function(x)
 
 sum_diag2 <- function(x, y)
 {
-  if(inherits(x, "spam"))
-    x <- as.matrix(x)
-  if(inherits(y, "spam"))
-    y <- as.matrix(y)
   if(is.null(dx <- dim(x)))
     stop("x must be a matrix!")
   if(is.null(dy <- dim(y)))
@@ -7564,3 +8138,145 @@ if(FALSE) {
   plot(x, y)
   b <- bamlss(list(y ~ n(x), ~ n(x)), sampler = FALSE)
 }
+
+## Most likely transformations.
+h <- function(...)
+{
+  ret <- te(...)
+  class(ret$margin[[1]]) <- "ispline.smooth.spec"
+  ret$label <- gsub("te(", "h(", ret$label, fixed = TRUE)
+  ret$special <- TRUE
+  class(ret) <- "mlt.smooth.spec"
+  ret
+}
+
+smooth.construct.ispline.smooth.spec <- function(object, data, knots, ...)
+{
+  stopifnot(requireNamespace("splines2"))
+  class(object) <- "ps.smooth.spec"
+  object <- smooth.construct(object, data, knots)
+  knots <- object$knots
+  knots <- knots[(knots > min(data[[object$term]])) &
+    (knots < max(data[[object$term]]))]
+  object$knots <- knots
+  object$X <- splines2::iSpline(data[[object$term]],
+    knots = knots, degree = 3, intercept = FALSE, derivs = 0L)
+  object$S <- list(crossprod(diff(diag(ncol(object$X)), differences = 2)))
+  object$derivMat <- splines2::iSpline(data[[object$term]],
+    knots = knots, degree = 3, intercept = FALSE, derivs = 1L)
+  class(object) <- "ispline.smooth"
+  return(object)
+}
+
+smooth.construct.mlt.smooth.spec <- function(object, data, knots, ...)
+{
+  stopifnot(requireNamespace("splines2"))
+  object$margin[[1]] <- smooth.construct(object$margin[[1]], data, knots)
+  if(length(object$margin) > 1) {
+    for(j in 2:length(object$margin))
+      object$margin[[j]] <- smoothCon(object$margin[[j]], data, knots, absorb.cons = TRUE)[[1]]
+  }
+  object$X <- tensor.prod.model.matrix(lapply(object$margin, function(x) { x$X } ))
+  dX <- list(object$margin[[1]]$derivMat)
+  if(length(object$margin) > 1)
+    dX <- c(dX, lapply(object$margin[2:length(object$margin)], function(x) { x$X } ))
+  object$dX <- tensor.prod.model.matrix(dX)
+  object$S <- tensor.prod.penalties(sapply(object$margin, function(x) { x$S } ))
+  object$force.positive <- TRUE
+  class(object) <- "mlt.smooth"
+  object
+}
+
+Predict.matrix.ispline.smooth <- function(object, data)
+{
+  stopifnot(requireNamespace("splines2"))
+  X <- splines2::iSpline(data[[object$term]],
+    knots = object$knots, degree = 3, intercept = FALSE, derivs = 0L)
+  attr(X, "deriv") <- splines2::iSpline(data[[object$term]],
+    knots = object$knots, degree = 3, intercept = FALSE, derivs = 1L)
+  X
+}
+
+Predict.matrix.mlt.smooth <- function(object, data)
+{
+  X <- lapply(object$margin, function(x) { PredictMat(x, as.data.frame(data)) })
+  X <- tensor.prod.model.matrix(X)
+  X
+}
+
+#bamlss_bridge <- function(object, ...)
+#{
+#  stopifnot(requireNamespace("bridgesampling"))
+
+#  if(!inherits(object, "bamlss"))
+#    stop("object must be a 'bamlss' object!")
+#  if(is.null(object$samples))
+#    stop("object does not contain any samples!")
+
+#  samps <- samples(object, coef.only = TRUE, drop = FALSE)
+
+#  if(is.data.frame(object$y)) {
+#    if(ncol(object$y) < 2)
+#      object$y <- object$y[[1]]
+#  }
+
+#  if(is.null(attr(object$x, "bamlss.engine.setup")))
+#    object$x <- bamlss.engine.setup(object$x)
+
+#  logPost <- function(par, ...) {
+#    log_posterior(par, object$x, object$y, object$family, verbose = FALSE)
+#  }
+
+#  lb <- rep(-Inf, ncol(samps[[1]]))
+#  ub <- rep(Inf, ncol(samps[[1]]))
+#  names(lb) <- names(ub) <- colnames(samps[[1]])
+#  if(any(grepl("tau2", colnames(samps[[1]]))))
+#    lb[grep("tau2", names(lb))] <- 0
+
+#  bs <- bridge_sampler(samples = samps,
+#    log_posterior = logPost,
+#    data = list("n" = NA),
+#    lb = lb, ub = ub, ...)
+
+#  bs
+#}
+
+smooth.construct.re2.smooth.spec <- function(object, data, knots, ...)
+{
+  isn <- NULL
+  for(j in object$term) {
+    isn <- c(isn, is.numeric(data[[j]]))
+  }
+  if(any(isn) & FALSE) {
+    center <- scale <- NULL
+    for(j in which(isn)) {
+      m <- mean(data[[j]])
+      sd <- sd(data[[j]])
+      data[[j]] <- (data[[j]] - m) / sd
+      center <- c(center, m)
+      scale <- c(scale, sd)
+    }
+    object$isn <- isn
+    object$center <- center
+    object$scale <- scale
+  }
+  object <- smooth.construct.re.smooth.spec(object, data, knots)
+  class(object) <- if (inherits(object, "tensor.smooth.spec")) 
+      c("random2.effect", "tensor.smooth", "random.effect")
+    else c("random2.effect", "random.effect")
+  object
+}
+
+Predict.matrix.random2.effect <- function(object, data) 
+{
+  if(!is.null(object$isn)) {
+    i <- 1
+    for(j in which(object$isn)) {
+      data[[j]] <- (data[[j]] - object$center[i]) / object$scale[i]
+      i <- i + 1
+    }
+  }
+  X <- model.matrix(object$form, data)
+  X
+}
+

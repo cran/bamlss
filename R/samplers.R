@@ -497,19 +497,6 @@ DIC.gmcmc <- function(object, ...)
   rval
 }
 
-DIC.bamlss <- function(object, ...)
-{
-  object <- list(object, ...)
-  rval <- NULL
-  for(j in seq_along(object)) {
-    stats <- samplestats(object[[j]])
-    rval <- rbind(rval, c("DIC" = stats$DIC, "pd" = stats$pd))
-  }
-  Call <- match.call()
-  row.names(rval) <- if(nrow(rval) > 1) as.character(Call[-1L])[1:nrow(rval)] else ""
-  rval
-}
-
 plot.gmcmc <- function(x, ...)
 {
   x <- na.omit(x)
