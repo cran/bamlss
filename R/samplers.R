@@ -314,9 +314,19 @@ gmcmc <- function(fun, theta, priors = NULL, propose = NULL,
             accepted <- if(is.na(state$alpha)) FALSE else log(runif(1)) <= state$alpha
 
             if(accepted) {
-              eta[[i]] <- eta[[i]] - fitfun[[i]][[j]](data[[i]][[j]], theta[[i]][[j]])
+              if (is.null(attr(theta[[i]][[j]], "fitted.values"))) {
+                eta[[i]] <- eta[[i]] - fitfun[[i]][[j]](data[[i]][[j]], theta[[i]][[j]])
+              } else {
+                eta[[i]] <- eta[[i]] - attr(theta[[i]][[j]], "fitted.values")
+              }
+
               theta[[i]][[j]] <- state$parameters
-              eta[[i]] <- eta[[i]] + fitfun[[i]][[j]](data[[i]][[j]], theta[[i]][[j]])
+
+              if (is.null(attr(theta[[i]][[j]], "fitted.values"))) {
+                eta[[i]] <- eta[[i]] + fitfun[[i]][[j]](data[[i]][[j]], theta[[i]][[j]])
+              } else {
+                eta[[i]] <- eta[[i]] + attr(theta[[i]][[j]], "fitted.values")
+              }
             }
 
             ## Save the samples.
@@ -342,9 +352,19 @@ gmcmc <- function(fun, theta, priors = NULL, propose = NULL,
           accepted <- if(is.na(state$alpha)) FALSE else log(runif(1)) <= state$alpha
 
           if(accepted) {
-            eta[[i]] <- eta[[i]] - fitfun[[i]](data[[i]], theta[[i]])
+            if (is.null(attr(theta[[i]], "fitted.values"))) {
+              eta[[i]] <- eta[[i]] - fitfun[[i]](data[[i]], theta[[i]])
+            } else {
+              eta[[i]] <- eta[[i]] - attr(theta[[i]], "fitted.values")
+            }
+
             theta[[i]] <- state$parameters
-            eta[[i]] <- eta[[i]] + fitfun[[i]](data[[i]], theta[[i]])
+
+            if (is.null(attr(theta[[i]], "fitted.values"))) {
+              eta[[i]] <- eta[[i]] + fitfun[[i]](data[[i]], theta[[i]])
+            } else {
+              eta[[i]] <- eta[[i]] + attr(theta[[i]], "fitted.values")
+            }
           }
 
           ## Save the samples.
@@ -883,7 +903,10 @@ GMCMC_iwls <- function(family, theta, id, eta, y, data, weights = NULL, offset =
     matrix_inv(XWX + S, data$sparse.setup)
   }
   P[P == Inf] <- 0
-  M <- P %*% crossprod(data$X, data$rres)
+  if(is.null(data$xt[["pmean"]]))
+    M <- P %*% crossprod(data$X, data$rres)
+  else
+    M <- P %*% (crossprod(data$X, data$rres) + P %*% data$xt[["pmean"]])
 
   ## Degrees of freedom.
   edf <- sum_diag(XWX %*% P)
@@ -895,6 +918,12 @@ GMCMC_iwls <- function(family, theta, id, eta, y, data, weights = NULL, offset =
   g <- try(drop(rmvnorm(n = 1, mean = M, sigma = P, method = "chol")), silent = TRUE)
   if(inherits(g, "try-error")) {
     return(list("parameters" = theta, "alpha" = -Inf, "extra" = c("edf" = NA)))
+  }
+  if(!is.null(data$doCmat)) {
+    V <- P %*% t(data$C)
+    W <- data$C %*% V
+    U <- chol2inv(chol(W)) %*% t(V)
+    g <- drop(g - t(U) %*% data$C %*% g)
   }
 
   ## Compute log priors.
@@ -944,7 +973,6 @@ GMCMC_iwls <- function(family, theta, id, eta, y, data, weights = NULL, offset =
 
   ## Compute mean and precision.
   XWX <- do.XWX(data$X, 1 / data$weights, data$sparse.setup$matrix)
-
   P2 <- if(data$fixed) {
     if(k < 2) {
       1 / (XWX)
@@ -953,7 +981,10 @@ GMCMC_iwls <- function(family, theta, id, eta, y, data, weights = NULL, offset =
     matrix_inv(XWX + S, data$sparse.setup)
   }
   P2[P2 == Inf] <- 0
-  M2 <- P2 %*% crossprod(data$X, data$rres)
+  if(is.null(data$xt[["pmean"]]))
+    M2 <- P2 %*% crossprod(data$X, data$rres)
+  else
+    M2 <- P2 %*% (crossprod(data$X, data$rres) + P2 %*% data$xt[["pmean"]])
 
   ## Get the log prior.
   qbeta <- try(dmvnorm(g0, mean = M2, sigma = P2, log = TRUE), silent = TRUE)
@@ -1602,3 +1633,79 @@ uni.slice <- function(g, x, family, response, eta, id, j, ...,
   return(g)
 }
 
+
+uni.slice2 <- function(g, x, y, j, ...,
+  w = 1, m = 30, lower = -Inf, upper = +Inf, logPost)
+{
+  x0 <- g[j]
+  gL <- gR <- g
+
+  gx0 <- logPost(g, x, y, ...)
+
+  ## Determine the slice level, in log terms.
+  logy <- gx0 - rexp(1)
+
+  ## Find the initial interval to sample from.
+  ## w <- w * abs(x0) ## FIXME???
+  u <- runif(1, 0, w)
+  gL[j] <- g[j] - u
+  gR[j] <- g[j] + (w - u)  ## should guarantee that g[j] is in [L, R], even with roundoff
+
+  ## Expand the interval until its ends are outside the slice, or until
+  ## the limit on steps is reached.
+  if(is.infinite(m)) {
+    repeat {
+      if(gL[j] <= lower) break
+      if(logPost(gL, x, y, ...) <= logy) break
+      gL[j] <- gL[j] - w
+    }
+    repeat {
+      if(gR[j] >= upper) break
+      if(logPost(gR, x, y, ...) <= logy) break
+      gR[j] <- gR[j] + w
+    }
+  } else {
+    if(m > 1) {
+      J <- floor(runif(1, 0, m))
+      K <- (m - 1) - J
+      while(J > 0) {
+        if(gL[j] <= lower) break
+        if(logPost(gL, x, y, ...) <= logy) break
+        gL[j] <- gL[j] - w
+        J <- J - 1
+      }
+      while(K > 0) {
+        if(gR[j] >= upper) break
+        if(logPost(gR, x, y, ...) <= logy) break
+        gR[j] <- gR[j] + w
+        K <- K - 1
+      }
+    }
+  }
+
+  ## Shrink interval to lower and upper bounds.
+  if(gL[j] < lower) {
+    gL[j] <- lower
+  }
+  if(gR[j] > upper) {
+    gR[j] <- upper
+  }
+
+  ## Sample from the interval, shrinking it on each rejection.
+  repeat {
+    g[j] <- runif(1, gL[j], gR[j])
+
+    gx1 <- logPost(g, x, y, ...)
+
+    if(gx1 >= logy) break
+
+    if(g[j] > x0) {
+      gR[j] <- g[j]
+    } else {
+      gL[j] <- g[j]
+    }
+  }
+
+  ## Return the point sampled
+  return(g)
+}

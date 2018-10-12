@@ -18,7 +18,7 @@
 \usage{
 ## Gradient boosting optimizer.
 boost(x, y, family, weights = NULL,
-  offset = NULL, nu = 0.1, df = 4, maxit = 400,
+  offset = NULL, nu = 0.1, nu.adapt = TRUE, df = 4, maxit = 400,
   mstop = NULL, maxq = NULL, qsel.splitfactor = FALSE,
   verbose = TRUE, digits = 4, flush = TRUE,
   eps = .Machine$double.eps^0.25,
@@ -67,6 +67,8 @@ boost.frame(formula, train, test, family = "gaussian", ...)
     returned from function \code{\link{bamlss.frame}}.}
   \item{nu}{Numeric, between [0, 1], controls the step size, i.e., the amount
     that should be added to model term parameters.}
+  \item{nu.adapt}{Logical. If set to TRUE (default) step size \code{nu} is divided by 2,
+    if current boosting iteration did not improve the loglikelihood.}
   \item{df}{Integer, defines the initial degrees of freedom that should be assigned
     to each smooth model term. May also be a named vector, the names must match the model term
     labels, e.g., as provided in \code{\link{summary.bamlss}}.}

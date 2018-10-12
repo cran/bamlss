@@ -184,11 +184,13 @@ BayesX <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
 
     rn <- response.name(as.formula(x$formula), hierarchical = FALSE)
 
-    if(is.null(family$cat)) {
-      if(rn %in% family$names)
-        rn <- NA
-      if(is.na(rn))
-        rn <- yname
+    if(!family$family == "dirichlet") {
+      if(is.null(family$cat)) {
+        if(rn %in% family$names)
+          rn <- NA
+        if(is.na(rn))
+          rn <- yname
+      }
     }
 
     eqn <- paste(rn, "=", paste(rhs, collapse = " + "))
@@ -227,6 +229,8 @@ BayesX <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
   if(modeonly)
     control$prg <- control$prg[!(names(control$prg) %in% c("iterations", "burnin", "step"))]
 
+  nrcat <- attr(family$bayesx, "nrcat")
+
   for(i in names(x)) {
     if(!all(c("fake.formula", "formula") %in% names(x[[i]]))) {
       stop("hierarchical models not supported yet!")
@@ -252,6 +256,7 @@ BayesX <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
     } else {
       msp <- single_eqn(x[[i]], y, id = i)
       teqn <- paste(model.name, ".hregress ", msp$eqn, ", family=", fbx[[i]][1],
+        if(!is.null(nrcat)) paste0(if(n == 1) " hlevel=1 " else NULL, " nrcat=", nrcat) else NULL,
         " equationtype=", if(!main[n]) fbx[[i]][length(fbx[[i]])] else fbx[[i]][2],
         if(n == length(x)) {
           paste(paste(" ", paste(names(control$prg), "=", control$prg, sep = "", collapse = " ")),
@@ -652,6 +657,10 @@ sx.construct.userdefined.smooth.spec <- sx.construct.tensorX.smooth <- function(
     "hc" = "hcauchy",
     "u" = "aunif"
   )
+  if(!is.null(object$xt[["pSigma"]])) {
+    cat("yes!\n")
+    object$S <- object$sx.S <- object$xt[["pSigma"]]
+  }
   object$state <- NULL
   if(!is.null(object$sx.S))
     object$S <- object$sx.S
@@ -664,6 +673,8 @@ sx.construct.userdefined.smooth.spec <- sx.construct.tensorX.smooth <- function(
       S <- S + object$S[[j]]
     object$S <- list(S)
   }
+  if(!is.null(object$xt$doC))
+    object$C <- Cmat(object)
   if(!is.null(object$C)) {
     if(nrow(object$C) < 1)
       object$C <- NULL
@@ -684,12 +695,14 @@ sx.construct.userdefined.smooth.spec <- sx.construct.tensorX.smooth <- function(
     Xn <- paste(id, by, "X", sep = "_")
     Cn <- paste(id, by, "C", sep = "_")
     Pn <- paste(id, by, "P", sep = "_")
+    Pm <- paste(id, by, "Pm", sep = "_")
   } else {
     Sn <- paste(id, "S", sep = "_")
     Sn <- paste(Sn, "", 1:length(object$S), sep = "")
     Xn <- paste(id, "X", sep = "_")
     Cn <- paste(id, "C", sep = "_")
     Pn <- paste(id, "P", sep = "_")
+    Pm <- paste(id, "Pm", sep = "_")
   }
   if(is.null(object$rank))
     object$rank <- sapply(object$S, function(x) { qr(x)$rank })
@@ -718,10 +731,12 @@ sx.construct.userdefined.smooth.spec <- sx.construct.tensorX.smooth <- function(
     term <- paste(term, "constrmatdata=", Cn, sep = "")
   if(!is.null(object$state$parameters))
     term <- paste(term, ",betastart=", Pn, sep = "")
+  if(!is.null(object$xt[["pmean"]]))
+    term <- paste(term, ",priormeandata=", Pm, sep = "")
   if(is.null(object$xt$nocenter) & is.null(object$xt$centermethod) & !is.null(object$rank))
     term <- paste(term, ",rankK=", sum(object$rank), sep = "")
   term <- paste(do.xt(term, object,
-    c("center", "before", "penalty", "polys", "map", "map.name", "nb", "gra", "ft", "prior", "theta")), ")", sep = "")
+    c("center", "before", "penalty", "polys", "map", "map.name", "nb", "gra", "ft", "prior", "theta", "pmean", "pSigma", "doC", "constraint", "binning")), ")", sep = "")
 
   write <- function(dir) {
     exists <- NULL
@@ -752,11 +767,18 @@ sx.construct.userdefined.smooth.spec <- sx.construct.tensorX.smooth <- function(
       } else exists <- c(exists, file.path(dir, paste(Cn, ".raw", sep = "")))
     }
     if(!is.null(object$state$parameters)) {
-      spar <- as.data.frame(matrix(get.par(object$state$parameters, "b"), nrow = 1))
+      spar <- as.matrix(matrix(get.par(object$state$parameters, "b"), ncol = 1))
       if(!file.exists(file.path(dir, paste(Pn, ".raw", sep = "")))) {
         write.table(spar, file = file.path(dir, paste(Pn, ".raw", sep = "")),
           quote = FALSE, row.names = FALSE)
       } else exists <- c(exists, file.path(dir, paste(Pn, ".raw", sep = "")))
+    }
+    if(!is.null(object$xt[["pmean"]])) {
+      spar <- as.matrix(matrix(object$xt[["pmean"]], ncol = 1))
+      if(!file.exists(file.path(dir, paste(Pm, ".raw", sep = "")))) {
+        write.table(spar, file = file.path(dir, paste(Pm, ".raw", sep = "")),
+          quote = FALSE, row.names = FALSE)
+      } else exists <- c(exists, file.path(dir, paste(Pm, ".raw", sep = "")))
     }
     cmd <- NULL
     if(is.tx) {
@@ -801,6 +823,14 @@ sx.construct.userdefined.smooth.spec <- sx.construct.tensorX.smooth <- function(
         cmd <- c(cmd,
           paste("dataset", Pn),
           paste(Pn, ".infile using ", file.path(dir, paste(Pn, ".raw", sep = "")), sep = "")
+        )
+      }
+    }
+    if(!is.null(object$xt[["pmean"]])) {
+      if(!(file.path(dir, paste(Pm, ".raw", sep = "")) %in% exists)) {
+        cmd <- c(cmd,
+          paste("dataset", Pm),
+          paste(Pm, ".infile using ", file.path(dir, paste(Pm, ".raw", sep = "")), sep = "")
         )
       }
     }
@@ -1303,7 +1333,7 @@ tx3 <- function(..., bs = "ps", k = c(10, 5), ctr = c("main", "center"), xt = NU
   object$label <- paste("tx3(", paste(vars, collapse = ","), ")", sep = "")
   object$dim <- 3
   object$special <- special
-  object$constraint <- match.arg(ctr)
+  object$constraint <- ctr[1]
   object$xt <- xt
   class(object) <- "tensorX3.smooth.spec"
   object
@@ -1326,31 +1356,39 @@ smooth.construct.tensorX3.smooth.spec <- function(object, data, knots, ...)
   p1 <- ncol(object$margin[[1]]$X)
   p2 <- ncol(object$margin[[2]]$X)
 
-  if(object$constraint == "main") {
-    A1 <- matrix(rep(1, p1), ncol = 1)
-    A2 <- matrix(rep(1, p2), ncol = 1)
-    I1 <- diag(p1); I2 <- diag(p2)
-
-    A <- cbind(kronecker(A1, I2), kronecker(I1,A2))
-
-    i <- match.index(t(A))
-    A <- A[, i$nodups, drop = FALSE]
-
-    k <- 0
-    while((qr(A)$rank < ncol(A)) & (k < 100)) {
-      i <- sapply(1:ncol(A), function(d) { qr(A[, -d])$rank })
-      j <- which(i == qr(A)$rank)
-      if(length(j))
-        A <- A[, -j[1], drop = FALSE]
-      k <- k + 1
-    }
-    if(k == 100)
-      stop("rank problems with constraint matrix!")
-
-    object$C <- t(A)
+  if(object$constraint %in% c("meanf", "meanfd", "meansimple", "none", "nullspace")) {
+    if(object$constraint == "none")
+      object$xt$nocenter <- TRUE
+    else
+      object$xt$centermethod <- object$constraint
   } else {
-    object$C <- matrix(1, ncol = p1 * p2)
-  }
+    if(object$constraint == "main") {
+      A1 <- matrix(rep(1, p1), ncol = 1)
+      A2 <- matrix(rep(1, p2), ncol = 1)
+      I1 <- diag(p1); I2 <- diag(p2)
+
+      A <- cbind(kronecker(A1, I2), kronecker(I1,A2))
+
+      i <- match.index(t(A))
+      A <- A[, i$nodups, drop = FALSE]
+
+      k <- 0
+      while((qr(A)$rank < ncol(A)) & (k < 100)) {
+        i <- sapply(1:ncol(A), function(d) { qr(A[, -d])$rank })
+        j <- which(i == qr(A)$rank)
+        if(length(j))
+          A <- A[, -j[1], drop = FALSE]
+        k <- k + 1
+      }
+      if(k == 100)
+        stop("rank problems with constraint matrix!")
+
+      object$C <- t(A)
+    } else {
+      object$C <- matrix(1, ncol = p1 * p2)
+    }
+    attr(object$C, "always.apply") <- TRUE
+ }
 
   if(is.null(object$xt$hyperprior)) {
     if(is.null(object$xt$prior))
@@ -1413,8 +1451,6 @@ smooth.construct.tensorX3.smooth.spec <- function(object, data, knots, ...)
     }
   }
 
-  attr(object$C, "always.apply") <- TRUE
-
   object$tx.term <- paste(object$term, collapse = "")
   object$sx.S <- lapply(object$margin, function(x) { x$S[[1]] })
   object$sx.rank <- qr(do.call("+", object$S))$rank
@@ -1432,6 +1468,18 @@ Predict.matrix.tensorX3.smooth <- function(object, data)
   tensor.prod.model.matrix(list(Predict.matrix(object$margin[[1]], data),
     Predict.matrix(object$margin[[2]]$margin[[1]], data),
     Predict.matrix(object$margin[[2]]$margin[[2]], data)))
+}
+
+
+tx4 <- function(..., ctr = c("center", "main", "both", "both1", "both2"))
+{
+  rval <- te(...)
+  rval$special <- TRUE
+  rval$mp <- TRUE
+  rval$xt$doC <- TRUE
+  rval$xt$constraint <- match.arg(ctr)
+  rval$label <- gsub("te(", "tx4(", rval$label, fixed = TRUE)
+  rval
 }
 
 
@@ -1626,6 +1674,93 @@ Predict.matrix.tensorX.smooth <- function(object, data)
 }
 
 
+## Constraint matrices.
+Cmat <- function(x)
+{
+  if(!is.null(x$margin)) {
+    x$xt <- list()
+    if(!is.null(x$margin[[1]]$xt$ctr))
+      x$margin[[1]]$xt$constraint <- x$margin[[1]]$xt$ctr
+    if(!is.null(x$margin[[1]]$xt$con))
+      x$margin[[1]]$xt$constraint <- x$margin[[1]]$xt$con
+    if(is.null(x$margin[[1]]$xt$constraint))
+      x$margin[[1]]$xt$constraint <- "center"
+    x$xt$constraint <- x$margin[[1]]$xt$constraint
+  } else {
+    if(!is.null(x$xt$ctr))
+      x$xt$constraint <- x$xt$ctr
+    if(!is.null(x$xt$con))
+      x$xt$constraint <- x$xt$con
+    if(is.null(x$xt$constraint))
+      x$xt$constraint <- "center"
+  }
+  ref <- sapply(x$margin, function(z) { inherits(z, "random.effect") })
+  if(length(ref)) {
+    if(length(ref) < 2) {
+      if(ref)
+        x$xt$constraint <- "center"
+    }
+  }
+  if(length(x$margin) < 2) {
+    p <- if(is.null(x$margin)) ncol(x$X) else ncol(x$margin[[1]]$X)
+    C <- matrix(1, ncol = p)
+    if(x$xt$constraint == "main")
+      C <- t(cbind(1, 1:p))
+  } else {
+    p1 <- ncol(x$margin[[2]]$X); p2 <- ncol(x$margin[[1]]$X)
+    if(x$xt$constraint == "center") {
+      C <- matrix(1, ncol = p1 * p2)
+    } else {
+      I1 <- diag(p1); I2 <- diag(p2)
+      if(x$xt$constraint == "main") {
+        ## Remove main effects only.
+        A1 <- matrix(rep(1, p1), ncol = 1)
+        A2 <- matrix(rep(1, p2), ncol = 1)
+      }
+      if(x$xt$constraint == "both") {
+        ## Remove main effects and varying coefficients.
+        A1 <- if(ref[1]) rep(0, p1) else cbind(rep(1, p1), 1:p1)
+        A2 <- if(ref[2]) rep(0, p2) else cbind(rep(1, p2), 1:p2)
+      }
+      if(x$xt$constraint == "both1") {
+        ## Remove main effects and varying coefficients.
+        A1 <- matrix(rep(1, p1), ncol = 1)
+        A2 <- cbind(rep(1, p2), 1:p2)
+      }
+      if(x$xt$constraint == "both2") {
+        ## Remove main effects and varying coefficients.
+        A1 <- cbind(rep(1, p1), 1:p1)
+        A2 <- matrix(rep(1, p2), ncol = 1)
+      }
+
+      if(ref[1])
+        A1 <- matrix(rep(1, p1), ncol = 1)
+      if(ref[2])
+        A2 <- matrix(rep(1, p2), ncol = 1)
+
+      A <- cbind(kronecker(A1, I2), kronecker(I1,A2))
+
+      i <- match.index(t(A))
+      A <- A[, i$nodups, drop = FALSE]
+
+      k <- 0
+      while((qr(A)$rank < ncol(A)) & (k < 100)) {
+        i <- sapply(1:ncol(A), function(d) { qr(A[, -d])$rank })
+        j <- which(i == qr(A)$rank)
+        if(length(j))
+        A <- A[, -j[1], drop = FALSE]
+        k <- k + 1
+      }
+      if(k == 100)
+        stop("rank problems with constraint matrix!")
+
+      C <- t(A)
+    }
+  }
+  return(C)
+}
+
+
 ## Download the newest version of BayesXsrc.
 get_BayesXsrc <- function(dir = NULL, install = TRUE) {
   owd <- getwd()
@@ -1681,3 +1816,4 @@ hyperpar_mod2 <- function(...)
     return(hpf(...))
   } else stop("cannot find hyperpar_mod() in sdPrior!")
 }
+

@@ -36,7 +36,8 @@ importFrom("stats", "acf", "as.formula", "coef", "complete.cases",
   "terms", "terms.formula", "time", "uniroot", "update",
   "var", "window", "median", "asOneSidedFormula", "ecdf",
   "pweibull", "qlogis", "rbeta", "rbinom", "rlnorm", "rpois",
-  "qgamma", "qlnorm", "qweibull", "prcomp", "deviance")
+  "qgamma", "qlnorm", "qweibull", "prcomp", "deviance", "cor",
+  "lm.fit", "nls.control", "qbeta", "qbinom", "qpois")
 importFrom("utils", "download.file", "flush.console", "getS3method",
   "head", "read.csv2", "read.table", "tail", "unzip",
   "write.table", "combn", "capture.output")
@@ -134,6 +135,7 @@ export(
   "tx",
   "tx2",
   "tx3",
+  "tx4",
   "rmf",
   "smooth.construct",
   "smooth.construct.tensorX.smooth.spec",
@@ -162,14 +164,33 @@ export(
   ## neural nets
   "n",
   "n.weights",
+  "predictn",
   "dl.bamlss",
   "predict.dl.bamlss",
+  "make_weights",
+
+  ## linear effects
+  "lin",
+  "smooth.construct.linear.smooth.spec",
+
+  ## random bits
+  "rb",
+  "smooth.construct.randombits.smooth.spec",
 
   ## stability selection
   "stabsel",
 
-  ## neural networks
-  "smooth.construct.nn.smooth.spec"
+  ## kriging
+  "smooth.construct.kr.smooth.spec",
+  "Predict.matrix.kriging.smooth",
+
+  ## shortcuts
+  "boost2",
+  "lasso2",
+  "bayesx2",
+  "bboost",
+  "predict.bboost",
+  "bboost.plot"
 )
 
 S3method("plot", "bamlss")
@@ -208,13 +229,21 @@ S3method("smooth.construct", "tensorX.smooth.spec")
 S3method("smooth.construct", "tensorX3.smooth.spec")
 S3method("smooth.construct", "la.smooth.spec")
 S3method("smooth.construct", "nnet.smooth.spec")
-S3method("smooth.construct", "nn.smooth.spec")
+S3method("smooth.construct", "nnet2.smooth.spec")
+S3method("smooth.construct", "linear.smooth.spec")
+S3method("smooth.construct", "randombits.smooth.spec")
+S3method("smooth.construct", "sr.smooth.spec")
 S3method("Predict.matrix", "kriging.smooth")
 S3method("Predict.matrix", "deriv.smooth")
 S3method("Predict.matrix", "tensorX.smooth")
 S3method("Predict.matrix", "tensorX3.smooth")
 S3method("Predict.matrix", "lasso.smooth")
 S3method("Predict.matrix", "nnet.smooth")
+S3method("Predict.matrix", "nnet2.smooth")
+S3method("Predict.matrix", "nnet3.smooth")
+S3method("Predict.matrix", "linear.smooth")
+S3method("Predict.matrix", "randombits.smooth")
+S3method("Predict.matrix", "srand.smooth")
 S3method("bamlss.engine.setup.smooth", "default")
 S3method("sx.construct", "tensorX.smooth")
 S3method("terms", "bamlss")
@@ -225,6 +254,7 @@ S3method("samples", "bamlss.frame")
 S3method("model.frame", "bamlss")
 S3method("model.frame", "bamlss.frame")
 S3method("predict", "dl.bamlss")
+S3method("predict", "bboost")
 S3method("fitted", "dl.bamlss")
 S3method("residuals", "dl.bamlss")
 S3method("formula", "bamlss.formula.character")

@@ -5,6 +5,7 @@
 \alias{tx}
 \alias{tx2}
 \alias{tx3}
+\alias{tx4}
 \alias{get_BayesXsrc}
 \alias{quant_bamlss}
 \alias{smooth.construct.tensorX.smooth.spec}
@@ -45,6 +46,7 @@ tx2(...)
 tx3(..., bs = "ps", k = c(10, 5),
   ctr = c("main", "center"),
   xt = NULL, special = TRUE)
+tx4(..., ctr = c("center", "main", "both", "both1", "both2"))
 
 ## Smooth constructors and predict matrix.
 \method{smooth.construct}{tensorX.smooth.spec}(object, data, knots, ...)
