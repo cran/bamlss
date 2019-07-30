@@ -4,7 +4,7 @@
 ## Print method.
 print.family.bamlss <- function(x, full = TRUE, ...)
 {
-  cat("Family:", x$family, "\n")
+  cat("Family:", x$family, if(!is.null(x$full.name)) paste0("(", x$full.name, ")") else NULL,  "\n")
   links <- paste(names(x$links), x$links, sep = " = ")
   links <- paste(links, collapse = ", ")
   cat(if(length(links) > 1) "Link functions:" else "Link function:", links, sep = " ")
@@ -88,7 +88,7 @@ make.link2 <- function(link)
         return(x)
       }
       x$mu.eta2 <- function(eta) rep.int(0, length(eta))
-      warning(paste('higher derivatives of link "', link, '" not available!', sep = ''))
+      ## warning(paste('higher derivatives of link "', link, '" not available!', sep = ''))
       return(x)
     }
 
@@ -748,6 +748,276 @@ Gaussian_bamlss <- function(...)
 }
 
 
+AR0_bamlss <- function(ar.start = NULL, ...)
+{
+  rval <- list(
+    "family" = "AR1",
+    "names" = c("mu", "alpha", "sigma"),
+    "links" = c(mu = "identity", alpha = "rhogit", sigma = "log"),
+    "initialize" = list(
+      "mu" = function(y, ...) { (y + mean(y)) / 2 },
+      "alpha" = function(y, ...) {
+        rep(acf(y - mean(y), lag.max = 1, plot = FALSE, na.action = na.pass)$acf[2], length(y))
+      },
+      "sigma" = function(y, ...) { rep(sd(y), length(y)) }
+    )
+  )
+  if(is.null(ar.start)) {
+    rval$d <- function(y, par, log = FALSE, ...) {
+      e <- y - par$mu
+      e1 <- c(0, e[-length(e)])
+      mu <- par$mu + par$alpha * e1
+      dnorm(y, mu, par$sigma, log = log)
+    }
+    rval$p <- function(y, par, ...) {
+      e <- y - par$mu
+      e1 <- c(0, e[-length(e)])
+      mu <- par$mu + par$alpha * e1
+      pnorm(y, mean = par$mu, sd = par$sigma, ...)
+    }
+#    rval$score <- list(
+#      "mu" = function(y, par, ...) {
+#        e <- y - par$mu
+#        e1 <- c(0, e[-length(e)])
+#        mu <- par$mu + par$alpha * e1
+#        drop((y - mu) / (par$sigma^2))
+#      },
+#      "sigma" = function(y, par, ...) {
+#        e <- y - par$mu
+#        e1 <- c(0, e[-length(e)])
+#        mu <- par$mu + par$alpha * e1
+#        drop(-1 + (y - mu)^2 / (par$sigma^2))
+#      }
+#    )
+#    rval$hess <- list(
+#      "mu" = function(y, par, ...) { drop(1 / (par$sigma^2)) },
+#      "sigma" = function(y, par, ...) { rep(2, length(y)) }
+#    )
+  } else {
+    nobs <- length(ar.start)
+    i <- which(ar.start)
+    rval$d <- function(y, par, log = FALSE, ...) {
+      e <- y - par$mu
+      e <- c(0, e[-nobs])
+      e[i] <- 0
+      mu <- par$mu + par$alpha * e
+      dnorm(y, mu, par$sigma, log = log)
+    }
+    rval$p <- function(y, par, ...) {
+      e <- y - par$mu
+      e <- c(0, e[-nobs])
+      e[i] <- 0
+      mu <- par$mu + par$alpha * e
+      pnorm(y, mean = par$mu, sd = par$sigma, ...)
+    }
+#    rval$score <- list(
+#      "mu" = function(y, par, ...) {
+#        e <- e0 <- y - par$mu
+#        e <- c(0, e[-nobs])
+#        e[i] <- 0
+#        mu <- par$mu + par$alpha * e
+#        drop((y - mu) / (par$sigma^2))
+#      },
+#      "sigma" = function(y, par, ...) {
+#        e <- y - par$mu
+#        e <- c(0, e[-nobs])
+#        e[i] <- 0
+#        mu <- par$mu + par$alpha * e
+#        drop(-1 + (y - mu)^2 / (par$sigma^2))
+#      }
+#    )
+#    rval$hess <- list(
+#      "mu" = function(y, par, ...) { drop(1 / (par$sigma^2)) },
+#      "sigma" = function(y, par, ...) { rep(2, length(y)) }
+#    )
+  }
+
+  rval$r = function(n, par) {
+    rnorm(n, mean = par$mu, sd = par$sigma)
+  }
+  rval$q = function(p, par) {
+    qnorm(p, mean = par$mu, sd = par$sigma)
+  }
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+
+AR1_bamlss <- function(ar.start = NULL, ...)
+{
+  if(is.null(list(...)$mu)) {
+    rval <- list(
+      "family" = "AR1",
+      "names" = c("alpha", "sigma"),
+      "links" = c(alpha = "rhogit", sigma = "log"),
+      "initialize" = list(
+        "alpha" = function(y, ...) {
+          rep(acf(y, lag.max = 1, plot = FALSE, na.action = na.pass)$acf[2], length(y))
+        },
+        "sigma" = function(y, ...) { rep(sd(y), length(y)) }
+      )
+    )
+    if(is.null(ar.start)) {
+      rval$d <- function(y, par, log = FALSE, ...) {
+        y1 <- c(0, y[-length(y)])
+        mu <- par$alpha * y1
+        dnorm(y, mu, par$sigma, log = log)
+      }
+      rval$p <- function(y, par, ...) {
+        y1 <- c(0, y[-length(y)])
+        mu <- par$alpha * y1
+        pnorm(y, mean = par$mu, sd = par$sigma, ...)
+      }
+    } else {
+      nobs <- length(ar.start)
+      i <- which(ar.start)
+      rval$d <- function(y, par, log = FALSE, ...) {
+        y1 <- c(0, y[-nobs])
+        y1[i] <- 0
+        mu <- par$alpha * y1
+        dnorm(y, mu, par$sigma, log = log)
+      }
+      rval$p <- function(y, par, ...) {
+        y1 <- c(0, y[-nobs])
+        y1[i] <- 0
+        mu <- par$alpha * y1
+        pnorm(y, mean = par$mu, sd = par$sigma, ...)
+      }
+    }
+  } else {
+    rval <- list(
+      "family" = "AR1",
+      "names" = c("mu", "sigma", "alpha"),
+      "links" = c(mu = "identity", sigma = "log", alpha = "rhogit"),
+      "initialize" = list(
+        "mu" = function(y, ...) { (y + mean(y)) / 2 },
+        "sigma" = function(y, ...) { rep(sd(y), length(y)) },
+        "alpha" = function(y, ...) {
+          rep(0, length(y))
+        }
+      )
+    )
+    if(is.null(ar.start)) {
+      rval$d <- function(y, par, log = FALSE, ...) {
+        e <- y - par$mu
+        e1 <- c(0, e[-length(e)])
+        mu <- par$mu + par$alpha * e1
+        dnorm(y, mu, par$sigma, log = log)
+      }
+      rval$p <- function(y, par, ...) {
+        e <- y - par$mu
+        e1 <- c(0, e[-length(e)])
+        mu <- par$mu + par$alpha * e1
+        pnorm(y, mean = mu, sd = par$sigma, ...)
+      }
+    } else {
+      nobs <- length(ar.start)
+      i <- which(ar.start)
+      rval$d <- function(y, par, log = FALSE, ...) {
+        e <- y - par$mu
+        e <- c(0, e[-nobs])
+        e[i] <- 0
+        mu <- par$mu + par$alpha * e
+        dnorm(y, mu, par$sigma, log = log)
+      }
+      rval$p <- function(y, par, ...) {
+        e <- y - par$mu
+        e <- c(0, e[-nobs])
+        e[i] <- 0
+        mu <- par$mu + par$alpha * e
+        pnorm(y, mean = par$mu, sd = par$sigma, ...)
+      }
+    }
+  }
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+beta1_bamlss <- function(ar.start, ...)
+{
+  rval <- list(
+    "family" = "beta1",
+    "names" = c("mu", "phi", "rho"),
+    "links" = c(mu = "logit", phi = "log", rho = "rhogit"),
+    "valid.response" = function(x) {
+      if(ok <- !all(x > 0 & x < 1)) stop("response values not in (0, 1)!", call. = FALSE)
+      ok
+    }
+  )
+
+  lmu <- make.link2(rval$links["mu"])
+  lphi <- make.link2(rval$links["phi"])
+  lrho <- make.link2(rval$links["rho"])
+
+  nobs <- length(ar.start)
+  i <- which(ar.start)
+
+  rval$d <- function(y, par, log = FALSE, ...) {
+    mu <- lmu$linkfun(par$mu)
+    e <- lmu$linkfun(y) - mu
+    e <- c(0, e[-nobs])
+    e[i] <- 0
+    mu <- lmu$linkinv(mu + par$rho * e)
+    a <- mu * par$phi
+    b <- (1 - mu) * par$phi
+    return(dbeta(y, a, b, log = log))
+  }
+
+  rval$score <- list(
+    "mu" = function(y, par, ...) {
+      mu <- lmu$linkfun(par$mu)
+      e <- lmu$linkfun(y) - mu
+      e <- c(0, e[-nobs])
+      e[i] <- 0
+      eta <- mu + par$rho * e
+      mu <- lmu$linkinv(eta)
+      ystar <- qlogis(y)
+      mustar <- digamma(mu * par$phi) - digamma((1 - mu) * par$phi)
+      return(par$phi * (ystar - mustar) * lmu$mu.eta(eta))
+    },
+    "phi" = function(y, par, ...) {
+      mu <- lmu$linkfun(par$mu)
+      e <- lmu$linkfun(y) - mu
+      e <- c(0, e[-nobs])
+      e[i] <- 0
+      eta <- mu + par$rho * e
+      mu <- lmu$linkinv(eta)
+      ystar <- qlogis(y)
+      mustar <- digamma(mu * par$phi) - digamma((1 - mu) * par$phi)
+      (mu * (ystar - mustar) + log(1-y) - digamma((1-mu)*par$phi) + digamma(par$phi)) * lphi$mu.eta(lphi$linkfun(par$phi))
+    },
+    "rho" = function(y, par, ...) {
+      mu <- lmu$linkfun(par$mu)
+      e <- lmu$linkfun(y) - mu
+      e <- c(0, e[-nobs])
+      e[i] <- 0
+      eta <- mu + par$rho * e
+      mu <- lmu$linkinv(eta)
+      ystar <- qlogis(y)
+      mustar <- digamma(mu * par$phi) - digamma((1 - mu) * par$phi)
+      sa <- par$phi * (ystar - mustar) * lmu$mu.eta(eta)
+      return(sa * e * lrho$mu.eta(lrho$linkfun(par$rho)))
+    }
+  )
+
+  rval$p <- function(y, par, ...) {
+    mu <- lmu$linkfun(par$mu)
+    e <- lmu$linkfun(y) - mu
+    e <- c(0, e[-nobs])
+    e[i] <- 0
+    mu <- lmu$linkinv(mu + par$rho * e)
+    a <- mu * par$phi
+    b <- (1 - mu) * par$phi
+    pbeta(y, shape1 = a, shape2 = b, ...)
+  }
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+
 gpareto_bamlss <- function(...)
 {
   rval <- list(
@@ -789,18 +1059,21 @@ gpareto_bamlss <- function(...)
       samps
     },
     "mean" = function(par) {
-      if (par$xi >= 1) {
-        return(NA)
-      } else {
-        return(par$sigma / (1 - par$xi))
-      }
+#      if (par$xi >= 1) {
+#        return(NA)
+#      } else {
+#        return(par$sigma / (1 - par$xi))
+#      }
+      ## TODO: NA vs Inf ???
+      ifelse(par$xi >= 1, NA, par$sigma / (1 - par$xi))
     },
     "variance" = function(par) {
-      if (par$xi >= 0.5) {
-        return(NA)
-      } else {
-        return((par$sigma^2) / (1 - par$xi)^2 * (1 - 2 * par$xi))
-      }
+#      if (par$xi >= 0.5) {
+#        return(NA)
+#      } else {
+#        return((par$sigma^2) / (1 - par$xi)^2 * (1 - 2 * par$xi))
+#      }
+      ifelse(par$xi >= 0.5, NA, (par$sigma^2) / (1 - par$xi)^2 * (1 - 2 * par$xi))
     }
   )
 
@@ -862,6 +1135,35 @@ gpareto_bamlss <- function(...)
 
   rval$initialize <- list(
     "xi" = function(y, ...) { rep(mean(y) + 0.5, length(y)) },
+    "sigma" = function(y, ...) { rep(sd(y), length(y)) }
+  )
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+
+dpareto_bamlss <- function(...)
+{
+  rval <- list(
+    "family" = "dpareto",
+    "names" = c("alpha", "sigma"),
+    "links" = c(alpha = "log", sigma = "log"),
+    "valid.response" = function(x) {
+      if(is.factor(x)) return(FALSE)
+      if(ok <- !all(x >= 0)) stop("response values smaller than 0 not allowed!", call. = FALSE)
+      ok
+    },
+    "d" = function(y, par, log = FALSE) {
+      d <- log((1 / (1 + (y - 1) / par$sigma))^par$alpha - (1 / (1 + y/par$sigma))^par$alpha)
+      if(!log)
+        d <- exp(d)
+      d
+    }
+  )
+
+  rval$initialize <- list(
+    "alpha" = function(y, ...) { rep(mean(y) + 0.5, length(y)) },
     "sigma" = function(y, ...) { rep(sd(y), length(y)) }
   )
 
@@ -1763,6 +2065,149 @@ weibull_bamlss <- function(...)
 }
 
 
+dw_bamlss <- function(...)
+{
+  links <- c(lambda = "logit", alpha = "log")
+  
+  trunc <- list(...)$trunc
+  if(is.null(trunc))
+    trunc <- FALSE
+
+  link_lambda <- make.link2(links["lambda"])
+  link_alpha <- make.link2(links["alpha"])
+
+  rval <- list(
+    "family" = "dw",
+    "full.name" = "Discrete Weibull",
+    "names" = c("lambda", "alpha"),
+    "links" = links,
+    "valid.response" = function(x) {
+      if(is.factor(x)) return(FALSE)
+      if(ok <- !all(x >= 0)) stop("response values smaller than 0 not allowed!", call. = FALSE)
+      ok
+    },
+    "d" = function(y, par, log = FALSE) {
+      d <- par$lambda^(y^par$alpha) - par$lambda^((y + 1)^par$alpha)
+      if(trunc) {
+        d / par$lambda
+      }
+      if(log)
+        d <- log(d)
+      d[is.na(d) | !is.finite(d)] <- 1.490116e-08
+      return(d)
+    },
+    "p" = function(y, par, log = FALSE) {
+      d <- 1 - par$lambda^((y + 1)^par$alpha)
+      if(log)
+        d <- log(d)
+      return(d)
+    },
+    "score" = list(
+      "lambda" = function(y, par, ...) {        
+        ya <- y^par$alpha
+        y1a <- ((y + 1)^par$alpha)
+
+        sw <- (par$lambda^(ya - 1) * ya - par$lambda^(y1a - 1) * y1a)/(par$lambda^ya - par$lambda^y1a)
+        sw <- sw * link_lambda$mu.eta(link_lambda$linkfun(par$lambda))
+
+        if(trunc)
+          sw <- sw - 1/par$lambda * link_lambda$mu.eta(link_lambda$linkfun(par$lambda))
+
+        return(sw)
+      },
+      "alpha" = function(y, par, ...) {
+        ya <- y^par$alpha
+        y1 <- y + 1
+        ll <- log(par$lambda)
+        lya <- par$lambda^(y1^par$alpha)
+        lya2 <- par$lambda^ya
+
+        sw <- (lya2 * (ll * (ya * log(y))) - lya * (ll * (y1^par$alpha * log(y1))))/(lya2 - lya)
+        sw <- sw * link_alpha$mu.eta(link_alpha$linkfun(par$alpha))
+
+        return(sw)
+      }
+    ),
+    "hess" = list(
+      "lambda" = function(y, par, ...) {
+        d1 <- link_lambda$mu.eta(link_lambda$linkfun(par$lambda))
+        d2 <- link_lambda$mu.eta2(link_lambda$linkfun(par$lambda))
+
+        y1 <- y + 1
+        ya <- y^par$alpha
+        y1a <- y1^par$alpha
+        ya1 <- (ya - 1)
+        ly1 <- par$lambda^ya1
+        ly1ya <- ly1 * ya
+        lya <- par$lambda^ya
+        lya1 <- par$lambda^y1a
+        y1a1 <- (y1a - 1)
+        lyalya1 <- (lya - lya1)
+        ly1a1 <- par$lambda^y1a1
+        a <- (ly1ya - ly1a1 * y1a)
+
+        dll1 <- a/lyalya1
+        dll2 <- (par$lambda^(ya1 - 1) * ya1 * ya - par$lambda^(y1a1 - 1) * y1a1 * y1a)/lyalya1 - a^2/lyalya1^2
+
+        hw <- d1^2 * dll2 + d2 * dll1
+
+        if(trunc) {
+          hw <- hw + d1^2 * 1 / par$lambda^2 - d2 * 1 / par$lambda
+        }
+
+        return(-hw)
+      },
+      "alpha" = function(y, par, ...) {
+        lambda <- par$lambda
+        alpha <- par$alpha
+
+        d1 <- link_alpha$mu.eta(link_alpha$linkfun(par$alpha))
+        d2 <- link_alpha$mu.eta2(link_alpha$linkfun(par$alpha))
+
+        ya <- y^par$alpha
+        lla <- log(par$lambda)
+        y1 <- y + 1
+        ly <- log(y)
+        ly1 <- log(y1)
+        y1a <- y1^par$alpha
+        ly1a <- par$lambda^y1a
+        y1aly1 <- y1a * ly1
+        yaly <- ya * ly
+        llayaly <- lla * yaly
+        lya <- lambda^ya
+        lyaly1a <- lya - ly1a
+        llay1aly1 <- lla * y1aly1
+        lyallayaly <- lya * llayaly
+        a <- ly1a * llay1aly1
+        b <- lyallayaly - a
+
+        dll1 <- b/lyaly1a
+
+        dll2 <- (lyallayaly * llayaly + lya * (lla * (yaly * ly)) -
+          (a * llay1aly1 + ly1a * (lla * (y1aly1 * ly1))))/lyaly1a - b^2/lyaly1a^2
+
+        hw <- d1^2 * dll2 + d2 * dll1
+
+        return(-hw)
+      }
+    ),
+    "initialize" = list(
+      "lambda" = function(y, ...) {
+        m1 <- mean(y)
+        m2 <- mean(y^2)
+        rep(ifelse(any(y < 1), m1 / (m1 + 1), (m1 - 1) / m1), length(y))
+      },
+      "alpha" = function(y, ...) {
+        rep(1, length(y))
+      }
+    )
+  )
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+
 gamma_bamlss <- function(...)
 {
   rval <- list(
@@ -1902,7 +2347,7 @@ lognormal_bamlss <- function(...)
       "mu" = function(y, par, ...) { 1 / (par$sigma^2) },
       "sigma" = function(y, par, ...) { rep(2, length(y)) }
     ),
-	  "mu" = function(par, ...) {
+    "mu" = function(par, ...) {
       exp(par$mu + 0.5 * (par$sigma)^2)
     },
     "d" = function(y, par, log = FALSE) {
@@ -1916,7 +2361,13 @@ lognormal_bamlss <- function(...)
     },
     "r" = function(n, par) {
       rlnorm(n, meanlog = par$mu, sdlog = par$sigma)
-    }
+    },
+    "initialize" = list(
+      "mu"    = function(y, ...) { (log(y) + mean(log(y))) / 2 },
+      "sigma" = function(y, ...) { rep(sd(log(y)), length(y)) }
+    ),
+    "mean" = function(par) exp(par$mu + 0.5 * par$sigma^2),
+    "variance" = function(par) exp(2 * par$mu + par$sigma^2) * (exp(par$sigma^2) - 1)
   )
 
   class(rval) <- "family.bamlss"
@@ -2142,7 +2593,7 @@ bivnorm_bamlss <- function(...)
         rep(sd(y[, 1]), length(y[, 1]))
       },
       "sigma2" = function(y, ...) {
-        rep(sd(y[, 1]), length(y[, 1]))
+        rep(sd(y[, 2]), length(y[, 2]))
       },
       "rho" = function(y, ...) {
         rep(0, length(y[, 1]))
@@ -2164,25 +2615,149 @@ bivnorm_bamlss <- function(...)
   rval
 }
 
+################################################################################
+##  MULTIVARIATE NORMAL
+################################################################################
 
-mvnorm_bamlss <- function(k = 2, ...)
+dev_mvnorm_bamlss <- function(k = 2, cov_type = "cor", geo_fun = NULL,
+                              dist_mat = NULL, ...)
 {
+  ## --- jump to univariate gaussian for k = 1 ---
   if(k == 1)
     return(gaussian_bamlss())
 
-  mu <- paste("mu", 1:k, sep = "")
-  sigma <- paste("sigma", 1:k, sep = "")
+  ## --- jump to bivariate gaussion for k = 2 ---
+  if(k == 2)
+    return(bivnorm_bamlss())
 
-  rho <- NULL
-  for(i in 1:k) {
-    for(j in 1:k) {
-      if(i < j)
-        rho <- c(rho, paste("rho", i, j, sep = ""))
+  ## --- Set up family w/o correlations ---  
+
+  ## --- set names of distributional  parameters ---
+  mu <- paste0("mu", seq_len(k))
+  sigma <- paste0("sigma", seq_len(k))
+
+  ## --- set names of link functions ---
+  links <- c(
+    rep("identity", k),
+    rep("log", k)
+  )
+  names(links) <- c(mu, sigma)
+
+  ## --- family list ---
+  rval <- list(
+    "family" = "mvnorm",
+    "names" = c(mu, sigma),
+    "links" = links,
+    "d" = function(y, par, log = FALSE) {     ## This density needs all correlation
+      d <- log_dmvnorm(y, par)                ##   parameters
+      if(!log)
+        d <- exp(d)
+      return(d)
+    },
+    "p" = function(y, par, ...) {
+      p <- NULL
+      for(j in 1:k) {
+        p <- cbind(p, pnorm(y[, j],
+          mean = par[[paste("mu", j, sep = "")]],
+          sd = par[[paste("sigma", j , sep = "")]], ...))
+      }
+      colnames(p) <- colnames(y)
+      p
+    },
+    "mu" = function(y, par, ...) {
+      do.call("cbind", par[grep("mu", names(par))])
     }
+  )
+
+  ## --- score functions ---
+  mu_score_calls <- paste0(
+    "function(y, par, ...) {mu_score_mvnorm(y, par, j = ", seq_len(k),")}"
+  )
+  sigma_score_calls <- paste0(
+    "function(y, par, ...) {sigma_score_mvnorm(y, par, j = ", seq_len(k),")}"
+  )
+
+  scores <- list()
+  for(j in seq_along(mu)) {
+    scores[[mu[j]]] <- eval(parse(text = mu_score_calls[j]))
   }
-  links <- c(rep("identity", length(mu)), rep("log", length(sigma)), rep("rhogit", length(rho)))
+  for(j in seq_along(sigma)) {
+    scores[[sigma[j]]] <- eval(parse(text = sigma_score_calls[j]))
+  }
+  rval$score <- scores
+
+  ## --- initialize function ---
+  mu_calls <- paste0(
+    "function(y, ...) {(y[,", seq_len(k), "] + mean(y[,", seq_len(k), "])) / 2}"
+  )
+  sigma_calls <- paste0(
+    "function(y, ...) {rep(sd(y[,", seq_len(k), "]), length(y[,", seq_len(k), "]))}"
+  )
+
+  init <- list()
+  for(j in seq_along(mu))
+    init[[mu[j]]] <- eval(parse(text = mu_calls[j]))
+  for(j in seq_along(sigma))
+    init[[sigma[j]]] <- eval(parse(text = sigma_calls[j]))
+  rval$initialize <- init
+
+  class(rval) <- "family.bamlss"
+
+  ## --- add correlation model ---
+  if(cov_type == "cor") {
+    ## --- names ---
+    rho <- combn(seq_len(k), 2, function(x) paste0("rho", x[1], x[2]))
+    k_rho <- k * (k-1) / 2    ## number of rho parameters
+    
+    ## --- links ---
+    nl <- names(rval$links)
+    rval$links <- c(rval$links, rep("rhogit", k_rho))
+    names(rval$links) <- c(nl, rho)
+  
+    ## --- add score functions ---
+    rho_score_calls <- combn(seq_len(k), 2, function(x) {paste0(
+      "function(y, par, ...) {rho_score_mvnorm(y, par, i = ", x[1],", j = ", x[2],")}"
+    )})
+    for(j in seq_along(rho)) {
+      rval$score[[rho[j]]] <- eval(parse(text = rho_score_calls[j]))
+    }
+
+    ## --- init functions ---
+    rho_calls <- rep("function(y, ...) { rep(0, length(y[,1])) }", k_rho)
+    for(j in seq_along(rho)) {
+      rval$initialize[[rho[j]]] <- eval(parse(text = rho_calls[j]))
+    }
+
+  }
+
+  rval
+}
+
+mvnorm_bamlss <- function(k = 2, ...)
+{
+  ## --- jump to univariate gaussian for k = 1 ---
+  if(k == 1)
+    return(gaussian_bamlss())
+
+  ## --- jump to bivariate gaussion for k = 2 ---
+  if(k == 2)
+    return(bivnorm_bamlss())
+
+  ## --- set names of distributional  parameters ---
+  mu <- paste0("mu", seq_len(k))
+  sigma <- paste0("sigma", seq_len(k))
+  rho <- combn(seq_len(k), 2, function(x) paste0("rho", x[1], x[2]))
+  k_rho <- k * (k-1) / 2    ## number of rho parameters
+
+  ## --- set names of link functions ---
+  links <- c(
+    rep("identity", k),
+    rep("log", k),
+    rep("rhogit", k_rho)
+  )
   names(links) <- c(mu, sigma, rho)
 
+  ## --- family list ---
   rval <- list(
     "family" = "mvnorm",
     "names" = c(mu, sigma, rho),
@@ -2208,40 +2783,48 @@ mvnorm_bamlss <- function(k = 2, ...)
     }
   )
 
-  mu_score_calls <- sigma_score_calls <- rho_score_calls <- NULL
-  for(j in seq_along(mu))
-    mu_score_calls <- c(mu_score_calls, paste("function(y, par, ...) {mu_score_mvnorm(y, par, j=",j,")}", sep=""))
-  for(j in seq_along(sigma))
-    sigma_score_calls <- c(sigma_score_calls, paste("function(y, par, ...) {sigma_score_mvnorm(y, par, j=",j,")}", sep=""))
-  for(i in 1:k) {
-    for(j in 1:k) {
-      if(i < j)
-        rho_score_calls <- c(rho_score_calls, paste("function(y, par, ...) {rho_score_mvnorm(y, par, i=",i,", j=",j,")}", sep=""))
-    }
-  }
+  ## --- score functions ---
+  mu_score_calls <- paste0(
+    "function(y, par, ...) {mu_score_mvnorm(y, par, j = ", seq_len(k),")}"
+  )
+  sigma_score_calls <- paste0(
+    "function(y, par, ...) {sigma_score_mvnorm(y, par, j = ", seq_len(k),")}"
+  )
+  rho_score_calls <- combn(seq_len(k), 2, function(x) {paste0(
+    "function(y, par, ...) {rho_score_mvnorm(y, par, i = ", x[1],", j = ", x[2],")}"
+  )})
+
   scores <- list()
-  for(j in seq_along(mu))
+  for(j in seq_along(mu)) {
     scores[[mu[j]]] <- eval(parse(text = mu_score_calls[j]))
-  for(j in seq_along(sigma))
+  }
+  for(j in seq_along(sigma)) {
     scores[[sigma[j]]] <- eval(parse(text = sigma_score_calls[j]))
-  for(j in seq_along(rho))
+  }
+  for(j in seq_along(rho)) {
     scores[[rho[j]]] <- eval(parse(text = rho_score_calls[j]))
+  }
   rval$score <- scores
 
-  mu_calls <- sigma_calls <- rho_calls <- NULL
-  for(j in seq_along(mu))
-    mu_calls <- c(mu_calls, paste("function(y, ...) { (y[,", j, "] + mean(y[,", j , "])) / 2 }"))
-  for(j in seq_along(sigma))
-    sigma_calls <- c(sigma_calls, paste("function(y, ...) { rep(sd(y[,", j , "]), length(y[,", j, "])) }"))
-  for(j in seq_along(rho))
-    rho_calls <- c(rho_calls, "function(y, ...) { rep(0, length(y[, 1])) }")
+  ## --- initialize function ---
+  mu_calls <- paste0(
+    "function(y, ...) {(y[,", seq_len(k), "] + mean(y[,", seq_len(k), "])) / 2}"
+  )
+  sigma_calls <- paste0(
+    "function(y, ...) {rep(sd(y[,", seq_len(k), "]), length(y[,", seq_len(k), "]))}"
+  )
+  rho_calls <- rep("function(y, ...) { rep(0, length(y[,1])) }", k_rho)
+
   init <- list()
-  for(j in seq_along(mu))
+  for(j in seq_along(mu)) {
     init[[mu[j]]] <- eval(parse(text = mu_calls[j]))
-  for(j in seq_along(sigma))
+  }
+  for(j in seq_along(sigma)) {
     init[[sigma[j]]] <- eval(parse(text = sigma_calls[j]))
-  for(j in seq_along(rho))
+  }
+  for(j in seq_along(rho)) {
     init[[rho[j]]] <- eval(parse(text = rho_calls[j]))
+  }
   rval$initialize <- init
 
   class(rval) <- "family.bamlss"
@@ -2249,8 +2832,7 @@ mvnorm_bamlss <- function(k = 2, ...)
 }
 
 
-log_dmvnorm <- function(y, par)
-{
+log_dmvnorm <- function(y, par) {
   par <- do.call("cbind", par)
   y <- as.matrix(y)
   cn <- colnames(par)
@@ -2260,8 +2842,7 @@ log_dmvnorm <- function(y, par)
   return(.Call("log_dmvnorm", y, par, nrow(y), ncol(y), mj, sj, rj, PACKAGE = "bamlss"))
 }
 
-mu_score_mvnorm <- function(y, par, j)
-{
+mu_score_mvnorm <- function(y, par, j) {
   par <- do.call("cbind", par)
   y <- as.matrix(y)
   cn <- colnames(par)
@@ -2272,8 +2853,7 @@ mu_score_mvnorm <- function(y, par, j)
   return(.Call("mu_score_mvnorm", y, par, nrow(y), ncol(y), mj, sj, rj, kj, PACKAGE = "bamlss"))
 }
 
-mu_score_mvnormR <- function(y, par, j)
-{
+mu_score_mvnormR <- function(y, par, j) {
   n <- nrow(y)
   k <- ncol(y)
   par <- do.call("cbind", par)
@@ -2308,8 +2888,7 @@ mu_score_mvnormR <- function(y, par, j)
   return(rval)
 }
 
-sigma_score_mvnorm <- function(y, par, j)
-{
+sigma_score_mvnorm <- function(y, par, j) {
   par <- do.call("cbind", par)
   y <- as.matrix(y)
   cn <- colnames(par)
@@ -2320,8 +2899,7 @@ sigma_score_mvnorm <- function(y, par, j)
   return(.Call("sigma_score_mvnorm", y, par, nrow(y), ncol(y), mj, sj, rj, kj, PACKAGE = "bamlss"))
 }
 
-sigma_score_mvnormR <- function(y, par, j)
-{
+sigma_score_mvnormR <- function(y, par, j) {
  n <- nrow(y)
  k <- ncol(y)
  par <- do.call("cbind", par)
@@ -2697,7 +3275,7 @@ negbin_bamlss <- function(...)
     "names" = c("mu", "delta"),
     "links" = parse.links(links, c(mu = "log", delta = "log"), ...),
     "bayesx" = list(
-      "mu" = c("negbin", "mu"),
+     "mu" = c("negbin", "mu"),
       "delta" = c("negbin", "delta")
     ),
     "mu" = function(par, ...) {
@@ -2729,7 +3307,7 @@ zinb_bamlss <- function(...)
       "pi" = c("zinb", "pi"),
       "delta" = c("zinb", "delta")
     ),
-	  "mu" = function(par, ...) {
+    "mu" = function(par, ...) {
       par$mu * (1 - par$pi)
     },
     "d" = function(y, par, log = FALSE) {
@@ -2785,6 +3363,123 @@ hurdleNB_bamlss <- function(...)
   rval
 }
 
+ztnbinom_bamlss <- function(...) {
+### Zero-truncated neg bin
+### Author: Thorsten Simon
+### Date:   2018 Nov
+  rval <- list(
+    "family" = "ztnbinom",
+    "names"  = c("mu", "theta"),
+    "links"  = c(mu = "log", theta = "log"),
+    "mu" = function(par, ...) {
+      par$mu / stats::pnbinom(0, mu = par$mu, size = par$theta, lower.tail = FALSE)
+    },
+    "loglik" = function(y, par, ...) {
+        rval <- stats::dnbinom(y, mu = par$mu, size = par$theta, log = TRUE) -
+                stats::pnbinom(0, mu = par$mu, size = par$theta, lower.tail = FALSE, log.p = TRUE)
+        sum(rval) 
+    },
+    "d" = function(y, par, log = FALSE) {
+        rval <- stats::dnbinom(y, mu = par$mu, size = par$theta, log = TRUE) -
+                stats::pnbinom(0, mu = par$mu, size = par$theta, lower.tail = FALSE, log.p = TRUE)
+        if(log) rval else exp(rval)
+    },
+    "p" = function(y, par, ...) {
+        rval <- log(stats::pnbinom(y, mu = par$mu, size = par$theta,
+                                   lower.tail = TRUE, log.p = FALSE) -
+                    stats::dnbinom(0, mu = par$mu, size = par$theta)) -
+                    stats::pnbinom(0, mu = par$mu, size = par$theta,
+                                   lower.tail = FALSE, log.p = TRUE)
+        exp(rval)
+    },
+    "score" = list(
+      "mu" = function(y, par, ...) {
+        .Call("ztnbinom_score_mu", as.numeric(y), as.numeric(par$mu),
+              as.numeric(par$theta), PACKAGE = "bamlss")
+      },
+      "theta" = function(y, par, ...) {
+        .Call("ztnbinom_score_theta", as.numeric(y), as.numeric(par$mu),
+              as.numeric(par$theta), PACKAGE = "bamlss")
+      }
+    ),
+    "initialize" = list(
+      "mu" = function(y, ...) {
+##        rep(mean(y) - 1, length(y))
+        (y + mean(y) - 1) / 2
+      },
+      "theta" = function(y, ...) {
+##        rep( mean(y)^2 / (var(y) - mean(y)), length(y))
+        rep( 1, length(y))
+      }
+    )
+  )
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+ztnbinomVAR_bamlss <- function(...) {
+### Zero-truncated neg bin with alternative parameterization
+###   gamma models the VAR of the un-truncated neg-bin, and replaces theta
+### Author: Thorsten Simon
+### Date:   2018 Nov
+  theta_from_gamma <- function(par) {
+    par$mu / sqrt(par$gamma - par$mu)  ## Thus gamma has to be greater than mu! Do we have to enforce this?
+  }
+  rval <- list(
+    "family" = "ztnbinom",
+    "names"  = c("mu", "gamma"),
+    "links"  = c(mu = "log", gamma = "log"),
+    "mu" = function(par, ...) {
+        theta <- theta_from_gamma(par)
+        par$mu / stats::pnbinom(0, mu = par$mu, size = theta, lower.tail = FALSE)
+    },
+    "loglik" = function(y, par, ...) {
+        theta <- theta_from_gamma(par)
+        rval <- stats::dnbinom(y, mu = par$mu, size = theta, log = TRUE) -
+                stats::pnbinom(0, mu = par$mu, size = theta, lower.tail = FALSE, log.p = TRUE)
+        sum(rval) 
+    },
+    "d" = function(y, par, log = FALSE) {
+        theta <- theta_from_gamma(par)
+        rval <- stats::dnbinom(y, mu = par$mu, size = theta, log = TRUE) -
+                stats::pnbinom(0, mu = par$mu, size = theta, lower.tail = FALSE, log.p = TRUE)
+        if(log) rval else exp(rval)
+    },
+    "p" = function(y, par, ...) {
+        theta <- theta_from_gamma(par)
+        rval <- log(stats::pnbinom(y, mu = par$mu, size = theta,
+                                   lower.tail = TRUE, log.p = FALSE) -
+                    stats::dnbinom(0, mu = par$mu, size = theta)) -
+                    stats::pnbinom(0, mu = par$mu, size = theta,
+                                   lower.tail = FALSE, log.p = TRUE)
+        exp(rval)
+    },
+    "score" = list(
+      "mu" = function(y, par, ...) {
+        theta <- theta_from_gamma(par)
+        .Call("ztnbinom_score_mu", as.numeric(y), as.numeric(par$mu),
+              as.numeric(theta), PACKAGE = "bamlss")
+      },
+      "gamma" = function(y, par, ...) {
+        theta <- theta_from_gamma(par)
+        .Call("ztnbinom_score_theta", as.numeric(y), as.numeric(par$mu),
+              as.numeric(theta), PACKAGE = "bamlss")
+      }
+    ),
+    "initialize" = list(
+      "mu" = function(y, ...) {
+        (y + mean(y) - 1) / 2
+      },
+      "gamma" = function(y, ...) {
+        (y + mean(y) - 1) / 2
+      }
+    )
+  )
+
+  class(rval) <- "family.bamlss"
+  rval
+}
 
 ## http://stats.stackexchange.com/questions/17672/quantile-regression-in-jags
 quant_bamlss <- function(prob = 0.5)
@@ -2826,7 +3521,7 @@ quant2_bamlss <- function(prob = 0.5, ...)
   rval
 }
 
-kde_bamlss <- function(...)
+kde_bamlss <- function(..., err)
 {
   rval <- list(
     "family" = "kde",
@@ -2840,8 +3535,8 @@ kde_bamlss <- function(...)
       e <- y - par$mu
       h <- 1.06 * sd(y) * n^(-1/5)
       for(i in 1:n) {
-        z <- r(e[i]) - r(e[-i])
-        d[i] <- log( 1/((n - 1) * h) * sum(K(z/h)) )
+        z <- e[i] - err[-i]
+        d[i] <- log(1/n * sum(1/h * K(z / h)))
       }
       if(!log)
         d <- exp(d)
@@ -3363,6 +4058,9 @@ mvnormAR1_bamlss <- function(k = 2, ...)
   if(k == 1)
     return(gaussian_bamlss())
 
+  if(k == 2)
+    return(bivnorm_bamlss())
+
   mu <- paste("mu", 1:k, sep = "")
   sigma <- paste("sigma", 1:k, sep = "")
   rho <- "rho"
@@ -3583,34 +4281,6 @@ glogis_bamlss <- function(...) {
 }
 
 
-## Nested multinomial logit.
-nml_bamlss <- function()
-{
-  links <- c(omega = "identity", xi = "log", pi = "log")
-
-  rval <- list(
-    "family" = "Nested Multinomial Logit",
-    "names"  = c("omega", "xi", "pi"),
-    "d" = function(y, par, log = FALSE) {
-      d0 <- log(1 - exp((1 - par$xi * par$omega)^(-1 / par$xi)))^y[[2]]
-      if(is.factor(y[[1]]))
-        y[[1]] <- model.matrix(~ y[[1]] - 1)
-      par <- cbind(do.call("cbind", par[, grep()]), 1)
-      d1 <- rowSums(y[[1]] * log(par))
-      d2 <- log(rowSums(par))
-      d <- d0 + d1 - d2
-      if(!log)
-        d <- exp(d)
-      return(d)
-    }
-  )
-
-  # Return family object
-  class(rval) <- "family.bamlss"
-  return(rval)
-}
-
-
 ## Most likely transformations.
 mlt_bamlss <- function(todistr = "Normal")
 {
@@ -3669,5 +4339,476 @@ mlt_MinExtrVal <- function() {
 mlt_distr <- function(which = c("Normal", "Logistic", "MinExtrVal")) {
     which <- match.arg(which)
     do.call(paste("mlt_", which, sep = ""), list())
+}
+
+
+## Family object for the nested multinomial model.
+nmult_bamlss <- function(K)
+{
+  links <- c(rep("identity", K - 1L), rep("identity", K), "identity")
+  names(links) <- c(paste0("alpha", 1L:(K - 1L)), paste0("w", 1L:K), "xi")
+
+  rval <- list(
+    "family" = "Nested Multinomial",
+    "names"  = names(links),
+    "links" = links,
+    "d" = function(y, par, log = FALSE) {
+      P2 <- exp(do.call("cbind", par[grep("alpha", names(par))]))
+      w <- do.call("cbind", par[grep("w", names(par))])
+      xi <- as.numeric(par$xi)
+      xi[abs(xi) < 0.00001] <- 0.00001
+      xi[xi <= -0.5] <- -0.4999
+
+      P2 <- P2 / (1 + rowSums(P2))
+      P2 <- log(cbind(P2, 1 - rowSums(P2)))
+
+      a <- (1 - xi * w)
+      a[a <= 0] <- 1e-05
+      P1 <- 1 - exp(-a^(-1/xi))
+      P1[P1 < 1e-05] <- 1e-05
+      P1 <- log(P1)
+
+      Pi <- P1 + P2
+      nPi <- 1 - exp(P1)
+      nPi[nPi < 1e-05] <- 1e-05
+      nPi <- log(nPi) + P2
+
+      d <- matrix(0, nrow = nrow(y), ncol = K)
+
+      for(j in 1:K) {
+        yd <- 1 * ((y[[1]] == 1L) & (y[[2]] == j))
+        ynd <- 1 * ((y[[1]] == 0L) & (y[[2]] == j))
+        d[, j] <- yd * Pi[, j] + ynd * nPi[, j]
+      }
+
+      d <- rowSums(d)
+
+      d[is.na(d) | !is.finite(d)] <- 1.490116e-08
+
+      if(!log)
+        d <- log(d)
+
+      return(d)
+    }
+  )
+
+  rval$nocat <- TRUE
+
+  score_alpha <- function(y, par, id, ...) {
+    j <- as.integer(gsub("alpha", "", id))
+    yd <- 1 * ((y[[1]] == 1L) & (y[[2]] == j))
+    ynd <- 1 * ((y[[1]] == 0L) & (y[[2]] == j))
+    P2 <- exp(do.call("cbind", par[grep("alpha", names(par))]))
+    pj <- P2[, id] / (1 + rowSums(P2))
+    sa <- (yd + ynd) - pj
+    sa[is.na(sa) | !is.finite(sa)] <- 1.490116e-08
+    sa
+  }
+
+  score_w <- function(y, par, id, ...) {
+    j <- as.integer(gsub("w", "", id))
+    yd <- 1 * ((y[[1]] == 1L) & (y[[2]] == j))
+    ynd <- 1 * ((y[[1]] == 0L) & (y[[2]] == j))
+    w <- par[[id]]
+    xi <- as.numeric(par$xi)
+    xi[abs(xi) < 0.00001] <- 0.00001
+    xi[xi <= -0.5] <- -0.4999
+    a <- (1 - xi * w)
+    a[a <= 0] <- 1e-05
+    P1 <- 1 - exp(-a^(-1/xi))
+    b <- exp(-a^(-1/xi)) * (a^(-1/xi - 1))
+    sw <- (yd * 1/P1 - ynd * 1/(1-P1)) * b
+    sw[is.na(sw) | !is.finite(sw)] <- 1.490116e-08
+    sw
+  }
+
+#library(numDeriv)
+
+#foo <- function(xi, w = 0.5) {
+#  xi[abs(xi) < 0.00001] <- 0.00001
+#  xi[xi <= -0.5] <- -0.4999
+#  a <- (1 - xi * w)
+#  a[a <= 0] <- 1e-05
+#  1 - exp(-a^(-1/xi))
+#}
+
+#bar <- function(xi, w = 0.5) {
+#  xi[abs(xi) < 0.00001] <- 0.00001
+#  xi[xi <= -0.5] <- -0.4999
+#  a <- (1 - xi * w)
+#  a[a <= 0] <- 1e-05
+#  exp(-a^(-1/xi)) * (a^(-1/xi) * (log(a) * (1/xi^2)) - a^((-1/xi) - 1) * ((-1/xi) * w))
+#}
+
+#curve(foo, -0.5, 10)
+#numDeriv::grad(foo, 0.2)
+#bar(0.2)
+
+  score_xi <- function(y, par, id, ...) {
+    w <- do.call("cbind", par[grep("w", names(par))])
+    xi <- as.numeric(par$xi)
+    xi[abs(xi) < 0.00001] <- 0.00001
+    xi[xi <= -0.5] <- -0.4999
+    a <- (1 - xi * w)
+    a[a <= 0] <- 1e-05
+
+    P1 <- 1 - exp(-a^(-1/xi))
+    B <- exp(-a^(-1/xi)) * (a^(-1/xi) * (log(a) * (1/xi^2)) - a^((-1/xi) - 1) * ((-1/xi) * w))
+
+    sxi <- matrix(0, nrow = nrow(y), ncol = K)
+
+    for(j in 1:K) {
+      yd <- 1 * ((y[[1]] == 1L) & (y[[2]] == j))
+      ynd <- 1 * ((y[[1]] == 0L) & (y[[2]] == j))
+      sxi[, j] <- (yd * 1/P1[, j] - ynd * 1/(1 - P1[, j])) * B[, j]
+    }
+
+    sxi <- rowSums(sxi)
+    sxi[is.na(sxi) | !is.finite(sxi)] <- 1.490116e-08
+    sxi
+  }
+
+  score1 <- rep(list(score_alpha), length = K - 1L)
+  names(score1) <- paste0("alpha", 1:(K - 1L))
+
+  score2 <- rep(list(score_w), length = K)
+  names(score2) <- paste0("w", 1:K)
+
+  score3 <- list("xi" = score_xi)
+  rval$score <- c(score1, score2)
+
+  rval$initialize <- list(
+    "xi" = function(y, ...) { rep(0.1, nrow(y)) }
+  )
+
+  init_w <- rep(list(function(y, ...) { rep(0.1, nrow(y)) }), K)
+  names(init_w) <- paste0("w", 1:K)
+
+  rval$initialize <- c(rval$initialize, init_w)
+
+  ## Return family object
+  class(rval) <- "family.bamlss"
+  return(rval)
+}
+
+
+#if(FALSE) {
+#foo1 <- function(x, p = 0.7) {
+#  log(p * (1 - p)) - x * (p - 1 * (x < 0))
+#}
+
+#absx <- function(x) { x * tanh(x/0.1) }
+
+#foo2 <- function(x, p = 0.7) {
+#  i <- x > 0
+#  rval <- rep(0, length(x))
+#  rval[i] <- p * absx(x[i])
+#  rval[!i] <- (1 - p) * absx(x[!i])
+#  log(p * (1 - p)) - rval
+#}
+
+#curve(foo1, -1, 1)
+#curve(foo2, -1, 1, col = 2, add = TRUE)
+
+#library(numDeriv)
+
+#numDeriv::grad(foo3, -0.01)
+#foo3prime(-0.01)
+
+#n <- 300
+#x <- runif(n, -3, 3)
+#y <- sin(x) + rnorm(n, sd = exp(-1 + 0.5 * x))
+
+#data("mcycle", package = "MASS")
+#x <- mcycle$times
+#y <- mcycle$accel / max(abs(mcycle$accel))
+
+#f <- list(
+#  y ~ s(x),
+#  sigma ~ s(x),
+#  lambda ~ s(x)
+#)
+
+#maxit = 500
+
+#b1 <- bamlss(f, family = gF("ELF", tau = 0.1), optimizer = boost, initialize = FALSE)
+#b2 <- bamlss(f, family = gF("ELF", tau = 0.5), optimizer = boost, initialize = FALSE)
+#b3 <- bamlss(f, family = gF("ELF", tau = 0.9), optimizer = boost, initialize = FALSE)
+
+#p1 <- predict(b1, model = "mu")
+#p2 <- predict(b2, model = "mu")
+#p3 <- predict(b3, model = "mu")
+
+#plot(x, y)
+#plot2d(cbind(p1, p2, p3) ~ x, col.lines = "blue", lty = c(2, 1, 2), add = TRUE)
+#}
+
+ALD_bamlss <- function(..., tau = 0.5, eps = 0.01)
+{
+  if(tau < 0.001 | tau > (1 - 0.001))
+    stop("tau must be between 0 and 1!")
+
+  absx <- function(x) { sqrt(x^2 + eps) }
+
+  rval <- list(
+    "family" = "Asymmetric Laplace",
+    "names" = c("mu", "sigma"),
+    "links" = c(mu = "identity", sigma = "log"),
+    "d" = function(y, par, log = FALSE) {
+      ## d <- logpc - r * (p - 1 * (r < 0))
+      ## e1 <- expression(  -2 * log(s) - tau * sqrt((y-mu)^2)/s^2  )
+      ## e2 <- expression(  -2 * log(s) - (1-tau) * sqrt((y-mu)^2)/s^2  )
+      ## Deriv(e1, cache.exp = FALSE, "mu")
+      r <- y - par$mu
+      i <- r > 0
+      d <- rep(0, length(r))
+      d[i] <- tau * abs(r[i]) / par$sigma[i]^2
+      d[!i] <- (1 - tau) * abs(r[!i]) / par$sigma[!i]^2
+      d <- log(tau * (1 - tau)) - 2 * log(par$sigma) - d
+      if(!log)
+        d <- exp(d)
+      return(d)
+    },
+    "score" = list(
+      "mu" = function(y, par, ...) {
+        r <- (y - par$mu)
+        i <- r > 0
+        score <- r/(par$sigma^2 * abs(r))
+        score[i] <- tau * score[i]
+        score[!i] <- (1 - tau) * score[!i]
+        return(score)
+      },
+      "sigma" = function(y, par, ...) {
+        r <- (y - par$mu)
+        i <- r > 0
+        score <- rep(0, length(r))
+        score[i] <- (2 * (tau * abs(r[i])/par$sigma[i]^2) - 2)/par$sigma[i]
+        score[!i] <- (2 * ((1 - tau) * abs(r[!i])/par$sigma[!i]^2) - 2)/par$sigma[!i]
+        return(score)
+      }
+    ),
+    "hess" = list(
+      "mu" = function(y, par, ...) {
+        r <- (y - par$mu)
+        i <- r > 0
+        hess <- rep(0, length(r))
+        hess[i] <- tau * (par$sigma[i]^2 * sign(r[i]) * r[i]/(par$sigma[i]^2 * abs(r[i]))^2 -
+          1/(par$sigma[i]^2 * abs(r[i])))
+        hess[!i] <- (1 - tau) * (par$sigma[!i]^2 * sign(r[!i]) * (r[!i])/(par$sigma[!i]^2 * abs(r[!i]))^2 -
+          1/(par$sigma[!i]^2 * abs(r[!i])))
+        return(-hess)
+      },
+      "sigma" = function(y, par, ...) {
+        r <- (y - par$mu)
+        i <- r > 0
+        hess <- rep(0, length(r))
+        hess[i] <- -((6 * (tau * abs(r[i])/par$sigma[i]^2) - 2)/par$sigma[i]^2)
+        hess[!i] <- -((6 * ((1 - tau) * abs(r[!i])/par$sigma[!i]^2) - 2)/par$sigma[!i]^2)
+        return(-hess)
+      }
+    ),
+    "initialize" = list(
+      "mu"    = function(y, ...) { (y + quantile(y, prob = tau)) / 2 },
+      "sigma" = function(y, ...) { rep(sd(y), length(y)) }
+    )
+  )
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+
+log1pexp <- function(x)
+{
+  indx <- .bincode(x, c(-Inf, -37, 18, 33.3, Inf), T)
+  
+  kk <- which(indx==1)
+  if( length(kk) ){  x[kk] <- exp(x[kk])  }
+  
+  kk <- which(indx==2)
+  if( length(kk) ){  x[kk] <- log1p( exp(x[kk]) ) }
+  
+  kk <- which(indx==3)
+  if( length(kk) ){  x[kk] <- x[kk] + exp(-x[kk]) }
+  
+  return(x)
+}
+
+ELF_bamlss <- function(..., tau = 0.5)
+{
+  if(tau < 0.001 | tau > (1 - 0.001))
+    stop("tau must be between 0 and 1!")
+
+  rval <- list(
+    "family" = "Elf density",
+    "names" = c("mu", "sigma", "lambda"),
+    "links" = c(mu = "identity", sigma = "log", lambda = "log"),
+    "d" = function(y, par, log = FALSE) {
+      r <- y - par$mu
+#      d <- (1 - tau) * r/par$sigma - par$lambda * log(1 + exp(r/(par$lambda * par$sigma))) -
+#        log(par$lambda * par$sigma * beta(par$lambda *(1 - tau), par$lambda*tau))
+
+## library("Deriv")
+## e <- expression((1 - tau) * (y-mu)/s - lam * log(1 + exp((y-mu)/(lam*s))) - log(lam * s * beta(lam*(1 - tau), lam*tau)))
+## Deriv(e, cache.exp = FALSE, "mu")
+
+      d <- (1 - tau) * r/par$sigma - par$lambda * log1pexp(r/(par$lambda * par$sigma)) -
+        log(par$lambda * par$sigma * beta(par$lambda *(1 - tau), par$lambda*tau))
+
+      if(!log)
+        d <- exp(d)
+
+      return(d)
+    },
+    "score" = list(
+      "mu" = function(y, par, ...) {
+        .e2 <- exp((y - par$mu)/(par$lambda * par$sigma))
+        score <- (.e2/(1 + .e2) + tau - 1)/par$sigma
+        return(score)
+      },
+      "sigma" = function(y, par, ...) {
+        .e1 <- par$lambda * par$sigma
+        .e2 <- y - par$mu
+        .e4 <- exp(.e2/.e1)
+        score <- (par$lambda^2 * .e4/((1 + .e4) * .e1^2) - (1 - tau)/par$sigma^2) * .e2 - 1/par$sigma
+        return(score)
+      },
+      "lambda" = function(y, par, ...) {
+        .e1 <- par$lambda * par$sigma
+        .e2 <- y - par$mu
+        .e4 <- exp(.e2/.e1)
+        .e5 <- 1 - tau
+        .e6 <- digamma(par$lambda)
+        score <- -((1 + par$lambda * (.e5 * (digamma(par$lambda * .e5) - .e6) + tau * (digamma(par$lambda * tau) - .e6)))/par$lambda + log1p(.e4) - .e1 * .e4 * .e2/((1 + .e4) * .e1^2))
+        return(score)
+      }
+    ),
+    "hess" = list(
+      "mu" = function(y, par, ...) {
+        .e2 <- exp((y - par$mu)/(par$lambda * par$sigma))
+        .e3 <- 1 + .e2
+        hess <- .e2 * (.e2/.e3 - 1)/(par$lambda * par$sigma^2 * .e3)
+        return(-hess)
+      },
+      "sigma" = function(y, par, ...) {
+        .e1 <- par$lambda * par$sigma
+        .e2 <- y - par$mu
+        .e4 <- exp(.e2/.e1)
+        .e5 <- 1 + .e4
+        hess <- (2 * ((1 - tau)/par$sigma^3) - par$lambda^3 * ((2 * (.e1 * .e5) - .e4 * .e2)/(.e5 * .e1^2)^2 + .e2/(.e5 * .e1^4)) * .e4) * .e2 + 1/par$sigma^2
+        return(-hess)
+      },
+      "lambda" = function(y, par, ...) {
+        .e1 <- par$lambda * par$sigma
+        .e2 <- y - par$mu
+        .e3 <- 1 - tau
+        .e5 <- exp(.e2/.e1)
+        .e6 <- digamma(par$lambda)
+        .e7 <- .e1^2
+        .e8 <- 1 + .e5
+        .e9 <- par$lambda * .e3
+        .e10 <- par$lambda * tau
+        .e11 <- .e3 * (digamma(.e9) - .e6)
+        .e12 <- .e8 * .e7
+        .e15 <- tau * (digamma(.e10) - .e6)
+        .e16 <- trigamma(par$lambda)
+        hess <- -((.e11 + par$lambda * ((.e3 * trigamma(.e9) - .e16) * .e3 + tau * 
+          (tau * trigamma(.e10) - .e16)) + .e15 - (1 + par$lambda * (.e11 + .e15))/par$lambda)/par$lambda -
+          par$sigma * ((2 - .e1 * .e2/.e7)/.e12 - .e1 * (2 * (.e1 * .e8) - .e5 * .e2)/.e12^2) * .e5 * .e2)
+        return(-hess)
+      }
+    ),
+    "initialize" = list(
+      "mu"    = function(y, ...) { (y + quantile(y, prob = tau)) / 2 },
+      "sigma"    = function(y, ...) { sd((y - quantile(y, prob = tau)) / 2) },
+      "lambda"    = function(y, ...) { rep(4, length(y)) }
+    )
+  )
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+nbinom_bamlss <- function(...) {
+### neg bin
+### Author: Thorsten Simon
+### Date:   2019 Feb
+  rval <- list(
+    "family" = "nbinom",
+    "names" = c("mu", "theta"),
+    "links" = c(mu = "log", theta = "log"),
+    "mu" = function(par, ...) { par$mu },
+    "loglik" = function(y, par, ...) {
+      sum(stats::dnbinom(y, mu = par$mu, size = par$theta, log = TRUE))
+    },
+    "d" = function(y, par, log = FALSE) {
+      stats::dnbinom(y, mu = par$mu, size = par$theta, log = log)
+    },
+    "p" = function(y, par, ...) {
+      stats::pnbinom(y, mu = par$mu, size = par$theta)
+    },
+    "q" = function(p, par, ...) {
+      stats::qnbinom(p, mu = par$mu, size = par$theta)
+    },
+    "r" = function(n, par, ...) {
+      stats::rnbinom(n, mu = par$mu, size = par$theta)
+    },
+    "score" = list(
+      "mu" = function(y, par, ...) {
+        y - (y + par$theta)*par$mu/(par$mu + par$theta)
+      },
+      "theta" = function(y, par, ...) {
+        (digamma(y + par$theta) - digamma(par$theta) + log(par$theta) + 1 -
+          log(par$mu + par$theta) - (y + par$theta)/(par$mu + par$theta)) *
+          par$theta
+      }
+    ),
+    "hess" = list(
+      "mu" = function(y, par, ...) {
+        par$mu * par$theta / (par$mu + par$theta)
+      },
+      "theta" = function(y, par, ...) {
+        (digamma(y + par$theta) - digamma(par$theta) + log(par$theta) + 1 -
+          log(par$mu + par$theta) - (y + par$theta)/(par$mu + par$theta)) *
+          -par$theta - (trigamma(y + par$theta) - trigamma(par$theta) +
+          1/par$theta - 2/(par$mu + par$theta) + (y + par$theta) /
+          (par$mu + par$theta)^2) * par$theta^2
+      }
+    ),
+    "initialize" = list(
+      "mu" = function(y, ...) { (y + mean(y)) / 2 },
+      "theta" = function(y, ...) {
+        rep( min( mean(y)^2 / (var(y) - mean(y)), 10), length(y))
+      }
+    )
+  )
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+
+gpareto2_bamlss <- function(...)
+{
+  rval <- list(
+    "family" = "gpareto",
+    "names" = c("xi", "sigma", "lambda", "gamma"),
+    "links" = c(xi = "log", sigma = "log", lambda = "log", gamma = "logit"),
+    "valid.response" = function(x) {
+      if(is.factor(x)) return(FALSE)
+      if(ok <- !all(x >= 0)) stop("response values smaller than 0 not allowed!", call. = FALSE)
+      ok
+    },
+    "d" = function(y, par, log = FALSE) {
+      yt <- (y + par$lambda - 1)^(par$gamma)
+      d <- -log(par$sigma) - (1 / par$xi + 1) * log(1 + par$xi * yt / par$sigma)
+      if(!log)
+        d <- exp(d)
+      d
+    }
+  )
+
+  class(rval) <- "family.bamlss"
+  rval
 }
 

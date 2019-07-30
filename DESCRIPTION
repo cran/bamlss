@@ -1,34 +1,38 @@
 Package: bamlss
-Version: 1.0-1
-Date: 2018-10-12
+Version: 1.0-2
+Date: 2019-07-30
 Title: Bayesian Additive Models for Location Scale and Shape (and
         Beyond)
 Authors@R: c(person(given = "Nikolaus", family = "Umlauf", role = c("aut", "cre"), email = "Nikolaus.Umlauf@uibk.ac.at"),
   person(given = "Nadja", family = "Klein", role = "aut", email = "nklein@uni-goettingen.de"),
   person(given = "Achim", family = "Zeileis", role = "aut", email = "Achim.Zeileis@R-project.org",
          comment = c(ORCID = "0000-0003-0918-3766")),
-  person(given = "Meike", family = "Koehler", role = "aut", email = "Meike.Koehler@helmholtz-muenchen.de"),
-  person(given = "Thorsten", family = "Simon", role = "ctb", email = "thorsten.simon@uibk.ac.at"), person(given = "Stanislaus", family = "Stadlmann", role = "ctb", email = "stadlmann@uni-goettingen.de"))
+  person(given = "Meike", family = "Koehler", role = "ctb", email = "meike_koehler@gmx.de"),
+  person(given = "Thorsten", family = "Simon", role = "aut", email = "thorsten.simon@uibk.ac.at",
+         comment = c(ORCID = "0000-0002-3778-7738")),
+  person(given = "Stanislaus", family = "Stadlmann", role = "ctb", email = "stadlmann@uni-goettingen.de"))
 Description: Infrastructure for estimating probabilistic distributional regression models in a Bayesian framework.
   The distribution parameters may capture location, scale, shape, etc. and every parameter may depend
   on complex additive terms (fixed, random, smooth, spatial, etc.) similar to a generalized additive model.
-  The conceptual and computational framework is introduced in Umlauf, Klein, Zeileis (2017)
+  The conceptual and computational framework is introduced in Umlauf, Klein, Zeileis (2018)
   <doi:10.1080/10618600.2017.1407325>.
 Depends: R (>= 3.2.3), coda, colorspace, mgcv
 Imports: Formula, MBA, mvtnorm, sp, Matrix, survival, methods, parallel
-Suggests: akima, bit, fields, gamlss, geoR, rjags, BayesX, BayesXsrc,
-        mapdata, maps, maptools, raster, spatstat, spdep, zoo, keras,
-        splines2, sdPrior, glogis, glmnet, scoringRules
+Suggests: akima, bit, ff, ffbase, fields, gamlss, geoR, rjags, BayesX,
+        BayesXsrc, mapdata, maps, maptools, raster, spatstat, spdep,
+        zoo, keras, splines2, sdPrior, glogis, glmnet, scoringRules
 License: GPL-2 | GPL-3
 LazyLoad: yes
+RoxygenNote: 6.1.1
+URL: http://bayesr.R-Forge.R-project.org
 NeedsCompilation: yes
-Packaged: 2018-10-12 07:51:05 UTC; nik
+Packaged: 2019-07-30 07:55:18 UTC; nik
 Author: Nikolaus Umlauf [aut, cre],
   Nadja Klein [aut],
   Achim Zeileis [aut] (<https://orcid.org/0000-0003-0918-3766>),
-  Meike Koehler [aut],
-  Thorsten Simon [ctb],
+  Meike Koehler [ctb],
+  Thorsten Simon [aut] (<https://orcid.org/0000-0002-3778-7738>),
   Stanislaus Stadlmann [ctb]
 Maintainer: Nikolaus Umlauf <Nikolaus.Umlauf@uibk.ac.at>
 Repository: CRAN
-Date/Publication: 2018-10-12 08:40:03 UTC
+Date/Publication: 2019-07-30 21:30:09 UTC

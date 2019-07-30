@@ -13,7 +13,7 @@
 }
 
 \usage{
-cox.mode(x, y, weights, offset,
+cox.mode(x, y, start, weights, offset,
   criterion = c("AICc", "BIC", "AIC"),
   nu = 0.1, update.nu = TRUE,
   eps = .Machine$double.eps^0.25, maxit = 400,
@@ -26,6 +26,8 @@ cox.mode(x, y, weights, offset,
     holding all model matrices and other information that is used for
     fitting the model.}
   \item{y}{The model response, as returned from function \code{\link{bamlss.frame}}.}
+  \item{start}{A named numeric vector containing possible starting values, the names are based on
+    function \code{\link{parameters}}.}
   \item{weights}{Prior weights on the data, as returned from function \code{\link{bamlss.frame}}.}
   \item{offset}{Can be used to supply model offsets for use in fitting,
     returned from function \code{\link{bamlss.frame}}.}

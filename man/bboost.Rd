@@ -13,13 +13,13 @@
 ## Bootstrap boosting.
 bboost(..., data, type = 1, cores = 1,
   n = 2, prob = 0.623, fmstop = NULL,
-  trace = TRUE, drop = FALSE)
+  trace = TRUE, drop = FALSE, replace = FALSE)
 
 ## Plotting function.
 bboost.plot(object, col = NULL)
 
 ## Predict method.
-\method{predict}{bboost}(object, newdata, ..., cores = 1, pfun = predict.bamlss)
+\method{predict}{bboost}(object, newdata, ..., cores = 1, pfun = NULL)
 }
 
 \arguments{
@@ -38,6 +38,8 @@ bboost.plot(object, col = NULL)
     each bootstrap iteration. See the examples.}
   \item{trace}{Prints out the current state of the bootstrap algorithm.}
   \item{drop}{Should only the best set of parameters be saved?}
+  \item{replace}{Sampling with replacement, or sampling \code{ceiling(nobs * prob)}
+    rows of the data for fitting the \code{n} models.}
   \item{object}{The \code{"bboost"} object used for prediction and plotting.}
   \item{col}{The color that should be used for plotting.}
   \item{newdata}{The data frame predictions should be made for.}

@@ -390,6 +390,8 @@ SEXP process_derivs(SEXP x, SEXP w)
     rvalptr[i] = xptr[i];
     if(ISNA(xptr[i]))
       rvalptr[i] = 1.490116e-08;
+    if(ISNAN(xptr[i]))
+      rvalptr[i] = 1.490116e-08;
     if(xptr[i] > 1e+10)
       rvalptr[i] = 1e+10;
     if(LOGICAL(w)[0]) {
@@ -419,7 +421,8 @@ SEXP sum_diag(SEXP x, SEXP N)
   double sum = 0.0;
 
   for(i = 0; i < n; i++) {
-    sum += xptr[i + n * i];
+    if(!ISNA(xptr[i + n * i]))
+      sum += xptr[i + n * i];
   }
 
   SEXP rval;
@@ -2971,7 +2974,7 @@ SEXP log_dmvnorm(SEXP Y, SEXP PAR, SEXP N, SEXP K, SEXP MJ, SEXP SJ, SEXP RJ)
   PROTECT(d = allocVector(REALSXP, n));
   double *dptr = REAL(d);
 
-  double lpi = - 0.5 * k * log(2.0 * 3.14159265358979323846);
+  double lpi = - 0.5 * (float)k * log(2.0 * 3.14159265358979323846);
   double det = 0.0;
   double sum = 0.0;
 
@@ -3876,7 +3879,7 @@ SEXP boost_fit_nnet(SEXP nu, SEXP X, SEXP N, SEXP y, SEXP ind, SEXP nthreads)
   int i, j;
   int n = nrows(X);
   int k = ncols(X);
-  int *nthreadsptr = INTEGER(nthreads);
+//  int *nthreadsptr = INTEGER(nthreads);
 
   SEXP g;
   PROTECT(g = allocVector(REALSXP, k));
@@ -4260,3 +4263,91 @@ SEXP bamlss_glogis_hesse(SEXP which, SEXP y, SEXP mu, SEXP sigma, SEXP alpha )
    UNPROTECT(1);
    return rval;
 }
+
+/* Zero-truncated negbin. */
+SEXP ztnbinom_score_mu(SEXP y, SEXP mu, SEXP theta)
+{
+  SEXP rval;
+  PROTECT(rval = allocVector(REALSXP, length(y)));
+  int i;
+  int n = length(y);
+  double *yptr = REAL(y);
+  double *muptr = REAL(mu);
+  double *thetaptr = REAL(theta);
+  double *rvalptr = REAL(rval);
+
+  double r = 0.0;
+  double pr = 0.0;
+
+  for(i = 0; i < n; i++) {
+    r = thetaptr[i] / (muptr[i] + thetaptr[i]);
+    pr = pow(r, thetaptr[i]);
+    rvalptr[i] = r * ((yptr[i] - muptr[i]) - (pr * muptr[i]) / (1.0 - pr));
+/*    rvalptr[i] = (yptr[i]/muptr[i] - (yptr[i] + thetaptr[i])/(muptr[i] + thetaptr[i]) -
+                 pr * r / (1.0 - pr)) * muptr[i]; */
+  }
+
+  UNPROTECT(1);
+  return rval;
+}
+
+SEXP ztnbinom_score_theta(SEXP y, SEXP mu, SEXP theta)
+{
+  SEXP rval;
+  PROTECT(rval = allocVector(REALSXP, length(y)));
+  int i;
+  int n = length(y);
+  double *yptr = REAL(y);
+  double *muptr = REAL(mu);
+  double *thetaptr = REAL(theta);
+  double *rvalptr = REAL(rval);
+
+  double r = 0.0;
+  double pr = 0.0;
+  double lr = 0.0;
+  double r2 = 0.0;
+
+  for(i = 0; i < n; i++) {
+    r = thetaptr[i] / (muptr[i] + thetaptr[i]);
+    pr = pow(r, thetaptr[i]);
+    lr = log(r) + 1.0;
+    r2 = (yptr[i] + thetaptr[i]) / (muptr[i] + thetaptr[i]);
+    rvalptr[i] = thetaptr[i] * (digamma(yptr[i] + thetaptr[i]) - digamma(thetaptr[i]) + 
+                 lr - r2 + pr * (lr - r) / (1.0 - pr));
+  }
+
+  UNPROTECT(1);
+  return rval;
+}
+
+
+// Nested multiomial.
+/*SEXP nlogit_p(SEXP P1, SEXP P2, SEXP id, SEXP y)*/
+/*{*/
+/*  int i, j;*/
+/*  int nr = length(id);*/
+/*  int nc = ncols(P1);*/
+
+/*  double *P1ptr = REAL(P1);*/
+/*  double *P2ptr = REAL(P2);*/
+/*  double *yptr = REAL(y);*/
+/*  int *idptr = INTEGER(id);*/
+
+/*  SEXP d = PROTECT(allocVector(REALSXP, nr));*/
+/*  double *dptr = REAL(d);*/
+
+/*  for(i = 0; i < nr; i++) {*/
+/*    dptr[i] = 0.0;*/
+/*    for(j = 0; j < (nc - 1); j++) {*/
+/*      if(yptr[i + nc * j] > 0.0) {*/
+/*        dptr[i] = P1ptr[i + nc * j] + log(P2ptr[i + nc * idptr[i]]);*/
+/*      }*/
+/*    }*/
+/*    if(ISNA(dptr[i]))*/
+/*      dptr[i] = 0.0;*/
+/*  }*/
+
+/*  UNPROTECT(1);*/
+/*  return(d);*/
+/*}*/
+

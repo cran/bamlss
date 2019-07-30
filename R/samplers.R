@@ -125,6 +125,8 @@ gmcmc <- function(fun, theta, priors = NULL, propose = NULL,
   }
   class(theta) <- c("gmcmc.theta", "list")
 
+  plot <- !is.null(list(...)$plot)
+
   parse_input <- function(input = NULL, default, type) {
     ninput <- deparse(substitute(input), backtick = TRUE, width.cutoff = 500)
     if(is.null(input))
@@ -340,6 +342,13 @@ gmcmc <- function(fun, theta, priors = NULL, propose = NULL,
               ll[js] <- if(!is.null(logLik)) {
                 logLik(eta)
               } else sum(do.call(fun, c(theta, list(...))[names(formals(fun))]), na.rm = TRUE)
+
+              if(plot) {
+                if(js > 1) {
+                  plot(ll[1:js], type = "l",
+                    xlab = "Iterations", ylab = "logLik")
+                }
+              }
             }
           }
         } else {
@@ -378,6 +387,13 @@ gmcmc <- function(fun, theta, priors = NULL, propose = NULL,
             ll[js] <- if(!is.null(logLik)) {
               logLik(eta)
             } else sum(do.call(fun, c(theta, list(...))[names(formals(fun))]), na.rm = TRUE)
+
+            if(plot) {
+              if(js > 1) {
+                plot(ll[1:js], type = "l",
+                  xlab = "Iterations", ylab = "logLik")
+              }
+            }
           }
         }
       }
@@ -895,18 +911,26 @@ GMCMC_iwls <- function(family, theta, id, eta, y, data, weights = NULL, offset =
   P <- if(data$fixed) {
     if((k <- ncol(data$X)) < 2) {
       1 / XWX
-    } else matrix_inv(XWX, data$sparse.setup)
+    } else matrix_inv(XWX + if(!is.null(data$xt[["pS"]])) data$xt[["pS"]] else 0, data$sparse.setup)
   } else {
     tau2 <- get.par(theta, "tau2")
     for(j in seq_along(data$S))
       S <- S + 1 / tau2[j] * if(is.function(data$S[[j]])) data$S[[j]](c(theta, data$fixed.hyper)) else data$S[[j]]
-    matrix_inv(XWX + S, data$sparse.setup)
+    matrix_inv(XWX + S + if(!is.null(data$xt[["pS"]])) data$xt[["pS"]] else 0, data$sparse.setup)
   }
   P[P == Inf] <- 0
-  if(is.null(data$xt[["pmean"]]))
+  if(is.null(data$xt[["pm"]])) {
     M <- P %*% crossprod(data$X, data$rres)
-  else
-    M <- P %*% (crossprod(data$X, data$rres) + P %*% data$xt[["pmean"]])
+  } else {
+    pS <- if(!is.null(data$xt[["pS"]])) {
+      data$xt[["pS"]]
+    } else {
+      if(!is.null(data$xt[["pSa"]])) {
+        1 / tau2[length(tau2)] * data$xt[["pSa"]]
+      } else 0
+    }
+    M <- P %*% (crossprod(data$X, data$rres) + pS %*% data$xt[["pm"]])
+  }
 
   ## Degrees of freedom.
   edf <- sum_diag(XWX %*% P)
@@ -976,15 +1000,23 @@ GMCMC_iwls <- function(family, theta, id, eta, y, data, weights = NULL, offset =
   P2 <- if(data$fixed) {
     if(k < 2) {
       1 / (XWX)
-    } else matrix_inv(XWX, data$sparse.setup)
+    } else matrix_inv(XWX + if(!is.null(data$xt[["pS"]])) data$xt[["pS"]] else 0, data$sparse.setup)
   } else {
-    matrix_inv(XWX + S, data$sparse.setup)
+    matrix_inv(XWX + S + if(!is.null(data$xt[["pS"]])) data$xt[["pS"]] else 0, data$sparse.setup)
   }
   P2[P2 == Inf] <- 0
-  if(is.null(data$xt[["pmean"]]))
+  if(is.null(data$xt[["pm"]])) {
     M2 <- P2 %*% crossprod(data$X, data$rres)
-  else
-    M2 <- P2 %*% (crossprod(data$X, data$rres) + P2 %*% data$xt[["pmean"]])
+  } else {
+    pS <- if(!is.null(data$xt[["pS"]])) {
+      data$xt[["pS"]]
+    } else {
+      if(!is.null(data$xt[["pSa"]])) {
+        1 / tau2[length(tau2)] * data$xt[["pSa"]]
+      } else 0
+    }
+    M2 <- P2 %*% (crossprod(data$X, data$rres) + pS %*% data$xt[["pm"]])
+  }
 
   ## Get the log prior.
   qbeta <- try(dmvnorm(g0, mean = M2, sigma = P2, log = TRUE), silent = TRUE)
@@ -1533,8 +1565,17 @@ MVNORM <- function(x, y = NULL, family = NULL, start = NULL, n.samples = 500, he
 
   npar <- names(par)
   hessian <- hessian[npar, npar]
+  Sigma <- matrix_inv(-1 * hessian)
+  if(ncol(Sigma) != length(par)) {
+    for(i in c(1e-05, 1e-04, 1e-03, 1e-02)) {
+      if(ncol(Sigma) != length(par)) {
+        hessian2 <- hessian + diag(i, ncol(hessian))
+        Sigma <- matrix_inv(-1 * hessian2)
+      }
+    }
+  }
 
-  samps <- rmvnorm(n.samples, mean = par, sigma = matrix_inv(-1 * hessian))
+  samps <- rmvnorm(n.samples, mean = par, sigma = Sigma)
   colnames(samps) <- npar
 
   as.mcmc(samps)

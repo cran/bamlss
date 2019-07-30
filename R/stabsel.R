@@ -1,56 +1,81 @@
 stabsel <- function(formula, data, family = "gaussian",
-                    q = ceiling(sqrt(ncol(data))), B = 100,
-                    thr = .9, ...) {
+                    q = NULL, maxit = NULL, B = 100,
+                    thr = .9, fraction = .5, seed = NULL, ...) {
 
-    ## Scale data
-    for(i in seq(ncol(data))) {
-        if(inherits(data[,i], "numeric"))
-            data[,i] <- scale(data[,i])
+    ## --- Check parameters ---
+    if(is.null(q) & is.null(maxit)) {
+        q <- ceiling(sqrt(ncol(data)))
+    } else if(!is.null(q) & !is.null(maxit)) {
+        stop("Error: Define either q or maxit. Not both.")
+    }
+    if(is.null(maxit)){
+        ## Set maxit to a very large number that cant be reached.
+        maxit <- 10000
+    }
+    
+    if(fraction <= 0 | fraction >= 1) {
+        stop("Error: fraction must be between 0 and 1.")
     }
 
-    ## Stability Selection
+    if(thr <= 0 | thr >= 1) {
+        stop("Error: Threshold (thr) must be between 0 and 1.")
+    }
+
+    ## --- set array of seeds ---
+    if(is.null(seed)) {
+        seeds <- NULL
+    } else {
+        seeds <- as.integer(seed) + seq(B)
+    }
+
+    ## --- Stability Selection ---
     ## TODO: parallel option
     stabselection <- NULL
     for(i in seq(B)) {
         cat(sprintf("Stability selection boosting run %d / %d \r", i, B))
         xx <- StabStep(formula = formula, data = data,
-                       family  = family, q = q, seed = i, ...)
+                       family  = family, q = q, maxit = maxit, seed = seeds[i],
+                       fraction = fraction, ...)
         stabselection <- c(stabselection, xx$sel)
     }
     cat("\n")
     formula <- xx$formula
+    environment(formula) <- NULL
     family  <- xx$family
 
-    ## Re-build formula
+    ## --- Re-build formula ---
     tabsel <- sort(table(stabselection), decreasing = FALSE)
     f <- StabFormula(tabsel, formula, family, thr, B)
 
-    ## Comupte per-family-error-rate
+    ## --- Comupte per-family-error-rate ---
     p <- 0
     for(i in seq(length(formula))) {
         p <- p + length(attr(terms(formula[[i]]$formula), "term.labels"))
     }
     PFER <- (q^2) / ((2*thr - 1)*p)
 
-    ## Return
+    ## --- Return ---
     rval <- list("table"       = tabsel, "raw" = stabselection,
                  "formula.org" = formula,
                  "formula.new" = f,
                  "family"      = family,
-                 "parameter"   = list("q" = q, "B" = B, "thr" = thr,
-                                      "p" = p, "PFER" = PFER))
+                 "parameter"   = list("q" = q, "maxit" = if(is.null(q)) maxit else NULL,
+                                      "B" = B, "thr" = thr, "p" = p, "PFER" = PFER,
+                                      "fraction" = fraction))
     class(rval) <- c("stabsel", "list")
     return(rval)
 }
 
-StabStep <- function(formula, data, family = "gaussian", q, seed = NULL, ...) {
-    if(!is.null(seed))
+StabStep <- function(formula, data, family = "gaussian", q, maxit, seed = NULL,
+                     fraction = fraction, ...) {
+    if(!is.null(seed)) {
         set.seed(seed)
-    d <- data[sample(nrow(data), size = round(nrow(data)/2)), ]
-    b <- bamlss(formula, data = d, family = family, optimizer = boost,
-                sampler = FALSE,
-                binning = TRUE, maxq = q, scale.d = FALSE,
-                plot = FALSE, verbose = FALSE, ...)
+    }
+    d <- data[sample(nrow(data), size = round(nrow(data) * fraction)), ]
+    b <- bamlss(formula, data = d, family = family,
+                optimizer = boost, maxit = maxit, maxq = q,
+                sampler = FALSE, binning = TRUE,
+                plot = FALSE, verbose = TRUE, ...)
 
     rval <- NULL
     for (model in b$family$names) {
@@ -114,7 +139,7 @@ StabFormula <- function(tabsel, formula, family, thr, B) {
     ## Select terms
     p <- names(tabsel)[tabsel > (thr*B)]
     ## grep model identifier
-    modelID <- substring(p, regexpr("\\.[a-z0-9]+$", p) + 1)
+    modelID <- substring(p, regexpr("(?<=\\.)[a-z0-9]+$", p, perl = TRUE))
     ## skip model identifier
     p <- gsub("\\.[a-z0-9]+$", "", p)
 
@@ -198,8 +223,30 @@ print.stabsel <- function(x, ...) {
     cat("---\n")
     cat("Selected formula:\n")
     print(x$formula.new)
+    invisible(x)
 }
 
-#summary.stabel <- function(x, ...) {}
-#print.summary.stabel <- function(x, ...) {}
+formula.stabsel <- function(x, env = parent.frame(), return_org = FALSE, ...) {
+    ff <- if(return_org) x$formula.org else x$formula.new
+    environment(ff) <- env
+    ff
+}
+
+family.stabsel <- function(object, ...) {
+    object$family
+}
+
+summary.stabsel <- function(object, ...) {
+    rval <- object[c("table", "parameter")]
+    class(rval) <- "summary.stabsel"
+    rval
+}
+
+print.summary.stabsel <- function(x, ...) {
+    xx <- sort(x$table, decreasing = TRUE)
+    nn <- names(xx)
+    cat("  term                 freq\n  -------------------------  \n")
+    cat(paste(sprintf("  %-20s  %3d\n", nn, xx), collapse = ""))
+    invisible(x)
+}
 

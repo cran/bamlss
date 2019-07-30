@@ -4,6 +4,7 @@
 \alias{bamlss.family}
 \alias{beta_bamlss}
 \alias{binomial_bamlss}
+\alias{dw_bamlss}
 \alias{cnorm_bamlss}
 \alias{cox_bamlss}
 \alias{gaussian_bamlss}
@@ -16,6 +17,13 @@
 \alias{poisson_bamlss}
 \alias{gpareto_bamlss}
 \alias{glogis_bamlss}
+\alias{AR1_bamlss}
+\alias{beta1_bamlss}
+\alias{ztnbinom_bamlss}
+\alias{lognormal_bamlss}
+\alias{ALD_bamlss}
+\alias{nbinom_bamlss}
+\alias{weibull_bamlss}
 
 \title{
   Distribution Families in \pkg{bamlss}
@@ -33,10 +41,12 @@
 
 \usage{
 ## Family objects in bamlss:
+ALD_bamlss(..., tau = 0.5, eps = 0.01)
 beta_bamlss(...)
 binomial_bamlss(link = "logit", ...)
 cnorm_bamlss(...)
 cox_bamlss(...)
+dw_bamlss(...)
 gaussian_bamlss(...)
 gaussian2_bamlss(...)
 Gaussian_bamlss(...)
@@ -47,6 +57,12 @@ mvnormAR1_bamlss(k = 2, ...)
 poisson_bamlss(...)
 gpareto_bamlss(...)
 glogis_bamlss(...)
+AR1_bamlss(ar.start = NULL, ...)
+beta1_bamlss(ar.start, ...)
+nbinom_bamlss(...)
+ztnbinom_bamlss(...)
+lognormal_bamlss(...)
+weibull_bamlss(...)
 
 ## Extractor functions:
 \method{family}{bamlss}(object, ...)
@@ -58,7 +74,13 @@ glogis_bamlss(...)
     \code{\link{bamlss}} and \code{\link{bamlss.frame}}.}
   \item{k}{The dimension of the multivariate normal. Note, if \code{k = 1} function
     \code{gaussian_bamlss()} is called.}
+  \item{ar.start}{Logical vector of length equal to the number of rows of the full data set
+    used for modeling. Must hold entries \code{TRUE} indicating the start of a time series of
+    a section. If \code{ar.start = NULL} lagged residuals are computed by simple shifting.
+    See also \code{\link[mgcv]{bam}}.}
   \item{link}{Possible link functions.}
+  \item{tau}{The quantile the should be fitted.}
+  \item{eps}{Constant to be used for the approximation of the absolute function.}
   \item{\dots}{Arguments passed to functions that are called within the family object.}
 }
 

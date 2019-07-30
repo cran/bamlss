@@ -112,10 +112,10 @@ lasso.coef(x, ...)
 }
 
 \references{
-  Andreas Groll, Julien Hambuckers, Thomas Kneib, and Nikolaus Umlauf. Lasso-type penalization in
+  Andreas Groll, Julien Hambuckers, Thomas Kneib, and Nikolaus Umlauf (2019). Lasso-type penalization in
   the framework of generalized additive models for location, scale and shape.
-  Working papers, Faculty of Economics and Statistics, University of Innsbruck, 2018.
-  \url{https://econpapers.repec.org/RePEc:inn:wpaper:2018-16}
+  \emph{Computational Statistics \& Data Analysis}.
+  \url{https://doi.org/10.1016/j.csda.2019.06.005}
 
   Oelker Margreth-Ruth and Tutz Gerhard (2015). A uniform framework for combination of
   penalties in generalized structured models. \emph{Adv Data Anal Classif}.

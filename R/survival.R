@@ -23,9 +23,8 @@ cox_bamlss <- function(...)
   rval
 }
 
-
 ## Posterior mode estimation.
-cox.mode <- function(x, y, weights, offset, criterion = c("AICc", "BIC", "AIC"),
+cox.mode <- function(x, y, start, weights, offset, criterion = c("AICc", "BIC", "AIC"),
   nu = 0.1, update.nu = TRUE, eps = .Machine$double.eps^0.25, maxit = 400,
   verbose = TRUE, digits = 4, ...)
 {
@@ -33,6 +32,9 @@ cox.mode <- function(x, y, weights, offset, criterion = c("AICc", "BIC", "AIC"),
     stop("nu must be 0 < nu < 1!")
 
   criterion <- match.arg(criterion)
+
+  if(!is.null(start))
+    x <- set.starting.values(x, start)
 
   ## Names of parameters/predictors.
   nx <- names(x)
@@ -167,6 +169,7 @@ update_surv_tv <- function(x, y, eta, eta_timegrid, width, sub, update.nu, crite
   xgrad <- drop(t(y[, "status"]) %*% x$XT - int$grad)
 
   if(!(!x$state$do.optim | x$fixed | x$fxsp)) {
+
     env <- new.env()
     par <- x$state$parameters
 
@@ -297,6 +300,7 @@ update_surv_tc <- function(x, y, eta, eeta, int, criterion, edf, ...)
     x$sparse.setup$matrix)
 
   Xr <- crossprod(x$X, x$rres)
+  g0 <- get.state(x, "b")
 
   if(!x$state$do.optim | x$fixed | x$fxsp) {
     if(x$fixed) {
@@ -306,7 +310,7 @@ update_surv_tc <- function(x, y, eta, eeta, int, criterion, edf, ...)
       S <- 0
       tau2 <- get.state(x, "tau2")
       for(j in seq_along(x$S))
-        S <- S + 1 / tau2[j] * x$S[[j]]
+        S <- S + 1 / tau2[j] * if(is.function(x$S[[j]])) x$S[[j]](c(g0, x$fixed.hyper)) else x$S[[j]]
       x$state$hessian <- XWX + S
       P <- matrix_inv(x$state$hessian, index = x$sparse.setup)
     }
@@ -317,7 +321,7 @@ update_surv_tc <- function(x, y, eta, eeta, int, criterion, edf, ...)
     objfun <- function(tau2, ...) {
       S <- 0
       for(j in seq_along(x$S))
-        S <- S + 1 / tau2[j] * x$S[[j]]
+        S <- S + 1 / tau2[j] * if(is.function(x$S[[j]])) x$S[[j]](c(g0, x$fixed.hyper)) else x$S[[j]]
       P <- matrix_inv(XWX + S, index = x$sparse.setup)
       if(inherits(P, "try-error")) return(NA)
       g <- drop(P %*% Xr)
@@ -334,7 +338,7 @@ update_surv_tc <- function(x, y, eta, eeta, int, criterion, edf, ...)
     x$state$parameters <- set.par(x$state$parameters, tau2, "tau2")
     S <- 0
     for(j in seq_along(x$S))
-      S <- S + 1 / tau2[j] * x$S[[j]]
+      S <- S + 1 / tau2[j] * if(is.function(x$S[[j]])) x$S[[j]](c(g0, x$fixed.hyper)) else x$S[[j]]
     x$state$hessian <- XWX + S
     P <- matrix_inv(x$state$hessian, index = x$sparse.setup)
     x$state$parameters <- set.par(x$state$parameters, drop(P %*% Xr), "b")

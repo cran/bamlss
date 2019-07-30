@@ -1,10 +1,12 @@
-## import("ffbase")
-## importFrom("ff", "read.table.ffdf", "ff", "ffdf", "fforder", "as.ff")
-
 import("coda")
 import("mgcv")
 import("Formula")
 import("colorspace")
+
+## importFrom("bit", "chunk", "chunk.default")
+## importFrom("ff", "chunk.ff_vector", "chunk.ffdf", "chunk.bit", "read.table.ffdf",
+##   "ff", "ffdf", "fforder", "as.ff", "ffapply", "nrow<-", "hi")
+## importFrom("ffbase", "ffappend", "range.ff")
 
 importFrom("parallel", "mclapply")
 importFrom("sp", "bbox", "point.in.polygon", "polygons",
@@ -37,7 +39,7 @@ importFrom("stats", "acf", "as.formula", "coef", "complete.cases",
   "var", "window", "median", "asOneSidedFormula", "ecdf",
   "pweibull", "qlogis", "rbeta", "rbinom", "rlnorm", "rpois",
   "qgamma", "qlnorm", "qweibull", "prcomp", "deviance", "cor",
-  "lm.fit", "nls.control", "qbeta", "qbinom", "qpois")
+  "lm.fit", "nls.control", "qbeta", "qbinom", "qpois", "na.pass", "relevel")
 importFrom("utils", "download.file", "flush.console", "getS3method",
   "head", "read.csv2", "read.table", "tail", "unzip",
   "write.table", "combn", "capture.output")
@@ -51,6 +53,7 @@ export(
   "bamlss.formula",
   "bamlss.family",
   "bfit",
+  "bbfit",
   "bfit_iwls",
   "bfit_iwls_Matrix",
   "bfit_lm",
@@ -80,10 +83,14 @@ export(
   "set.par",
 
   ## families,
+  "ALD_bamlss",
+  "AR1_bamlss",
   "beta_bamlss",
+  "beta1_bamlss",
   "binomial_bamlss",
   "cnorm_bamlss",
   "cox_bamlss",
+  "dw_bamlss",
   "gaussian_bamlss",
   "gaussian2_bamlss",
   "Gaussian_bamlss",
@@ -94,6 +101,10 @@ export(
   "quant_bamlss",
   "gpareto_bamlss",
   "glogis_bamlss",
+  "nbinom_bamlss",
+  "ztnbinom_bamlss",
+  "lognormal_bamlss",
+  "weibull_bamlss",
   "gF",
 
   ## extractor functions
@@ -102,6 +113,7 @@ export(
   "samplestats",
   "results.bamlss.default",
   "parameters",
+  "WAIC",
 
   ## vis functions
   "plot2d",
@@ -177,6 +189,9 @@ export(
   "rb",
   "smooth.construct.randombits.smooth.spec",
 
+  ## monotone P-splines
+  "smooth.construct.ms.smooth.spec",
+
   ## stability selection
   "stabsel",
 
@@ -199,14 +214,18 @@ S3method("plot", "bamlss.results")
 S3method("plot", "bamlss.residuals")
 S3method("plot", "stabsel")
 S3method("summary", "bamlss")
+S3method("summary", "stabsel")
 S3method("family", "bamlss")
 S3method("family", "bamlss.frame")
+S3method("family", "stabsel")
 S3method("print", "summary.bamlss")
 S3method("print", "family.bamlss")
 S3method("print", "bamlss.frame")
+S3method("print", "bamlss")
 S3method("print", "boost.summary")
 S3method("print", "bamlss.formula")
 S3method("print", "stabsel")
+S3method("print", "summary.stabsel")
 S3method("plot", "boost.summary")
 S3method("predict", "bamlss")
 S3method("predict", "boost.frame")
@@ -233,6 +252,7 @@ S3method("smooth.construct", "nnet2.smooth.spec")
 S3method("smooth.construct", "linear.smooth.spec")
 S3method("smooth.construct", "randombits.smooth.spec")
 S3method("smooth.construct", "sr.smooth.spec")
+S3method("smooth.construct", "ms.smooth.spec")
 S3method("Predict.matrix", "kriging.smooth")
 S3method("Predict.matrix", "deriv.smooth")
 S3method("Predict.matrix", "tensorX.smooth")
@@ -244,6 +264,7 @@ S3method("Predict.matrix", "nnet3.smooth")
 S3method("Predict.matrix", "linear.smooth")
 S3method("Predict.matrix", "randombits.smooth")
 S3method("Predict.matrix", "srand.smooth")
+S3method("Predict.matrix", "ff_smooth.smooth.spec")
 S3method("bamlss.engine.setup.smooth", "default")
 S3method("sx.construct", "tensorX.smooth")
 S3method("terms", "bamlss")
@@ -259,6 +280,7 @@ S3method("fitted", "dl.bamlss")
 S3method("residuals", "dl.bamlss")
 S3method("formula", "bamlss.formula.character")
 S3method("formula", "bamlss.formula")
+S3method("formula", "stabsel")
 S3method("as.character", "bamlss.formula")
 S3method("as.character", "bamlss.terms")
 

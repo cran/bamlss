@@ -159,6 +159,10 @@ GAMart <- function(n = 500, sd = 0.1, seed = FALSE, ti = c("none", "vcm", "main"
   f6 <- function(fac) {
     scale2(sort(rnorm(length(unique(fac)), sd = 1))[fac], -0.5, 0.5)
   }
+
+  if(sd < 0) {
+    sd <- exp(-2 + sin(d$x1 * 2 *pi - pi) - d$x2)
+  }
   
   ## Response.
   if(ti == "none") {

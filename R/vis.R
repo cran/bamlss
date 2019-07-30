@@ -969,8 +969,12 @@ colorlegend <- function(color = NULL, ncol = NULL, x = NULL, breaks = NULL,
     graphics::rect(xlim[1L], ylim[1L], xlim[2L], ylim[2L], 
       border = col.border, lwd = lwd.border, lty = lty.border, xpd = xpd)
     dl <- TRUE
-    if(!is.null(labels) && labels == FALSE)
-      dl <- FALSE
+    if(!is.null(labels)) {
+      if(is.logical(labels)) {
+        if(!labels)
+          dl <- FALSE
+      }
+    }
     if(ticks || dl) {
       if(is.null(at)) {
         at <- pal$breaks
