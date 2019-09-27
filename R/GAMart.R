@@ -199,3 +199,14 @@ Volcano <- function(sd = 0.3) {
   d
 }
 
+
+Crazy <- function(n = 1000) {
+  d <- data.frame("x" = runif(n, -3, 3))
+  d$eta <- sin(20 * exp(bamlss::scale2(d$x, 0, 1))) * bamlss::scale2(d$x, 0, 1)^2
+  d$eta[d$x >= -1]  <- d$eta[d$x >= -1] - 1.5
+  d$eta[d$x <= -2] <- - 1.5
+  d$eta[d$x >= -2 & d$x <= -1] <- 0
+  d$y <- d$eta + rnorm(n, sd = 0.1)
+  return(d)
+}
+

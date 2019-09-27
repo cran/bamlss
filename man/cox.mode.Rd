@@ -1,5 +1,5 @@
-\name{cox.mode}
-\alias{cox.mode}
+\name{cox_mode}
+\alias{cox_mode}
 
 \title{
   Cox Model Posterior Mode Estimation
@@ -13,7 +13,7 @@
 }
 
 \usage{
-cox.mode(x, y, start, weights, offset,
+cox_mode(x, y, start, weights, offset,
   criterion = c("AICc", "BIC", "AIC"),
   nu = 0.1, update.nu = TRUE,
   eps = .Machine$double.eps^0.25, maxit = 400,
@@ -22,7 +22,7 @@ cox.mode(x, y, start, weights, offset,
 
 \arguments{
  \item{x}{The \code{x} list, as returned from function
-    \code{\link{bamlss.frame}} and transformed by function \code{\link{surv.transform}},
+    \code{\link{bamlss.frame}} and transformed by function \code{\link{surv_transform}},
     holding all model matrices and other information that is used for
     fitting the model.}
   \item{y}{The model response, as returned from function \code{\link{bamlss.frame}}.}
@@ -63,12 +63,12 @@ cox.mode(x, y, start, weights, offset,
 }
 
 \seealso{
-  \code{\link{cox.mcmc}}, \code{\link{cox_bamlss}}, \code{\link{surv.transform}},
+  \code{\link{cox_mcmc}}, \code{\link{cox_bamlss}}, \code{\link{surv_transform}},
   \code{\link{simSurv}}, \code{\link{bamlss}}
 }
 
 \examples{
-## Please see the examples of function cox.mcmc()!
+## Please see the examples of function cox_mcmc()!
 }
 
 \keyword{regression}

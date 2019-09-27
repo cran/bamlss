@@ -1,7 +1,7 @@
 \name{bboost}
 \alias{bboost}
+\alias{bboost_plot}
 \alias{predict.bboost}
-\alias{bboost.plot}
 
 \title{Bootstrap Boosting}
 
@@ -16,7 +16,7 @@ bboost(..., data, type = 1, cores = 1,
   trace = TRUE, drop = FALSE, replace = FALSE)
 
 ## Plotting function.
-bboost.plot(object, col = NULL)
+bboost_plot(object, col = NULL)
 
 ## Predict method.
 \method{predict}{bboost}(object, newdata, ..., cores = 1, pfun = NULL)
@@ -78,7 +78,7 @@ fmstop <- function(model, data) {
 b <- bboost(f, data = d, n = 50, cores = 3, fmstop = fmstop)
 
 ## Plot hold out sample MSE.
-bboost.plot(b)
+bboost_plot(b)
 
 ## Predict for each bootstrap sample.
 nd <- data.frame("x2" = seq(0, 1, length = 100))

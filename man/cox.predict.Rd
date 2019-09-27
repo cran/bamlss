@@ -1,20 +1,20 @@
-\name{cox.predict}
-\alias{cox.predict}
+\name{cox_predict}
+\alias{cox_predict}
 
 \title{
   Cox Model Prediction
 }
 
 \description{
-  This function takes a fitted Cox model, i.e., a model estimated by \code{\link{cox.mode}}
-  or \code{\link{cox.mcmc}} and computes predictions given a new data set or the
+  This function takes a fitted Cox model, i.e., a model estimated by \code{\link{cox_mode}}
+  or \code{\link{cox_mcmc}} and computes predictions given a new data set or the
   original values. Survival probabilities are computed using numerical integration, therefore,
   computation may take some time. To avoid problems with computer memory, the prediction
   of survival probabilities can be split into chunks and computed parallel on different cores.
 }
 
 \usage{
-cox.predict(object, newdata,
+cox_predict(object, newdata,
   type = c("link", "parameter", "probabilities"),
   FUN = function(x) { mean(x, na.rm = TRUE) },
   time = NULL, subdivisions = 100, cores = NULL,
@@ -23,7 +23,7 @@ cox.predict(object, newdata,
 
 \arguments{
   \item{object}{A \code{"bamlss"} object as returned from function \code{\link{bamlss}}
-    using the optimizer \code{\link{cox.mode}} or sampler function \code{\link{cox.mcmc}}.}
+    using the optimizer \code{\link{cox_mode}} or sampler function \code{\link{cox_mcmc}}.}
   \item{newdata}{A data frame or list containing the values of the model
     covariates at which predictions are required. If missing \code{newdata} is the
     \code{model.frame} of the provided model.}
@@ -50,7 +50,7 @@ cox.predict(object, newdata,
 }
 
 \seealso{
-  \code{\link{cox.mcmc}}, \code{\link{cox_bamlss}}, \code{\link{surv.transform}},
+  \code{\link{cox_mcmc}}, \code{\link{cox_bamlss}}, \code{\link{surv_transform}},
   \code{\link{simSurv}}, \code{\link{bamlss}}, \code{\link{predict.bamlss}}
 }
 
@@ -72,8 +72,8 @@ f <- list(
 ## Note the the family object cox_bamlss() sets
 ## the default optimizer and sampler function!
 ## First, posterior mode estimates are computed
-## using function cox.mode(), afterwards the
-## sampler cox.mcmc() is started.
+## using function cox_mode(), afterwards the
+## sampler cox_mcmc() is started.
 b <- bamlss(f, family = "cox", data = d)
 
 ## Predict survival probabilities P(T > t).

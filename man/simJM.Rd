@@ -121,7 +121,7 @@ rJM(hazard, censoring, x, r,
 }
 
 \seealso{
-  \code{\link{jm_bamlss}}, \code{\link{jm.mode}}, \code{\link{jm.mcmc}}, \code{\link{bamlss}}.
+  \code{\link{jm_bamlss}}, \code{\link{jm_mode}}, \code{\link{jm_mcmc}}, \code{\link{bamlss}}.
 }
 
 \examples{

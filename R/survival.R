@@ -12,11 +12,11 @@ cox_bamlss <- function(...)
     "names" = c("lambda", "gamma"),
     "links" = c(lambda = "log", gamma = "log"),
     "transform" = function(x, ...) {
-      surv.transform(x = x$x, y = x$y, data = model.frame(x), family = x$family, is.cox = TRUE, ...)
+      surv_transform(x = x$x, y = x$y, data = model.frame(x), family = x$family, is.cox = TRUE, ...)
     },
-    "optimizer" = cox.mode,
-    "sampler" = cox.mcmc,
-    "predict" = cox.predict
+    "optimizer" = cox_mode,
+    "sampler" = cox_mcmc,
+    "predict" = cox_predict
   )
 
   class(rval) <- "family.bamlss"
@@ -24,7 +24,7 @@ cox_bamlss <- function(...)
 }
 
 ## Posterior mode estimation.
-cox.mode <- function(x, y, start, weights, offset, criterion = c("AICc", "BIC", "AIC"),
+cox_mode <- function(x, y, start, weights, offset, criterion = c("AICc", "BIC", "AIC"),
   nu = 0.1, update.nu = TRUE, eps = .Machine$double.eps^0.25, maxit = 400,
   verbose = TRUE, digits = 4, ...)
 {
@@ -360,7 +360,7 @@ update_surv_tc <- function(x, y, eta, eeta, int, criterion, edf, ...)
 
 ## The MCMC sampling engine.
 ## Posterior mode estimation.
-cox.mcmc <- function(x, y, family, start, weights, offset,
+cox_mcmc <- function(x, y, family, start, weights, offset,
   n.iter = 1200, burnin = 200, thin = 1,
   verbose = TRUE, digits = 4, step = 20, ...)
 {
@@ -811,7 +811,7 @@ simSurv <- function(n = 300)
 
 
 ## Survival models transformer function.
-surv.transform <- function(x, y, data, family,
+surv_transform <- function(x, y, data, family,
   subdivisions = 100, timedependent = "lambda",
   timevar = NULL, idvar = NULL, is.cox = FALSE, alpha = 0.1, ...)
 {
@@ -1140,7 +1140,7 @@ survint <- function(X, eta, width, gamma, eta2 = NULL, index = NULL, dX = NULL, 
 
 
 ## Survival probabilities.
-cox.predict <- function(object, newdata, type = c("link", "parameter", "probabilities"),
+cox_predict <- function(object, newdata, type = c("link", "parameter", "probabilities"),
   FUN = function(x) { mean(x, na.rm = TRUE) }, time = NULL, subdivisions = 100, cores = NULL,
   chunks = 1, verbose = FALSE, ...)
 {

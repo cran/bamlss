@@ -16,7 +16,7 @@ plot2d(x, residuals = FALSE, rug = FALSE, jitter = TRUE,
   col.rug = NULL, c.select = NULL, fill.select = NULL, 
   data = NULL, sep = "", month = NULL, year = NULL,
   step = 12, shift = NULL, trans = NULL,
-  scheme = 1, s2.col = NULL, grid = 50, ...)
+  scheme = 2, s2.col = NULL, grid = 50, ...)
 }
 
 \arguments{

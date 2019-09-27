@@ -1,0 +1,363 @@
+---
+title: "A Lego Toolbox for Flexible Bayesian Regression (and Beyond)"
+author: "Nikolaus Umlauf, Nadja Klein, Achim Zeileis, Thorsten Simon"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+bibliography: bamlss.bib
+nocite: '@bamlss:Umlauf+bamlss:2018'
+vignette: >
+  %\VignetteIndexEntry{First Steps}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteDepends{bamlss}
+  %\VignetteKeywords{distributional regression, first steps}
+  %\VignettePackage{bamlss}
+---
+
+```{r preliminaries, echo=FALSE, message=FALSE, results="hide"}
+library("bamlss")
+prefix <- "http://bayesr.R-Forge.R-project.org/articles/" ## ""
+prefix2 <- "http://bayesr.R-Forge.R-project.org/reference/" ## ""
+```
+
+## Overview
+
+The R package _bamlss_ provides a modular computational framework for flexible Bayesian
+regression models (and beyond). The implementation follows the conceptional framework presented in
+@bamlss:Umlauf+Klein+Zeileis:2017 and provides a modular "Lego toolbox" for setting
+up regression models. In this setting not only the response distribution or the regression terms
+are "Lego bricks" but also the estimation algorithm or the MCMC sampler.
+
+The highlights of the package are:  
+
+* The usual R "look & feel" for regression modeling.
+* Estimation of classic (GAM-type) regression models (Bayesian or frequentist).
+* Estimation of flexible (GAMLSS-type) distributional regression models.
+* An extensible "plug & play" approach for regression terms.
+* Modular combinations of fitting algorithms and samplers.
+
+Especially the last item is notable because the models in _bamlss_ are not limited to
+a specific estimation algorithm but different engines can be plugged in without necessitating
+changes in other aspects of the model specification.
+
+More detailed overviews and examples are provided in the articles:
+
+* [Available Model Terms](`r prefix`terms.html)
+* [BAMLSS Families](`r prefix`families.html)
+* [BAMLSS Model Frame](`r prefix`bf.html)
+* [Estimation Engines](`r prefix`engines.html)
+* [Visualization with distreg.vis](`r prefix`distregvis.html)
+
+* [Bayesian Joint Models for Longitudinal and Survival Data](`r prefix`jm.html)
+* [Bayesian Multinomial Regression](`r prefix`multinomial.html)
+* [Bivariate Gaussian models for wind vectors](`r prefix`bivnorm.html)
+* [Complex Space-Time Interactions in a Cox Model](`r prefix`cox.html)
+* [Generalized Linear Models (+)](`r prefix`glm.html)
+* [LASSO-Type Penalization in the Framework of Generalized Additive Models for Location, Scale and Shape](`r prefix`lasso.html)
+* [Munich Rent Model](`r prefix`rent.html)
+* [Spatial Location-Scale Model](`r prefix`zn.html)
+
+
+## Installation
+
+The stable release version of _bamlss_ is hosted on the Comprehensive R Archive Network
+(CRAN) at <https://CRAN.R-project.org/package=bamlss> and can be installed via
+
+```{r installation-cran, eval=FALSE}
+install.packages("bamlss")
+```
+
+The development version of _bamlss_ is hosted on R-Forge at
+<https://R-Forge.R-project.org/projects/bayesr/> in a Subversion (SVN) repository.
+It can be installed via
+
+```{r installation-rforge, eval=FALSE}
+install.packages("bamlss", repos = "http://R-Forge.R-project.org")
+```
+
+## Basic Bayesian regression
+
+This section gives a first quick overview of the functionality of the package and
+demonstrates that the usual "look & feel" when using well-established model fitting 
+functions like `glm()` is an elementary part of _bamlss_, i.e., first steps and
+basic handling of the package should be relatively simple. We illustrate the first steps
+with _bamlss_ using a data set taken from the _Regression Book_ [@bamlss:Fahrmeir+Kneib+Lang+Marx:2013]
+which is about prices of used VW Golf cars. The data is loaded with
+```{r}
+data("Golf", package = "bamlss")
+head(Golf)
+```
+In this example the aim is to model the `price` in 1000 Euro. Using _bamlss_ a first Bayesian
+linear model could be set up by first specifying a model formula
+```{r}
+f <- price ~ age + kilometer + tia + abs + sunroof
+```
+afterwards the fully Bayesian model using MCMC simulation is estimated by
+```{r, message=FALSE, results="hide"}
+library("bamlss")
+
+set.seed(111)
+
+b1 <- bamlss(f, family = "gaussian", data = Golf)
+```
+Note that the default number of iterations for the MCMC sampler is 1200, the burnin-phase is 200 and
+thinning is 1 (see the manual of the default MCMC sampler <code>[GMCMC()](`r prefix2`GMCMC.html)</code>).
+The reason is that during the modeling process, users usually want to obtain first
+results rather quickly. Afterwards, if a final model is estimated the number of iterations of the
+sampler is usually set much higher to get close to i.i.d. samples from the posterior distribution.
+To obtain reasonable starting values for the MCMC sampler we run a backfitting algorithm that
+optimizes the posterior mode. The _bamlss_ package uses its own family objects, which can be
+specified as characters using the <code>[bamlss()](`r prefix2`bamlss.html)</code> wrapper, in this
+case `family = "gaussian"` (see also [BAMLSS Families](`r prefix`families.html)). In addition, the
+package also supports all families provided from the
+[_gamlss_ families](https://cran.r-project.org/package=gamlss.dist "CRAN gamlss.dist").
+
+The model summary gives
+```{r}
+summary(b1)
+```
+indicating high acceptance rates as reported by the `alpha` parameter in the linear model
+output, which is a sign of good mixing of the MCMC chains. The mixing can also be inspected
+graphically by
+```{r, eval=FALSE}
+plot(b1, which = "samples")
+```
+```{r, fig.width = 9, fig.height = 5, fig.align = "center", echo = FALSE, dev = "png", results = 'hide', message=FALSE}
+bsp <- b1
+bsp$samples <- bsp$samples[, c("mu.p.(Intercept)", "sigma.p.(Intercept)")]
+plot(bsp, which = "samples")
+```
+Note, for convenience we only show the traceplots of the intercepts. Considering significance of the
+estimated effects, only variables `tia` and `sunroof` seem to have no effect on `price` since the
+credible intervals of estimated parameters contain zero. This information can also be extracted
+using the implemented `confint()` method.
+```{r}
+confint(b1, prob = c(0.025, 0.975))
+```
+
+Since the prices cannot be negative, a possible consideration is to use a logarithmic transformation
+of the response `price`
+```{r, message=FALSE, results="hide"}
+set.seed(111)
+
+f <- log(price) ~ age + kilometer + tia + abs + sunroof
+
+b2 <- bamlss(f, family = "gaussian", data = Golf)
+```
+and compare the models using the <code>[DIC()](`r prefix2`DIC.html)</code>
+```{r}
+DIC(b1, b2)
+```
+indicating that the transformation seems to improve the model fit.
+
+Instead of using linear effects, another option would be to use polynomial regression for
+covariates `age`, `kilometer` and `tia`. A polynomial model using polynomials of order 3
+is estimated with
+```{r, message=FALSE, results="hide"}
+set.seed(222)
+
+f <- log(price) ~ poly(age, 3) + poly(kilometer, 3) + poly(tia, 3) + abs + sunroof
+
+b3 <- bamlss(f, family = "gaussian", data = Golf)
+```
+Comparing the models using the <code>[DIC()](`r prefix2`DIC.html)</code> function
+```{r}
+DIC(b1, b2, b3)
+```
+suggests that the polynomial model is not really an improvement, however, this is probably caused
+by an insignificant `tia` effect. The effects can be inspected graphically, to better understand
+their influence on `price`. Using the polynomial model, graphical inspections can be done using
+the `predict()` method.
+
+One major difference compared to other regression model implementations is that predictions can be
+made for single variables, only, where the user does not have to create a new data frame containing
+all variables. For example, posterior mean estimates and 95% credible intervals for variable `age`
+can be obtained by
+```{r}
+nd <- data.frame("age" = seq(min(Golf$age), max(Golf$age), length = 100))
+
+nd$page <- predict(b3, newdata = nd, model = "mu", term = "age",
+  FUN = c95, intercept = FALSE)
+
+head(nd)
+```
+Note that the prediction does not include the model intercept. Similarly for variables `kilometer`
+and `tia`
+```{r}
+nd$kilometer <- seq(min(Golf$kilometer), max(Golf$kilometer), length = 100)
+nd$tia <- seq(min(Golf$tia), max(Golf$tia), length = 100)
+
+nd$pkilometer <- predict(b3, newdata = nd, model = "mu", term = "kilometer",
+  FUN = c95, intercept = FALSE)
+nd$ptia <- predict(b3, newdata = nd, model = "mu", term = "tia",
+  FUN = c95, intercept = FALSE)
+```
+Here, we need to specify for which `model` predictions should be calculated, and if predictions
+only for variable `age` are created, argument `term` needs also be specified.
+Argument `FUN` can be any function that should be applied on the samples of the linear predictor.
+For more examples see the documentation of the
+<code>[predict.bamlss()](`r prefix2`predict.bamlss.html)</code> method.
+
+Then, the estimated effects can be visualized with
+```{r, eval=FALSE}
+par(mfrow = c(1, 3))
+ylim <- range(c(nd$page, nd$pkilometer, nd$ptia))
+plot2d(page ~ age, data = nd, ylim = ylim)
+plot2d(pkilometer ~ kilometer, data = nd, ylim = ylim)
+plot2d(ptia ~ tia, data = nd, ylim = ylim)
+```
+```{r, fig.width = 8, fig.height = 2.4, fig.align = "center", dev = "png", results='hide', message=FALSE, echo=FALSE, out.width="100%"}
+par(mfrow = c(1, 3), mar = c(4.1, 4.1, 0.1, 1.1))
+ylim <- range(c(nd$page, nd$pkilometer, nd$ptia))
+plot2d(page ~ age, data = nd, ylim = ylim)
+plot2d(pkilometer ~ kilometer, data = nd, ylim = ylim)
+plot2d(ptia ~ tia, data = nd, ylim = ylim)
+```
+The figure clearly shows the negative effect on the logarithmic `price` for variable `age` and
+`kilometer`. The effect of `tia` is not significant according the 95% credible intervals, since
+the interval always contains the zero horizontal line.
+
+
+## Location-scale model
+
+```{r preliminaries2, echo=FALSE, message=FALSE, results="hide"}
+data("mcycle", package = "MASS")
+f <- list(accel ~ s(times, k = 20), sigma ~ s(times, k = 20))
+set.seed(123)
+b <- bamlss(f, data = mcycle, family = "gaussian")
+```
+
+As a second startup on how to use _bamlss_ for full distributional regression, we illustrate the basic
+steps on a small textbook example using the well-known simulated motorcycle accident
+data [@bamlss:Silverman:1985]. The data contain measurements of the head acceleration
+(in $g$, variable `accel`) in a simulated motorcycle accident, recorded in milliseconds after
+impact (variable `times`).
+```{r}
+data("mcycle", package = "MASS")
+head(mcycle)
+```
+To estimate a Gaussian location-scale model with
+$$
+\texttt{accel} \sim \mathcal{N}(\mu = f(\texttt{times}), \log(\sigma) = f(\texttt{times}))
+$$
+we use the following model formula
+```{r}
+f <- list(accel ~ s(times, k = 20), sigma ~ s(times, k = 20))
+```
+where `s()` is the smooth term constructor from the _mgcv_ [@bamlss:Wood:2018]. Note,
+that formulae are provided as `list`s of formulae, i.e., each list entry represents one
+parameter of the response distribution. Also note that all
+smooth terms, i.e., `te()`, `ti()`, etc., are supported by _bamlss_. This way, it is also
+possible to incorporate user defined model terms. A fully Bayesian model is the
+estimated with
+```{r, eval=FALSE}
+set.seed(123)
+
+b <- bamlss(f, data = mcycle, family = "gaussian")
+```
+using the default of 1200 iterations of the MCMC sampler to obtain first results quickly (see
+the documentation <code>[GMCMC()](`r prefix2`GMCMC.html)</code> for further details on tuning
+parameters). Note that per default <code>[bamlss()](`r prefix2`bamlss.html)</code> uses a
+backfitting algorithm to compute posterior mode estimates, afterwards these estimates are used as
+starting values for the MCMC chains.
+The returned object is of class `"bamlss"` for which generic extractor functions like
+`summary()`, `plot()`, `predict()`, etc., are provided. For example, the estimated effects
+for distribution parameters `mu` and `sigma` can be visualized by
+```{r, eval=FALSE}
+plot(b, model = c("mu", "sigma"))
+```
+```{r, fig.width = 7, fig.height = 3, fig.align = "center", echo = FALSE, dev = "png", results = 'hide', message=FALSE, out.width="80%"}
+par(mar = c(4.1, 4.1, 1.1, 1.1), mfrow = c(1, 2))
+plot(b, pages = 1, spar = FALSE, scheme = 2, grid = 100)
+```
+The model summary gives
+```{r}
+summary(b)
+```
+showing, e.g., the acceptance probabilities of the MCMC chains (`alpha`), the estimated degrees of freedom of
+the optimizer and the successive sampler (`edf`), the final AIC and DIC as well as parametric
+model coefficients (in this case only the intercepts). As mentioned in the first example, using MCMC
+involves convergence checks of the sampled parameters. The easiest diagnostics are traceplots
+```{r, eval=FALSE}
+plot(b, which = "samples")
+```
+```{r, fig.width = 9, fig.height = 5, fig.align = "center", echo = FALSE, dev = "png", results = 'hide', message=FALSE}
+bsp <- b
+bsp$samples <- bsp$samples[, c("mu.p.(Intercept)", "sigma.p.(Intercept)")]
+plot(bsp, which = "samples")
+```
+Note again that this call would show all traceplots, for convenience we only show the plots for the intercepts.
+In this case, the traceplots do not indicate convergence of the Markov chains for parameter `"mu"`.
+To fix this, the number of iterations can be increased and also the burnin and thinning parameters
+can be adapted (see <code>[GMCMC()](`r prefix2`GMCMC.html)</code>). Further inspections are the
+maximum autocorrelation of all parameters, using <code>[plot.bamlss()](`r prefix2`plot.bamlss.html)</code>
+setting argument `which = "max-acf"`, besides other convergence diagnostics, e.g., diagnostics that
+are part of the _coda_ package [@bamlss:Plummer+Best+Cowles+Vines:2006].
+
+Inspecting randomized quantile residuals [@bamlss:Dunn+Gordon:1996] is useful for judging how
+well the model fits to the data
+```{r, eval = FALSE}
+plot(b, which = c("hist-resid", "qq-resid"))
+```
+```{r, fig.width = 7.5, fig.height = 4, fig.align = "center", echo = FALSE, dev = "png", results = 'hide', message=FALSE, out.width="80%"}
+par(mfrow = c(1, 2))
+plot(b, which = c("hist-resid", "qq-resid"), spar = FALSE)
+```
+Randomized quantile residuals are the default method in _bamlss_, which are computed using
+the CDF function of the corresponding family object.
+
+The posterior mean including 95% credible intervals for new data based on MCMC samples for
+parameter $\mu$ can be computed by
+```{r, eval=FALSE}
+nd <- data.frame("times" = seq(2.4, 57.6, length = 100))
+nd$ptimes <- predict(b, newdata = nd, model = "mu", FUN = c95)
+plot2d(ptimes ~ times, data = nd)
+```
+```{r, fig.width = 5, fig.height = 4, fig.align = "center", dev = "png", results='hide', message=FALSE, echo=FALSE, out.width="50%"}
+par(mar = c(4.1, 4.1, 1.1, 1.1))
+nd <- data.frame("times" = seq(2.4, 57.6, length = 100))
+nd$ptimes <- predict(b, newdata = nd, model = "mu", FUN = c95)
+plot2d(ptimes ~ times, data = nd)
+```
+and as above in the first example, argument `FUN` can be any function, e.g., the `identity()`
+function could be used to calculate other statistics of the distribution, e.g., plot
+the estimated densities for each iteration of the MCMC sampler for `times = 10` and `times = 40`:
+```{r, fig.width = 5, fig.height = 4, fig.align = "center", dev = "png", out.width="50%"}
+## Predict for the two scenarios.
+nd <- data.frame("times" = c(10, 40))
+ptimes <- predict(b, newdata = nd, FUN = identity, type = "parameter")
+
+## Extract the family object.
+fam <- family(b)
+
+## Compute densities.
+dens <- list("t10" = NULL, "t40" = NULL)
+for(i in 1:ncol(ptimes$mu)) {
+  ## Densities for times = 10.
+  par <- list(
+    "mu" = ptimes$mu[1, i, drop = TRUE],
+    "sigma" = ptimes$sigma[1, i, drop = TRUE]
+  )
+  dens$t10 <- cbind(dens$t10, fam$d(mcycle$accel, par))
+
+  ## Densities for times = 40.
+  par <- list(
+    "mu" = ptimes$mu[2, i, drop = TRUE],
+    "sigma" = ptimes$sigma[2, i, drop = TRUE]
+  )
+  dens$t40 <- cbind(dens$t40, fam$d(mcycle$accel, par))
+}
+
+## Visualize.
+par(mar = c(4.1, 4.1, 0.1, 0.1))
+col <- rainbow_hcl(2, alpha = 0.01)
+plot2d(dens$t10 ~ accel, data = mcycle,
+  col.lines = col[1], ylab = "Density")
+plot2d(dens$t40 ~ accel, data = mcycle,
+  col.lines = col[2], add = TRUE)
+```
+
+## References
+

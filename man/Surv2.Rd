@@ -22,12 +22,12 @@ Surv2(..., obs = NULL)
 }
 
 \seealso{
-  \code{\link{jm.mode}}, \code{\link{jm.mcmc}}, \code{\link{bamlss}}
+  \code{\link{jm_mode}}, \code{\link{jm_mcmc}}, \code{\link{bamlss}}
 }
 
 \examples{
 ## Surv2(time, event, obs = y)
-## See the examples of jm.mode() and jm.mcmc()!
+## See the examples of jm_mode() and jm_mcmc()!
 }
 
 \keyword{regression}

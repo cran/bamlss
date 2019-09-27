@@ -69,10 +69,10 @@ export(
   "BayesX.control",
   "get_BayesXsrc",
   "MVNORM",
-  "surv.transform",
-  "cox.mode",
-  "cox.mcmc",
-  "cox.predict",
+  "surv_transform",
+  "cox_mode",
+  "cox_mcmc",
+  "cox_predict",
 
   ## engine setup functions
   "randomize",
@@ -125,16 +125,17 @@ export(
 
   ## JM
   "jm_bamlss",
-  "jm.mode",
-  "jm.mcmc",
+  "jm_mode",
+  "jm_mcmc",
   "simJM",
   "rJM",
-  "jm.survplot",
-  "jm.predict",
+  "jm_survplot",
+  "jm_predict",
 
   ## others
   "GAMart",
   "Volcano",
+  "Crazy",
   "Surv2",
   "c95",
   "s2",
@@ -163,15 +164,15 @@ export(
   ## boosting/lasso
   "boost",
   "boostm",
-  "boost.summary",
-  "boost.plot",
-  "boost.frame",
+  "boost_summary",
+  "boost_plot",
+  "boost_frame",
   "la",
   "lasso",
-  "lasso.plot",
-  "lasso.stop",
-  "lasso.coef",
-  "lasso.transform",
+  "lasso_plot",
+  "lasso_stop",
+  "lasso_coef",
+  "lasso_transform",
 
   ## neural nets
   "n",
@@ -205,7 +206,12 @@ export(
   "bayesx2",
   "bboost",
   "predict.bboost",
-  "bboost.plot"
+  "bboost_plot",
+  "pathplot",
+
+  ## misc
+  "response_name",
+  "smooth_check"
 )
 
 S3method("plot", "bamlss")
@@ -222,13 +228,13 @@ S3method("print", "summary.bamlss")
 S3method("print", "family.bamlss")
 S3method("print", "bamlss.frame")
 S3method("print", "bamlss")
-S3method("print", "boost.summary")
+S3method("print", "boost_summary")
 S3method("print", "bamlss.formula")
 S3method("print", "stabsel")
 S3method("print", "summary.stabsel")
-S3method("plot", "boost.summary")
+S3method("plot", "boost_summary")
 S3method("predict", "bamlss")
-S3method("predict", "boost.frame")
+S3method("predict", "boost_frame")
 S3method("fitted", "bamlss")
 S3method("logLik", "bamlss")
 S3method("DIC", "bamlss")

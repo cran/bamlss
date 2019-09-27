@@ -3414,6 +3414,17 @@ ztnbinom_bamlss <- function(...) {
     )
   )
 
+  rval$rps <- function(y, par) {
+    K <- sort(unique(y))
+    rps <- 0
+    for(k in K) {
+      P <- rval$p(k, par)
+      O <- y <= k
+      rps <- rps + (P - O)^2
+    }
+    return(rps)
+  }
+
   class(rval) <- "family.bamlss"
   rval
 }
@@ -4811,4 +4822,24 @@ gpareto2_bamlss <- function(...)
   class(rval) <- "family.bamlss"
   rval
 }
+
+
+#ipp_bamlss <- function(...)
+#{
+#  rval <- list(
+#    "family" = "IPP",
+#    "names" = "lambda",
+#    "links" = c(lambda = "identity"),
+#    "d" = function(y, par, ...) {
+#      f <- function(x,y) {
+#        exp(par$lambda)
+#      }
+#      intL <- rmutil::int2(f, a=c(0,0), b=c(1,1))
+#      return(par$lambda - intL)
+#    }
+#  )
+
+#  class(rval) <- "family.bamlss"
+#  rval
+#}
 

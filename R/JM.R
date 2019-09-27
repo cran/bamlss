@@ -13,10 +13,10 @@ jm_bamlss <- function(...)
     "links" = links,
     "transform" = function(x, jm.start = NULL, timevar = NULL, idvar = NULL, init.models = FALSE, 
                            plot = FALSE, nonlinear = FALSE, edf_alt = FALSE, start_mu = NULL, k_mu = 6, ...) {
-      rval <- jm.transform(x = x$x, y = x$y, terms = x$terms, knots = x$knots,
-                           formula = x$formula, family = x$family, data = x$model.frame,
-                           jm.start = jm.start, timevar = timevar, idvar = idvar, 
-                           nonlinear = nonlinear, edf_alt = edf_alt, start_mu = start_mu, k_mu = k_mu, ...)
+      rval <- jm_transform(x = x$x, y = x$y, terms = x$terms, knots = x$knots,
+                formula = x$formula, family = x$family, data = x$model.frame,
+                jm.start = jm.start, timevar = timevar, idvar = idvar, 
+                nonlinear = nonlinear, edf_alt = edf_alt, start_mu = start_mu, k_mu = k_mu, ...)
       if(init.models) {
         x2 <- rval$x[c("mu", "sigma")]
         for(i in names(x2)) {
@@ -38,7 +38,7 @@ jm_bamlss <- function(...)
         attr(y, "width") <- attr(rval$y[[1]], "width")
         attr(y, "subdivisions") <- attr(rval$y[[1]], "subdivisions")
         cat2("generating starting model for survival part...\n")
-        spar <- cox.mode(x = x2, y = list(y), family = gF2("cox"),
+        spar <- cox_mode(x = x2, y = list(y), family = gF2("cox"),
                          start = NULL, maxit = 100)$parameters
         if(plot) {
           b <- list("x" = x2, "model.frame" = x$model.frame, "parameters" = spar)
@@ -50,9 +50,9 @@ jm_bamlss <- function(...)
       
       return(rval)
     },
-    "optimizer" = jm.mode,
-    "sampler" = jm.mcmc,
-    "predict" = jm.predict
+    "optimizer" = jm_mode,
+    "sampler" = jm_mcmc,
+    "predict" = jm_predict
   )
   
   class(rval) <- "family.bamlss"
@@ -61,10 +61,10 @@ jm_bamlss <- function(...)
 
 
 ## (2) The transformer function.
-jm.transform <- function(x, y, data, terms, knots, formula, family,
-                         subdivisions = 25, timedependent = c("lambda", "mu", "alpha", "dalpha"), 
-                         timevar = NULL, idvar = NULL, alpha = .Machine$double.eps, mu = NULL, sigma = NULL,
-                         sparse = TRUE, nonlinear = FALSE, edf_alt = FALSE, start_mu = NULL, k_mu = 6, ...)
+jm_transform <- function(x, y, data, terms, knots, formula, family,
+  subdivisions = 25, timedependent = c("lambda", "mu", "alpha", "dalpha"), 
+  timevar = NULL, idvar = NULL, alpha = .Machine$double.eps, mu = NULL, sigma = NULL,
+  sparse = TRUE, nonlinear = FALSE, edf_alt = FALSE, start_mu = NULL, k_mu = 6, ...)
 {
   rn <- names(y)
   y0 <- y
@@ -201,13 +201,13 @@ jm.transform <- function(x, y, data, terms, knots, formula, family,
   for(j in c("lambda", "gamma", "alpha", if(dalpha) "dalpha" else NULL)) {
     if(nonlinear & (j =="alpha")){
       x[[j]]<- design.construct(terms, data = data[take_last, , drop = FALSE], knots = list(mu = k),
-                                model.matrix = TRUE, smooth.construct = TRUE, model = j,
-                                scale.x = FALSE, absorb.cons = TRUE, C = C)[[j]]
+                 model.matrix = TRUE, smooth.construct = TRUE, model = j,
+                 scale.x = FALSE, absorb.cons = TRUE, C = C)[[j]]
     } else {
-    x[[j]]<- design.construct(terms, data = data[take, , drop = FALSE], knots = knots,
-                              model.matrix = TRUE, smooth.construct = TRUE, model = j,
-                              scale.x = FALSE)[[j]]
-  }
+      x[[j]]<- design.construct(terms, data = data[take, , drop = FALSE], knots = knots,
+                 model.matrix = TRUE, smooth.construct = TRUE, model = j,
+                 scale.x = FALSE)[[j]]
+    }
   }
   
   ## Degrees of freedom to 1 for lambda, gamma and alpha smooths.
@@ -287,7 +287,6 @@ jm.transform <- function(x, y, data, terms, knots, formula, family,
   }
   
   ## Assign time grid predict functions.
-
   for(i in seq_along(ntd)) {
     if(has_pterms(x[[ntd[i]]]$terms)) {
       if(ntd[i] %in% c("lambda", if(nonlinear) "alpha")) {
@@ -479,11 +478,11 @@ sparse_Matrix_setup <- function(x, sparse = TRUE, force = FALSE, take, nonlinear
 }
 
 
-jm.mode <- function(x, y, start = NULL, weights = NULL, offset = NULL,
-                    criterion = c("AICc", "BIC", "AIC"), maxit = c(100, 1),
-                    nu = c("lambda" = 0.1, "gamma" = 0.1, "mu" = 0.1, "sigma" = 0.1, "alpha" = 0.1, "dalpha" = 0.1),
-                    update.nu = TRUE, eps = 0.0001, alpha.eps = 0.001, ic.eps = 1e-08, nback = 40,
-                    verbose = TRUE, digits = 4, ...)
+jm_mode <- function(x, y, start = NULL, weights = NULL, offset = NULL,
+  criterion = c("AICc", "BIC", "AIC"), maxit = c(100, 1),
+  nu = c("lambda" = 0.1, "gamma" = 0.1, "mu" = 0.1, "sigma" = 0.1, "alpha" = 0.1, "dalpha" = 0.1),
+  update.nu = FALSE, eps = 0.0001, alpha.eps = 0.001, ic.eps = 1e-08, nback = 40,
+  verbose = TRUE, digits = 4, ...)
 {
   ## Hard coded.
   fix.lambda <- FALSE
@@ -1885,9 +1884,9 @@ update_jm_dalpha <- function(x, eta, eta_timegrid,
 
 
 ## (5) Joint model MCMC.
-jm.mcmc <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
-                    n.iter = 1200, burnin = 200, thin = 1, verbose = TRUE, 
-                    digits = 4, step = 20, ...)
+jm_mcmc <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
+  n.iter = 1200, burnin = 200, thin = 1, verbose = TRUE, 
+  digits = 4, step = 20, ...)
 {
   ## Hard coded.
   fixed <- NULL
@@ -3750,7 +3749,7 @@ rJM <- function(hazard, censoring, x, r,
 
 
 ## Prediction.
-jm.predict <- function(object, newdata, type = c("link", "parameter", "probabilities", "cumhaz", "loglik"),
+jm_predict <- function(object, newdata, type = c("link", "parameter", "probabilities", "cumhaz", "loglik"),
                        dt, steps, id, FUN = function(x) { mean(x, na.rm = TRUE) }, subdivisions = 100, cores = NULL,
                        chunks = 1, verbose = FALSE,  ...)
 {
@@ -4049,7 +4048,7 @@ jm.predict <- function(object, newdata, type = c("link", "parameter", "probabili
 
 
 
-jm.survplot <- function(object, id = 1, dt = NULL, steps = 10, 
+jm_survplot <- function(object, id = 1, dt = NULL, steps = 10, 
                         points = TRUE, rug = !points)
 {
   on.exit(par(par(no.readonly = TRUE)))
@@ -4108,18 +4107,18 @@ jm.survplot <- function(object, id = 1, dt = NULL, steps = 10,
   par(mfrow = c(2, 1), mar = rep(0, 4),
       oma = c(4.1, 4.1, 1.1, 4.1))
   plot2d(p_surv ~ time, fill.select = c(0, 1, 0, 1),
-         scheme = 1, axes = FALSE, ylim = c(0, 1),
+         scheme = 2, axes = FALSE, ylim = c(0, 1),
          xlim = c(0, maxtime), s2.col = s2.col, xlab = "", ylab = "")
   abline(v = tmax, lty = 2)
   axis(2)
   box()
   mtext("Prob(T > t + dt |T > t)", side = 2, line = 2.5)
   plot2d(p_long[time2 <= tmax, ] ~ time2[time2 <= tmax], fill.select = c(0, 1, 0, 1),
-         scheme = 1, axes = FALSE, xlim = c(0, maxtime),
+         scheme = 2, axes = FALSE, xlim = c(0, maxtime),
          xlab = "", ylab = "",
          ylim = if(points) range(c(p_long, object$y[[1]][ii, "obs"])) else range(p_long))
   plot2d(p_long[time2 >= tmax, ] ~ time2[time2 >= tmax], fill.select = c(0, 1, 0, 1),
-         scheme = 1, axes = FALSE, add = TRUE, s2.col = s2.col,
+         scheme = 2, axes = FALSE, add = TRUE, s2.col = s2.col,
          xlab = "", ylab = "")
   abline(v = tmax, lty = 2)
   if(points)

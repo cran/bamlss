@@ -1,10 +1,10 @@
 \name{la}
 \alias{la}
 \alias{lasso}
-\alias{lasso.plot}
-\alias{lasso.stop}
-\alias{lasso.coef}
-\alias{lasso.transform}
+\alias{lasso_plot}
+\alias{lasso_stop}
+\alias{lasso_coef}
+\alias{lasso_transform}
 
 \title{Lasso Smooth Constructor}
 
@@ -25,20 +25,20 @@ lasso(x, y, start = NULL, adaptive = TRUE, lower = 0.001, upper = 1000,
 
 ## Lasso transformation function to set
 ## adaptive weights from an unpenalized model.
-lasso.transform(x, zeromodel, nobs = NULL, ...)
+lasso_transform(x, zeromodel, nobs = NULL, ...)
 
 ## Plotting function for lasso() optimizer.
-lasso.plot(x, which = c("criterion", "parameters"),
+lasso_plot(x, which = c("criterion", "parameters"),
   spar = TRUE, model = NULL, name = NULL, mstop = NULL,
   retrans = FALSE, color = NULL, show.lambda = TRUE,
   labels = NULL, digits = 2, ...)
 
 ## Extract optimum stopping iteration for lasso() optimizer.
 ## Based on the minimum of the information criterion.
-lasso.stop(x)
+lasso_stop(x)
 
 ## Extract retransformed Lasso coefficients.
-lasso.coef(x, ...)
+lasso_coef(x, ...)
 }
 
 \arguments{
@@ -46,10 +46,10 @@ lasso.coef(x, ...)
     penalized with Lasso.}
   \item{type}{Should one single penalty parameter be used or multiple parameters, one for each
     covariate in \code{formula}.}
-  \item{x}{For function \code{lasso()} and \code{lasso.transform()} the \code{x} list, as returned
+  \item{x}{For function \code{lasso()} and \code{lasso_transform()} the \code{x} list, as returned
     from function \code{\link{bamlss.frame}}, holding all model matrices and other information that
     is used for fitting the model. For the plotting function and
-    \code{lasso.stop()}/\code{lasso.coef()} the
+    \code{lasso_stop()}/\code{lasso_coef()} the
     corresponding \code{\link{bamlss}} object fitted with the \code{lasso()} optimizer.}
   \item{y}{The model response, as returned from function \code{\link{bamlss.frame}}.}
   \item{start}{A vector of starting values. Note, Lasso smoothing parameters will be dropped.}
@@ -64,7 +64,7 @@ lasso.coef(x, ...)
     each distributional parameter.}
   \item{verbose}{Print information during runtime of the algorithm.}
   \item{digits}{Set the digits for printing when \code{verbose = TRUE}. If the optimum lambda value
-    is plotted, the number of decimal decimal places to be used within \code{lasso.plot()}.}
+    is plotted, the number of decimal decimal places to be used within \code{lasso_plot()}.}
   \item{flush}{use \code{\link{flush.console}} for displaying the current output in the console.}
   \item{nu}{Numeric or logical. Defines the step length for parameter updating of a model term,
     useful when the algorithm encounters convergence problems. If \code{nu = TRUE} the step length
@@ -149,27 +149,27 @@ b1 <- bamlss(f, sampler = FALSE, optimizer = lasso,
   criterion = "BIC", zeromodel = b0)
 
 ## Plot information criterion and coefficient paths.
-lasso.plot(b1, which = 1)
-lasso.plot(b1, which = 2)
-lasso.plot(b1, which = 2, model = "mu", name = "mu.s.la(id).id")
-lasso.plot(b1, which = 2, model = "sigma", name = "sigma.s.la(id).id")
+lasso_plot(b1, which = 1)
+lasso_plot(b1, which = 2)
+lasso_plot(b1, which = 2, model = "mu", name = "mu.s.la(id).id")
+lasso_plot(b1, which = 2, model = "sigma", name = "sigma.s.la(id).id")
 
 ## Extract coefficients for optimum Lasso parameter.
-coef(b1, mstop = lasso.stop(b1))
+coef(b1, mstop = lasso_stop(b1))
 
 ## Predict with optimum Lasso parameter.
-p1 <- predict(b1, mstop = lasso.stop(b1))
+p1 <- predict(b1, mstop = lasso_stop(b1))
 
-## Full MCMC, needs lasso.transform() to assign the
+## Full MCMC, needs lasso_transform() to assign the
 ## adaptive weights from unpenalized model b0.
-b2 <- bamlss(f, optimizer = FALSE, transform = lasso.transform,
-  zeromodel = b0, nobs = length(y), start = coef(b1, mstop = lasso.stop(b1)),
+b2 <- bamlss(f, optimizer = FALSE, transform = lasso_transform,
+  zeromodel = b0, nobs = length(y), start = coef(b1, mstop = lasso_stop(b1)),
   n.iter = 4000, burnin = 1000)
 summary(b2)
 plot(b2)
 
 ci <- confint(b2, model = "mu", pterms = FALSE, sterms = TRUE)
-lasso.plot(b1, which = 2, model = "mu", name = "mu.s.la(id).id", spar = FALSE)
+lasso_plot(b1, which = 2, model = "mu", name = "mu.s.la(id).id", spar = FALSE)
 for(i in 1:8) {
   abline(h = ci[i, 1], lty = 2, col = "red")
   abline(h = ci[i, 2], lty = 2, col = "red")

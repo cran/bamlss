@@ -1,9 +1,10 @@
 Package: bamlss
-Version: 1.0-2
-Date: 2019-07-30
-Title: Bayesian Additive Models for Location Scale and Shape (and
+Version: 1.1-0
+Date: 2019-09-27
+Title: Bayesian Additive Models for Location, Scale, and Shape (and
         Beyond)
-Authors@R: c(person(given = "Nikolaus", family = "Umlauf", role = c("aut", "cre"), email = "Nikolaus.Umlauf@uibk.ac.at"),
+Authors@R: c(person(given = "Nikolaus", family = "Umlauf", role = c("aut", "cre"), email = "Nikolaus.Umlauf@uibk.ac.at",
+         comment = c(ORCID = "0000-0003-2160-9803")),
   person(given = "Nadja", family = "Klein", role = "aut", email = "nklein@uni-goettingen.de"),
   person(given = "Achim", family = "Zeileis", role = "aut", email = "Achim.Zeileis@R-project.org",
          comment = c(ORCID = "0000-0003-0918-3766")),
@@ -14,20 +15,23 @@ Authors@R: c(person(given = "Nikolaus", family = "Umlauf", role = c("aut", "cre"
 Description: Infrastructure for estimating probabilistic distributional regression models in a Bayesian framework.
   The distribution parameters may capture location, scale, shape, etc. and every parameter may depend
   on complex additive terms (fixed, random, smooth, spatial, etc.) similar to a generalized additive model.
-  The conceptual and computational framework is introduced in Umlauf, Klein, Zeileis (2018)
-  <doi:10.1080/10618600.2017.1407325>.
-Depends: R (>= 3.2.3), coda, colorspace, mgcv
+  The conceptual and computational framework is introduced in Umlauf, Klein, Zeileis (2019)
+  <doi:10.1080/10618600.2017.1407325> and the R package in Umlauf, Klein, Simon, Zeileis (2019)
+  <arXiv:1909.11784>.
+Depends: R (>= 3.5.0), coda, colorspace, mgcv
 Imports: Formula, MBA, mvtnorm, sp, Matrix, survival, methods, parallel
 Suggests: akima, bit, ff, ffbase, fields, gamlss, geoR, rjags, BayesX,
-        BayesXsrc, mapdata, maps, maptools, raster, spatstat, spdep,
-        zoo, keras, splines2, sdPrior, glogis, glmnet, scoringRules
+        BayesXsrc, R2BayesX, mapdata, maps, maptools, raster, spatstat,
+        spdep, zoo, keras, splines2, sdPrior, glogis, glmnet,
+        scoringRules, knitr, MASS
 License: GPL-2 | GPL-3
 LazyLoad: yes
 RoxygenNote: 6.1.1
-URL: http://bayesr.R-Forge.R-project.org
+URL: http://www.bamlss.org/
+VignetteBuilder: knitr
 NeedsCompilation: yes
-Packaged: 2019-07-30 07:55:18 UTC; nik
-Author: Nikolaus Umlauf [aut, cre],
+Packaged: 2019-09-27 08:26:56 UTC; nik
+Author: Nikolaus Umlauf [aut, cre] (<https://orcid.org/0000-0003-2160-9803>),
   Nadja Klein [aut],
   Achim Zeileis [aut] (<https://orcid.org/0000-0003-0918-3766>),
   Meike Koehler [ctb],
@@ -35,4 +39,4 @@ Author: Nikolaus Umlauf [aut, cre],
   Stanislaus Stadlmann [ctb]
 Maintainer: Nikolaus Umlauf <Nikolaus.Umlauf@uibk.ac.at>
 Repository: CRAN
-Date/Publication: 2019-07-30 21:30:09 UTC
+Date/Publication: 2019-09-27 09:10:10 UTC

@@ -1,5 +1,5 @@
-\name{cox.mcmc}
-\alias{cox.mcmc}
+\name{cox_mcmc}
+\alias{cox_mcmc}
 
 \title{
   Cox Model Markov Chain Monte Carlo
@@ -11,14 +11,14 @@
 }
 
 \usage{
-cox.mcmc(x, y, family, start, weights, offset,
+cox_mcmc(x, y, family, start, weights, offset,
   n.iter = 1200, burnin = 200, thin = 1,
   verbose = TRUE, digits = 4, step = 20, ...)
 }
 
 \arguments{
  \item{x}{The \code{x} list, as returned from function
-    \code{\link{bamlss.frame}} and transformed by function \code{\link{surv.transform}},
+    \code{\link{bamlss.frame}} and transformed by function \code{\link{surv_transform}},
     holding all model matrices and other information that is used for
     fitting the model.}
   \item{y}{The model response, as returned from function \code{\link{bamlss.frame}}.}
@@ -60,7 +60,7 @@ cox.mcmc(x, y, family, start, weights, offset,
 }
 
 \seealso{
-  \code{\link{cox.mcmc}}, \code{\link{cox_bamlss}}, \code{\link{surv.transform}},
+  \code{\link{cox_mcmc}}, \code{\link{cox_bamlss}}, \code{\link{surv_transform}},
   \code{\link{simSurv}}, \code{\link{bamlss}}
 }
 
@@ -82,8 +82,8 @@ f <- list(
 ## Note the the family object cox_bamlss() sets
 ## the default optimizer and sampler function!
 ## First, posterior mode estimates are computed
-## using function cox.mode(), afterwards the
-## sampler cox.mcmc() is started.
+## using function cox_mode(), afterwards the
+## sampler cox_mcmc() is started.
 b <- bamlss(f, family = "cox", data = d)
 
 ## Plot estimated effects.

@@ -3,26 +3,26 @@ stabsel <- function(formula, data, family = "gaussian",
                     thr = .9, fraction = .5, seed = NULL, ...) {
 
     ## --- Check parameters ---
-    if(is.null(q) & is.null(maxit)) {
+    if (is.null(q) && is.null(maxit)) {
         q <- ceiling(sqrt(ncol(data)))
     } else if(!is.null(q) & !is.null(maxit)) {
         stop("Error: Define either q or maxit. Not both.")
     }
-    if(is.null(maxit)){
+    if (is.null(maxit)){
         ## Set maxit to a very large number that cant be reached.
         maxit <- 10000
     }
     
-    if(fraction <= 0 | fraction >= 1) {
+    if (fraction <= 0 || fraction >= 1) {
         stop("Error: fraction must be between 0 and 1.")
     }
 
-    if(thr <= 0 | thr >= 1) {
+    if (thr <= 0 || thr >= 1) {
         stop("Error: Threshold (thr) must be between 0 and 1.")
     }
 
     ## --- set array of seeds ---
-    if(is.null(seed)) {
+    if (is.null(seed)) {
         seeds <- NULL
     } else {
         seeds <- as.integer(seed) + seq(B)
@@ -31,7 +31,7 @@ stabsel <- function(formula, data, family = "gaussian",
     ## --- Stability Selection ---
     ## TODO: parallel option
     stabselection <- NULL
-    for(i in seq(B)) {
+    for (i in seq(B)) {
         cat(sprintf("Stability selection boosting run %d / %d \r", i, B))
         xx <- StabStep(formula = formula, data = data,
                        family  = family, q = q, maxit = maxit, seed = seeds[i],
@@ -49,7 +49,7 @@ stabsel <- function(formula, data, family = "gaussian",
 
     ## --- Comupte per-family-error-rate ---
     p <- 0
-    for(i in seq(length(formula))) {
+    for (i in seq_along(formula)) {
         p <- p + length(attr(terms(formula[[i]]$formula), "term.labels"))
     }
     PFER <- (q^2) / ((2*thr - 1)*p)
@@ -78,8 +78,9 @@ StabStep <- function(formula, data, family = "gaussian", q, maxit, seed = NULL,
                 plot = FALSE, verbose = TRUE, ...)
 
     rval <- NULL
+
     for (model in b$family$names) {
-        boosum <- b$model.stats$optimizer$boost.summary$summary[[model]]
+        boosum <- b$model.stats$optimizer$boost_summary$summary[[model]]
         selterms <- rownames(boosum)[boosum[,1] > 0]
 
         ## ignore intercept

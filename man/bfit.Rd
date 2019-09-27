@@ -251,7 +251,7 @@ smooth.construct.gc.smooth.spec <- function(object, data, knots)
   object$X <- matrix(as.numeric(data[[object$term]]), ncol = 1)
   center <- if(!is.null(object$xt$center)) {
     object$xt$center
-  } else FALSE
+  } else TRUE
   object$by.done <- TRUE
   if(object$by != "NA")
     stop("by variables not supported!")
@@ -281,16 +281,16 @@ Predict.matrix.gc.smooth <- function(object, data, knots)
 }
 
 ## Heteroscedastic growth curve data example.
-set.seed(123)
+set.seed(111)
 
 d <- data.frame("time" = 1:30)
 d$y <- 2 + 1 / (1 + exp(0.5 * (15 - d$time))) +
-  rnorm(30, sd = exp(-4 + 0.1 * d$time))
+  rnorm(30, sd = exp(-3 + 2 * cos(d$time/30 * 6 - 3)))
 
 ## Special model terms must be called with s2()!
 f <- list(
-  "mu" = y ~ s2(time, bs = "gc"),
-  "sigma" = ~ s(time)
+  y ~ s2(time, bs = "gc"),
+  sigma ~ s(time)
 )
 
 ## Fit model with special model term.

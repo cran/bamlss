@@ -2,7 +2,7 @@ plot2d <- function(x, residuals = FALSE, rug = FALSE, jitter = TRUE,
   col.residuals = NULL, col.lines = NULL, col.polygons = NULL, 
   col.rug = NULL, c.select = NULL, fill.select = NULL, data = NULL,
   sep = "", month = NULL, year = NULL, step = 12,
-  shift = NULL, trans = NULL, scheme = 1, s2.col = NULL, grid = 50, ...)
+  shift = NULL, trans = NULL, scheme = 2, s2.col = NULL, grid = 50, ...)
 {
   rugp <- attr(x, "rug")
   if(is.null(x))
@@ -23,7 +23,17 @@ plot2d <- function(x, residuals = FALSE, rug = FALSE, jitter = TRUE,
         data <- as.data.frame(data)
     if(any(grep("+", as.character(x)[2L]))) {
       xch <- as.character(x)
-      x <- model.frame(as.formula(paste("~", xch[2L])), data = data)
+      if(xch[2L] %in% names(data)) {
+        if(inherits(data[[xch[2L]]], "data.frame")) {
+          data[[xch[2L]]] <- as.matrix(data[[xch[2L]]])
+        }
+      }
+      x <- try(model.frame(as.formula(paste("~", xch[2L])), data = data), silent = TRUE)
+      if(inherits(x, "try-error")) {
+        x <- model.frame(as.formula(paste0("~ as.matrix(", xch[2L], ")")), data = data)
+      }
+      x <- as.matrix(x)
+      colnames(x) <- gsub(paste0(xch[2L], "."), "", colnames(x), fixed = TRUE)
       x <- cbind(model.frame(as.formula(paste("~", xch[3L])), data = data), x)
     } else x <- model.frame(x, data = data)
     if(ncol(x) < 2L)
@@ -39,8 +49,17 @@ plot2d <- function(x, residuals = FALSE, rug = FALSE, jitter = TRUE,
     stop("x must be a matrix!")
   if(!is.list(x) && ncol(x) < 2L)
     stop("x must have at least 2 columns!")
-  if(scheme != 1)
-    col.lines <- c(NA, "black", NA)
+  if(ncol(x) < 3L)
+    scheme <- 1
+  if(ncol(x) > 10L)
+    scheme <- 1
+  if(scheme != 1) {
+    if(is.null(col.lines)) {
+      col.lines <- c(NA, "black", NA)
+    } else {
+      col.lines <- c(NA, col.lines[!is.na(col.lines)][1L], NA)
+    }
+  }
   args <- list(...)
   nc <- ncol(x)
   if(is.null(c.select)) {
@@ -53,9 +72,12 @@ plot2d <- function(x, residuals = FALSE, rug = FALSE, jitter = TRUE,
     c.select <- 1L:nc
   if(length(c.select) > nc)
     c.select <- c.select[1L:nc]
-  if(is.null(fill.select))
+  if(is.null(fill.select)) {
     if(is.bayesx)
       fill.select <- c(0L, 0L, 1L, 2L, 2L, 1L)
+    if(all(c("Mean", "2.5%", "97.5%") %in% colnames(x)) & (ncol(x) == 4L))
+      fill.select <- c(0, 1, 0, 1)
+  }
   if(!is.bayesx && length(fill.select) < nc) {
     fill.select <- NULL
   }
@@ -125,6 +147,12 @@ plot2d <- function(x, residuals = FALSE, rug = FALSE, jitter = TRUE,
       xlab = args$xlab, ylab = args$ylab, main = args$main)
   }
   args <- set.plot2d.specs(ncol(x) - 1L, args, col.lines, is.bayesx)
+  if(!is.null(args$add)) {
+    if(args$add) {
+      if(is.null(args$axes))
+        args$axes <- FALSE
+    }
+  }
   args$rugp <- rugp
   args$specs <- args
   args$residuals <- residuals
@@ -229,7 +257,7 @@ plot2d.default <- function(x, residuals, range, col.residuals = "black",
     else
       specs$poly.lwd <- rep(1, nu)
     if(is.null(specs$scheme))
-      specs$scheme <- 1
+      specs$scheme <- 2
     for(k in 1L:nu) {
       check <- fill.select == ufs[k]
       if(length(check) == ncol(x)) {
@@ -249,6 +277,8 @@ plot2d.default <- function(x, residuals, range, col.residuals = "black",
           mx <- grep("50%", colnames(x), fixed = TRUE)
           if(!length(mx))
             mx <- grep("mean", colnames(x), ignore.case = TRUE)
+          if(!length(mx))
+            mx <- grep("median", colnames(x), ignore.case = TRUE)
           if(!length(mx))
             mx <- grep("estimate", colnames(x), ignore.case = TRUE)
           if(length(mx)) {
@@ -1326,8 +1356,16 @@ plotmap <- function(map, x = NA, id = NULL, select = NULL,
     args$x <- map@data[[select[1]]]
     args$plot <- FALSE
     pal <- do.call("colorlegend", delete.args("colorlegend", args))
-
-    plot(map, col = pal$map(map@data[[select[1]]]), border = args$border, add = args$add,
+    missing <- any(is.na(map@data[[select[1]]]))
+    if(missing) {
+      if(is.null(args$mdensity))
+        args$mdensity <- 20
+      plot(map, density = args$mdensity, border = args$border, xlim = args$xlim,
+        ylim = args$ylim, xpd = args$xpd, angle = args$angle, pbg = args$pbg,
+        axes = args$axes, lty = args$lty, lwd = args$lwd, xlab = args$xlab,
+        ylab = args$ylab, main = args$main)
+    }
+    plot(map, col = pal$map(map@data[[select[1]]]), border = args$border, add = args$add | missing,
       xlim = args$xlim, ylim = args$ylim, xpd = args$xpd, density = args$density,
       angle = args$angle, pbg = args$pbg, axes = args$axes, lty = args$lty,
       lwd = args$lwd, xlab = args$xlab, ylab = args$ylab, main = args$main)

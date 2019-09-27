@@ -36,7 +36,8 @@ plotmap(map, x = NA, id = NULL, select = NULL,
   \item{values}{If set to \code{TRUE} the corresponding values for each polygon will also be plotted 
     at the centroids of the polygons.}
   \item{\dots}{Arguments to be passed to \code{\link{colorlegend}} and others, e.g. change the 
-    \code{border} of the polygons and \code{density}, see \code{\link[graphics]{polygon}}.}
+    \code{border} of the polygons and \code{density} (\code{mdensity} for missing regions in \code{id}),
+    see \code{\link[graphics]{polygon}}.}
 }
 
 \seealso{

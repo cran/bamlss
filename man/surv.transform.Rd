@@ -1,5 +1,5 @@
-\name{surv.transform}
-\alias{surv.transform}
+\name{surv_transform}
+\alias{surv_transform}
 
 \title{
   Survival Model Transformer Function
@@ -19,7 +19,7 @@
 }
 
 \usage{
-surv.transform(x, y, data, family,
+surv_transform(x, y, data, family,
   subdivisions = 100, timedependent = "lambda",
   timevar = NULL, idvar = NULL, is.cox = FALSE,
   alpha = 0.1, ...)
@@ -27,7 +27,7 @@ surv.transform(x, y, data, family,
 
 \arguments{
  \item{x}{The \code{x} list, as returned from function
-    \code{\link{bamlss.frame}} and transformed by function \code{\link{surv.transform}},
+    \code{\link{bamlss.frame}} and transformed by function \code{\link{surv_transform}},
     holding all model matrices and other information that is used for
     fitting the model.}
   \item{y}{The model response, as returned from function \code{\link{bamlss.frame}}.}
@@ -52,7 +52,7 @@ surv.transform(x, y, data, family,
 }
 
 \seealso{
-  \code{\link{cox_bamlss}}, \code{\link{cox.mode}}, \code{\link{cox.mcmc}},
+  \code{\link{cox_bamlss}}, \code{\link{cox_mode}}, \code{\link{cox_mcmc}},
   \code{\link{simSurv}}, \code{\link{bamlss}}
 }
 
@@ -77,7 +77,7 @@ bf <- bamlss.frame(f, family = "cox", data = d)
 print(bf)
 
 ## Apply the transformer.
-bf <- with(bf, surv.transform(x, y, data = model.frame,
+bf <- with(bf, surv_transform(x, y, data = model.frame,
   family = family, is.cox = TRUE, subdivisions = 25))
 
 ## Extract the time grid design matrix for term s(time).

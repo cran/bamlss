@@ -58,7 +58,7 @@ rSurvTime2(lambda, x, cens_fct, upper = 1000, ...,
 }
 
 \seealso{
-  \code{\link{cox_bamlss}}, \code{\link{cox.mode}}, \code{\link{cox.mcmc}}, \code{\link{bamlss}}
+  \code{\link{cox_bamlss}}, \code{\link{cox_mode}}, \code{\link{cox_mcmc}}, \code{\link{bamlss}}
 }
 
 \examples{

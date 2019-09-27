@@ -1,11 +1,11 @@
 \name{boost}
 \alias{boost}
 \alias{boostm}
-\alias{boost.summary}
-\alias{boost.plot}
-\alias{print.boost.summary}
-\alias{plot.boost.summary}
-\alias{boost.frame}
+\alias{boost_summary}
+\alias{boost_plot}
+\alias{print.boost_summary}
+\alias{plot.boost_summary}
+\alias{boost_frame}
 
 \title{Boosting BAMLSS}
 
@@ -38,21 +38,21 @@ boostm(x, y, family, offset = NULL,
   do.optim = TRUE, always = FALSE, ...)
 
 ## Boosting summary extractor.
-boost.summary(object, ...)
+boost_summary(object, ...)
 
 ## Plot all boosting paths.
-boost.plot(x, which = c("loglik", "loglik.contrib", "parameters",
+boost_plot(x, which = c("loglik", "loglik.contrib", "parameters",
   "aic", "bic", "user"), intercept = TRUE, spar = TRUE, mstop = NULL,
   name = NULL, drop = NULL, labels = NULL, color = NULL, ...)
 
 ## Boosting summary printing and plotting.
-\method{print}{boost.summary}(x, summary = TRUE, plot = TRUE,
+\method{print}{boost_summary}(x, summary = TRUE, plot = TRUE,
   which = c("loglik", "loglik.contrib"), intercept = TRUE,
   spar = TRUE, ...)
-\method{plot}{boost.summary}(x, ...)
+\method{plot}{boost_summary}(x, ...)
 
 ## Model frame for out-of-sample selection.
-boost.frame(formula, train, test, family = "gaussian", ...)
+boost_frame(formula, train, test, family = "gaussian", ...)
 }
 
 \arguments{
@@ -119,16 +119,16 @@ boost.frame(formula, train, test, family = "gaussian", ...)
   \item{formula}{See \code{\link{bamlss.frame}}.}
   \item{train, test}{Data frames used for training and testing the model..}
   \item{\dots}{For function \code{boost()}, arguments passed to \code{\link{bamlss.engine.setup}}.
-    for function \code{boost.summary()} arguments passed to function \code{print.boost.summary()}.}
+    for function \code{boost_summary()} arguments passed to function \code{print.boost_summary()}.}
 }
 
 \value{
-  For function \code{boost.summary()} a list containing information on selection frequencies etc.
+  For function \code{boost_summary()} a list containing information on selection frequencies etc.
   For function \code{boost()} and \code{boostm()} a list containing the following objects:
   \item{fitted.values}{A named list of the fitted values based on the last boosting iteration
     of the modeled parameters of the selected distribution.}
   \item{parameters}{A matrix, each row corresponds to the parameter values of one boosting iteration.}
-  \item{boost.summary}{The boosting summary which can be printed and plotted.}
+  \item{boost_summary}{The boosting summary which can be printed and plotted.}
 }
 
 \section{WARNINGS}{
@@ -161,10 +161,10 @@ b <- bamlss(f, data = d, optimizer = boost,
 plot(b)
 
 ## Print and plot the boosting summary.
-boost.summary(b, plot = FALSE)
-boost.plot(b, which = 1)
-boost.plot(b, which = 2)
-boost.plot(b, which = 3, name = "mu.s.te(lon,lat).")
+boost_summary(b, plot = FALSE)
+boost_plot(b, which = 1)
+boost_plot(b, which = 2)
+boost_plot(b, which = 3, name = "mu.s.te(lon,lat).")
 
 ## Extract estimated parameters for certain
 ## boosting iterations.
@@ -192,8 +192,8 @@ b <- bamlss(f, data = d, optimizer = boostm,
 plot(b)
 
 ## Plot AIC and log-lik contributions.
-boost.plot(b, "AIC")
-boost.plot(b, "loglik.contrib")
+boost_plot(b, "AIC")
+boost_plot(b, "loglik.contrib")
 
 ## Out-of-sample selection of model terms.
 set.seed(123)
@@ -211,7 +211,7 @@ f <- list(
 )
 
 ## Create model frame for out-of-sample selection.
-sm <- boost.frame(f, train = d.train, test = d.test, family = "gaussian")
+sm <- boost_frame(f, train = d.train, test = d.test, family = "gaussian")
 
 ## Out-of-sample selection function.
 sfun <- function(parameters) {
@@ -226,7 +226,7 @@ b <- bamlss(f, data = d.train, sampler = FALSE, optimizer = boost,
   selectfun = sfun, always = "best")
 
 ## Plot curve of negative out-of-sample log-likelihood.
-boost.plot(b, which = "user")
+boost_plot(b, which = "user")
 }
 }
 
