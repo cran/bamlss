@@ -712,7 +712,12 @@ gaussian_bamlss <- function(...)
       "sigma" = function(y, ...) { rep(sd(y), length(y)) }
     ),
     "mean"      = function(par) par$mu,
-    "variance"  = function(par) par$sigma^2
+    "variance"  = function(par) par$sigma^2,
+    "valid.response" = function(x) {
+      if(is.factor(x) | is.character(x))
+        stop("the response should be numeric!")
+      return(TRUE)
+    }
   )
 
   class(rval) <- "family.bamlss"
@@ -740,7 +745,12 @@ Gaussian_bamlss <- function(...)
     },
     "initialize" = list(
       "mu" = function(y, ...) { (y + mean(y)) / 2 }
-    )
+    ),
+    "valid.response" = function(x) {
+      if(is.factor(x) | is.character(x))
+        stop("the response should be numeric!")
+      return(TRUE)
+    }
   )
 
   class(rval) <- "family.bamlss"
@@ -1398,6 +1408,11 @@ truncgaussian_bamlss <- function(...)
     "loglik" = function(y, par, ...) {
       rval <- with(par, sum(-0.5 * log(2 * pi) - log(sigma) - (y - mu)^2 / (2*sigma^2) - log(pnorm(mu / sigma))))
       return(rval)
+    },
+    "valid.response" = function(x) {
+      if(is.factor(x) | is.character(x))
+        stop("the response should be numeric!")
+      return(TRUE)
     }
   )
 
@@ -1966,6 +1981,11 @@ invgaussian_bamlss <- function(...)
       lq <- sqrt(lambda / y)
       qm <- y / mu
       pnorm(lq * (qm - 1)) + exp(2 * lambda / mu) * pnorm(-lq * (qm + 1), ...)
+    },
+    "valid.response" = function(x) {
+      if(is.factor(x) | is.character(x))
+        stop("the response should be numeric!")
+      return(TRUE)
     }
   )
 
@@ -2289,6 +2309,11 @@ gamma_bamlss <- function(...)
       s <- par$mu / par$sigma
       vx <- a * s^2
       return(vx)
+    },
+    "valid.response" = function(x) {
+      if(is.factor(x) | is.character(x))
+        stop("the response should be numeric!")
+      return(TRUE)
     }
   )
 
@@ -3134,6 +3159,24 @@ multinomial_bamlss <- multinom_bamlss <- function(...)
     "cat" = TRUE
   )
 
+  rval$probabilities <- function(par, numeric = TRUE, ...) {
+    pi <- exp(do.call("cbind", par))
+    pi <- pi / (rowSums(pi) + 1)
+    pi <- cbind(1 - rowSums(pi), pi)
+
+    if(!numeric) {
+      pi <- t(apply(pi, 1, function(x) {
+        y <- rep(0,length(x))
+        y[which.max(x)] <- 1
+        y
+      }))
+    }
+
+    colnames(pi) <- c("reference", names(par))
+
+    return(as.data.frame(pi))
+  }
+
   class(rval) <- "family.bamlss"
   rval
 }
@@ -3185,7 +3228,14 @@ poisson_bamlss <- function(...)
       }
     ),
     "mean" = function(par) par$lambda,
-    "variance" = function(par) par$lambda
+    "variance" = function(par) par$lambda,
+    "valid.response" = function(x) {
+      if(is.factor(x) | is.character(x))
+        stop("the response should be numeric!")
+      if(any(x < 0))
+        stop("response values < 0 are not allowed!")
+      return(TRUE)
+    }
   )
 
   class(rval) <- "family.bamlss"
@@ -4354,84 +4404,238 @@ mlt_distr <- function(which = c("Normal", "Logistic", "MinExtrVal")) {
 
 
 ## Family object for the nested multinomial model.
+pgev <- function(x, xi = 1)
+{
+  if(any(i <- xi < 0)) {
+    tx <- x[i]
+    txi <- xi[i]
+    if(any(j <- tx > -1/xi[i])) {
+      tx[j] <- -1/xi[i][j] - 0.01
+      x[i] <- tx
+    }
+  }
+  if(any(i <- xi > 0)) {
+    tx <- x[i]
+    txi <- xi[i]
+    if(any(j <- tx < -1/xi[i])) {
+      tx[j] <- -1/xi[i][j] + 0.01
+      x[i] <- tx
+    }
+  }
+  i <- xi == 0
+  p <- x
+  p[i] <- exp(-exp(-x[i]))
+  p[!i] <- exp(-pmax(1 + xi[!i] * x[!i], 0)^(-1/xi[!i]))
+  if(any(i <- p == 0))
+    p[i] <- 0.0001
+  p
+}
+
+pgev_dw <- function(x, xi = 1)
+{
+  if(any(i <- xi < 0)) {
+    tx <- x[i]
+    txi <- xi[i]
+    if(any(j <- tx > -1/xi[i])) {
+      tx[j] <- -1/xi[i][j] - 0.01
+      x[i] <- tx
+    }
+  }
+  if(any(i <- xi > 0)) {
+    tx <- x[i]
+    txi <- xi[i]
+    if(any(j <- tx < -1/xi[i])) {
+      tx[j] <- -1/xi[i][j] + 0.01
+      x[i] <- tx
+    }
+  }
+  i <- xi == 0
+  p <- x
+  p[i] <- exp(-x[i])
+  p[!i] <- pmax(1 + xi[!i] * x[!i], 0)^(-1/xi[!i] - 1)
+  p
+}
+
+pgev_dxi <- function(x, xi = 1)
+{
+  if(any(i <- xi < 0)) {
+    tx <- x[i]
+    txi <- xi[i]
+    if(any(j <- tx > -1/xi[i])) {
+      tx[j] <- -1/xi[i][j] - 0.01
+      x[i] <- tx
+    }
+  }
+  if(any(i <- xi > 0)) {
+    tx <- x[i]
+    txi <- xi[i]
+    if(any(j <- tx < -1/xi[i])) {
+      tx[j] <- -1/xi[i][j] + 0.01
+      x[i] <- tx
+    }
+  }
+  i <- xi != 0
+  p <- x
+  p[!i] <- 0
+  pm <- pmax(1 + xi[i] * x[i], 0)
+  p[i] <- pm^(-1/xi[i]) * log(pm) * 1/(xi[i]^2) + pm^(-1/xi[i] - 1) * x[i]/xi[i]
+  p
+}
+
 nmult_bamlss <- function(K)
 {
-  links <- c(rep("identity", K - 1L), rep("identity", K), "identity")
-  names(links) <- c(paste0("alpha", 1L:(K - 1L)), paste0("w", 1L:K), "xi")
+  links <- c(rep("identity", K - 1L), rep("identity", K), rep("identity", K))
+  names(links) <- c(paste0("alpha", 1L:(K - 1L)), paste0("w", 1L:K), paste0("xi", 1L:K))
+
+  h <- make.link("logit")$linkinv
 
   rval <- list(
     "family" = "Nested Multinomial",
     "names"  = names(links),
     "links" = links,
     "d" = function(y, par, log = FALSE) {
-      P2 <- exp(do.call("cbind", par[grep("alpha", names(par))]))
-      w <- do.call("cbind", par[grep("w", names(par))])
-      xi <- as.numeric(par$xi)
-      xi[abs(xi) < 0.00001] <- 0.00001
-      xi[xi <= -0.5] <- -0.4999
-
-      P2 <- P2 / (1 + rowSums(P2))
-      P2 <- log(cbind(P2, 1 - rowSums(P2)))
-
-      a <- (1 - xi * w)
-      a[a <= 0] <- 1e-05
-      P1 <- 1 - exp(-a^(-1/xi))
-      P1[P1 < 1e-05] <- 1e-05
-      P1 <- log(P1)
-
-      Pi <- P1 + P2
-      nPi <- 1 - exp(P1)
-      nPi[nPi < 1e-05] <- 1e-05
-      nPi <- log(nPi) + P2
-
-      d <- matrix(0, nrow = nrow(y), ncol = K)
-
-      for(j in 1:K) {
-        yd <- 1 * ((y[[1]] == 1L) & (y[[2]] == j))
-        ynd <- 1 * ((y[[1]] == 0L) & (y[[2]] == j))
-        d[, j] <- yd * Pi[, j] + ynd * nPi[, j]
+      if(is.null(dim(y))) {
+        y <- model.matrix(~ y - 1)
       }
 
-      d <- rowSums(d)
+      alpha <- exp(do.call("cbind", par[grep("alpha", names(par))]))
+      w <- do.call("cbind", par[grep("w", names(par))])
+      xi <- do.call("cbind", par[grep("xi", names(par))])
 
-      d[is.na(d) | !is.finite(d)] <- 1.490116e-08
+      probs_alpha <- alpha / (rowSums(alpha) + 1)
+      probs_alpha <- cbind(probs_alpha, 1 - rowSums(probs_alpha))
 
+      probs_w <- 1 - pgev(w, xi)
+
+      d <- NULL
+      for(j in 1:K) {
+        d <- cbind(d, (1 - probs_w[, j]) * probs_alpha[, j])
+        d <- cbind(d, probs_w[, j] * probs_alpha[, j])
+      }
+
+      d[d < 1e-10] <- 1e-10
+
+      d <- rowSums(y * log(d))
       if(!log)
-        d <- log(d)
+        d <- exp(d)
 
       return(d)
     }
   )
 
+  score_alpha <- function(y, par, id, ...) {
+    if(is.null(dim(y))) {
+      y <- model.matrix(~ y - 1)
+    }
+    i <- as.integer(gsub("alpha", "", id))
+    ind <- sort(rep(1:K, 2))
+    j <- which(ind == i)
+    alpha <- exp(do.call("cbind", par[grep("alpha", names(par))]))
+    pi <- alpha[, id] / (rowSums(alpha) + 1)
+    rowSums(y[, j]) - pi
+  }
+
+  salpha <- rep(list(score_alpha), K - 1L)
+  names(salpha) <- paste0("alpha", K - 1L)
+
+  rval$score <- salpha
+
+#  score_w <- function(y, par, id, ...) {
+#    if(is.null(dim(y))) {
+#      y <- model.matrix(~ y - 1)
+#    }
+#    i <- as.integer(gsub("w", "", id))
+#    ind <- sort(rep(1:K, 2))
+#    j <- which(ind == i)
+#    j <- j[2]
+#    y[, j] * pgev_dw(par[[id]], par[[paste0("xi", i)]]) 
+#  }
+
+#  sw <- rep(list(score_w), K - 1L)
+#  names(sw) <- paste0("w", K - 1L)
+
+#  rval$score <- c(rval$score, sw)
+
+#  score_xi <- function(y, par, id, ...) {
+#    if(is.null(dim(y))) {
+#      y <- model.matrix(~ y - 1)
+#    }
+#    i <- as.integer(gsub("xi", "", id))
+#    ind <- sort(rep(1:K, 2))
+#    j <- which(ind == i)
+#    j <- j[2]
+#    y[, j] * pgev_dxi(par[[paste0("w", i)]], par[[id]]) 
+#  }
+
+#  sxi <- rep(list(score_xi), K - 1L)
+#  names(sxi) <- paste0("xi", K - 1L)
+
+#  rval$score <- c(rval$score, sxi)
+
+  hess_alpha <- function(y, par, id, ...) {
+    alpha <- exp(do.call("cbind", par[grep("alpha", names(par))]))
+    pi <- alpha[, id] / (rowSums(alpha) + 1)
+    pi * (1 - pi)
+  }
+
+  halpha <- rep(list(hess_alpha), K - 1L)
+  names(halpha) <- paste0("alpha", K - 1L)
+
+  rval$hess <- halpha
+
+  rval$initialize <- list()
+  init_xi <- rep(list(function(y, ...) {
+    rep(1, if(is.null(dim(y))) length(y) else nrow(y))
+  }), K)
+  names(init_xi) <- paste0("xi", 1:K)
+  rval$initialize <- c(rval$initialize, init_xi)
+
   rval$nocat <- TRUE
 
-  score_alpha <- function(y, par, id, ...) {
-    j <- as.integer(gsub("alpha", "", id))
-    yd <- 1 * ((y[[1]] == 1L) & (y[[2]] == j))
-    ynd <- 1 * ((y[[1]] == 0L) & (y[[2]] == j))
-    P2 <- exp(do.call("cbind", par[grep("alpha", names(par))]))
-    pj <- P2[, id] / (1 + rowSums(P2))
-    sa <- (yd + ynd) - pj
-    sa[is.na(sa) | !is.finite(sa)] <- 1.490116e-08
-    sa
+  rval$probabilities <- function(par, y = NULL, numeric = TRUE, ...) {
+    if(!is.null(y)) {
+      if(!is.character(y)) {
+        if(is.null(dim(y))) {
+          y <- model.matrix(~ y - 1)
+        }
+        y <- colnames(y)
+      }
+    } else {
+      y <- paste0("p", 1:(2 * K))
+    }
+
+    alpha <- exp(do.call("cbind", par[grep("alpha", names(par))]))
+    w <- do.call("cbind", par[grep("w", names(par))])
+    xi <- do.call("cbind", par[grep("xi", names(par))])
+
+    probs_alpha <- alpha / (rowSums(alpha) + 1)
+    probs_alpha <- cbind(probs_alpha, 1 - rowSums(probs_alpha))
+
+    probs_w <- 1 - pgev(w, xi)
+
+    d <- NULL
+    for(j in 1:K) {
+      d <- cbind(d, (1 - probs_w[, j]) * probs_alpha[, j])
+      d <- cbind(d, probs_w[, j] * probs_alpha[, j])
+    }
+
+    if(!numeric) {
+      d <- t(apply(d, 1, function(x) {
+        y <- rep(0,length(x))
+        y[which.max(x)] <- 1
+        y
+      }))
+    }
+
+    colnames(d) <- y
+
+    return(as.data.frame(d))
   }
 
-  score_w <- function(y, par, id, ...) {
-    j <- as.integer(gsub("w", "", id))
-    yd <- 1 * ((y[[1]] == 1L) & (y[[2]] == j))
-    ynd <- 1 * ((y[[1]] == 0L) & (y[[2]] == j))
-    w <- par[[id]]
-    xi <- as.numeric(par$xi)
-    xi[abs(xi) < 0.00001] <- 0.00001
-    xi[xi <= -0.5] <- -0.4999
-    a <- (1 - xi * w)
-    a[a <= 0] <- 1e-05
-    P1 <- 1 - exp(-a^(-1/xi))
-    b <- exp(-a^(-1/xi)) * (a^(-1/xi - 1))
-    sw <- (yd * 1/P1 - ynd * 1/(1-P1)) * b
-    sw[is.na(sw) | !is.finite(sw)] <- 1.490116e-08
-    sw
-  }
+  ## Return family object
+  class(rval) <- "family.bamlss"
+  return(rval)
+}
 
 #library(numDeriv)
 
@@ -4454,54 +4658,6 @@ nmult_bamlss <- function(K)
 #curve(foo, -0.5, 10)
 #numDeriv::grad(foo, 0.2)
 #bar(0.2)
-
-  score_xi <- function(y, par, id, ...) {
-    w <- do.call("cbind", par[grep("w", names(par))])
-    xi <- as.numeric(par$xi)
-    xi[abs(xi) < 0.00001] <- 0.00001
-    xi[xi <= -0.5] <- -0.4999
-    a <- (1 - xi * w)
-    a[a <= 0] <- 1e-05
-
-    P1 <- 1 - exp(-a^(-1/xi))
-    B <- exp(-a^(-1/xi)) * (a^(-1/xi) * (log(a) * (1/xi^2)) - a^((-1/xi) - 1) * ((-1/xi) * w))
-
-    sxi <- matrix(0, nrow = nrow(y), ncol = K)
-
-    for(j in 1:K) {
-      yd <- 1 * ((y[[1]] == 1L) & (y[[2]] == j))
-      ynd <- 1 * ((y[[1]] == 0L) & (y[[2]] == j))
-      sxi[, j] <- (yd * 1/P1[, j] - ynd * 1/(1 - P1[, j])) * B[, j]
-    }
-
-    sxi <- rowSums(sxi)
-    sxi[is.na(sxi) | !is.finite(sxi)] <- 1.490116e-08
-    sxi
-  }
-
-  score1 <- rep(list(score_alpha), length = K - 1L)
-  names(score1) <- paste0("alpha", 1:(K - 1L))
-
-  score2 <- rep(list(score_w), length = K)
-  names(score2) <- paste0("w", 1:K)
-
-  score3 <- list("xi" = score_xi)
-  rval$score <- c(score1, score2)
-
-  rval$initialize <- list(
-    "xi" = function(y, ...) { rep(0.1, nrow(y)) }
-  )
-
-  init_w <- rep(list(function(y, ...) { rep(0.1, nrow(y)) }), K)
-  names(init_w) <- paste0("w", 1:K)
-
-  rval$initialize <- c(rval$initialize, init_w)
-
-  ## Return family object
-  class(rval) <- "family.bamlss"
-  return(rval)
-}
-
 
 #if(FALSE) {
 #foo1 <- function(x, p = 0.7) {

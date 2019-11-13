@@ -29,7 +29,7 @@ See function see \code{\link[mgcv]{smooth.construct}}.
 }
 
 \examples{
-## Generate some data.
+\dontrun{## Generate some data.
 d <- GAMart()
 
 ## Increasing: constr = 1.
@@ -38,7 +38,7 @@ b <- bamlss(num ~ s2(x1,bs="ms",xt=list(constr=2)),
   data = d, sampler = FALSE, optimizer = boost)
 
 plot(b)
-}
+}}
 
 \keyword{models}
 \keyword{smooth}

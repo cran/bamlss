@@ -55,7 +55,10 @@ SEXP rho_score_mvnormAR1(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP ztnbinom_score_mu(SEXP, SEXP, SEXP);
 SEXP ztnbinom_score_theta(SEXP, SEXP, SEXP);
 
+SEXP xcenter(SEXP);
+
 static R_CallMethodDef callMethods[] = {
+  {"xcenter", (DL_FUNC) &xcenter, 1},
   {"bamlss_glogis_score", (DL_FUNC) &bamlss_glogis_score, 5},
   {"bamlss_glogis_hesse", (DL_FUNC) &bamlss_glogis_hesse, 5},
   {"bamlss_glogis_density", (DL_FUNC) &bamlss_glogis_density, 5},

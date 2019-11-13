@@ -39,7 +39,9 @@ importFrom("stats", "acf", "as.formula", "coef", "complete.cases",
   "var", "window", "median", "asOneSidedFormula", "ecdf",
   "pweibull", "qlogis", "rbeta", "rbinom", "rlnorm", "rpois",
   "qgamma", "qlnorm", "qweibull", "prcomp", "deviance", "cor",
-  "lm.fit", "nls.control", "qbeta", "qbinom", "qpois", "na.pass", "relevel")
+  "lm.fit", "nls.control", "qbeta", "qbinom", "qpois", "na.pass", "relevel",
+  ".getXlevels", "binomial", "glm", "glm.fit", "lm", "naresid", "residuals",
+  "weights")
 importFrom("utils", "download.file", "flush.console", "getS3method",
   "head", "read.csv2", "read.table", "tail", "unzip",
   "write.table", "combn", "capture.output")
@@ -54,6 +56,7 @@ export(
   "bamlss.family",
   "bfit",
   "bbfit",
+  "bbfitp",
   "bfit_iwls",
   "bfit_iwls_Matrix",
   "bfit_lm",
@@ -238,8 +241,6 @@ S3method("predict", "boost_frame")
 S3method("fitted", "bamlss")
 S3method("logLik", "bamlss")
 S3method("DIC", "bamlss")
-S3method("BIC", "bamlss")
-S3method("AIC", "bamlss")
 S3method("coef", "bamlss")
 S3method("confint", "bamlss")
 S3method("residuals", "bamlss")

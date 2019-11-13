@@ -1,3 +1,14 @@
+### 
+### Functions for performing stability selection based on gradient boosting.
+###
+### TODO:
+### * pass ... to bamlss
+### * verbose option
+### * parallel option
+### * class bamlss.stabsel
+### * snake style function names
+###
+
 stabsel <- function(formula, data, family = "gaussian",
                     q = NULL, maxit = NULL, B = 100,
                     thr = .9, fraction = .5, seed = NULL, ...) {

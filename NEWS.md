@@ -1,3 +1,9 @@
+# bamlss 1.1-1
+
+* Bug fixing.
+
+* Support new features for generating weights for neural networks.
+
 # bamlss 1.1-0
 
 * New features.

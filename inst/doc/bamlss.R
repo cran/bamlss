@@ -1,7 +1,7 @@
 ## ----preliminaries, echo=FALSE, message=FALSE, results="hide"------------
 library("bamlss")
-prefix <- "http://bayesr.R-Forge.R-project.org/articles/" ## ""
-prefix2 <- "http://bayesr.R-Forge.R-project.org/reference/" ## ""
+prefix <- "http://www.bamlss.org/articles/" ## ""
+prefix2 <- "http://www.bamlss.org/reference/" ## ""
 
 ## ----installation-cran, eval=FALSE---------------------------------------
 #  install.packages("bamlss")

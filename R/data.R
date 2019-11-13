@@ -103,7 +103,7 @@ data_Germany <- function(dir = NULL)
   on.exit(unlink(tf))
 
   download.file("http://biogeo.ucdavis.edu/data/gadm2/shp/DEU_adm.zip",
-    zf <- file.path(tf, "germany.zip"))
+  zf <- file.path(tf, "germany.zip"))
   unzip(zf, exdir = gsub("\\.zip$", "", zf))
 
   g <- maptools::readShapePoly(file.path(tf, "germany", "DEU_adm3.shp"))
@@ -153,5 +153,44 @@ data_Golf <- function(dir = NULL)
   save_data(Golf, file = file.path(dir, "Golf.rda"), envir = nenv)
 
   invisible(NULL)
+}
+
+
+data_spam <- function(...)
+{
+  dpath <- "ftp://ftp.ics.uci.edu/pub/machine-learning-databases/spambase/spambase.zip"
+  dir.create(tdir <- tempfile())
+  on.exit(unlink(tdir))
+  owd <- getwd()
+  on.exit(setwd(owd), add = TRUE)
+  setwd(tdir)
+  download.file(dpath, zf <- basename(dpath))
+  unzip(zf, exdir = gsub("\\.zip$", "", zf))
+  data <- read.table(file.path("spambase", "spambase.data"), sep = ",", header = FALSE)
+  dnames <- readLines(file.path("spambase", "spambase.names"))
+  i <- grep("continuous.", dnames, fixed = TRUE)[1L]
+  dnames <- dnames[i:length(dnames)]
+  dnames <- gsub("continuous.", "", dnames, fixed = TRUE)
+  dnames <- gsub(" ", "", dnames, fixed = TRUE)
+  dnames <- gsub(":", "", dnames, fixed = TRUE)
+  dnames <- gsub("word_freq_", "", dnames, fixed = TRUE)
+  dnames <- gsub("char_freq_", "ch", dnames, fixed = TRUE)
+  dnames <- gsub("capital_run_length_", "cap_", dnames, fixed = TRUE)
+  for(j in seq_along(dnames)) {
+    if(!is.na(as.numeric(dnames[j])))
+      dnames[j] <- paste0("n", dnames[j])
+    chars <- c(";", "!", "[", "(", "$", "#")
+    rchars <- c("_scolon", "_qmark", "_sbracket", "_bracket", "_dollar", "_hash")
+    for(ch in seq_along(chars))
+      dnames <- gsub(chars[ch], rchars[ch], dnames, fixed = TRUE)
+  }
+  dnames <- gsub("all", "nall", dnames)
+  dnames <- gsub("3d", "n3d", dnames)
+  dnames <- c(dnames, "spam")
+  names(data) <- dnames
+  data$spam <- factor(data$spam, levels = c(1, 0), labels = c("yes", "no"))
+  id <- read.table("https://web.stanford.edu/~hastie/ElemStatLearn/datasets/spam.traintest")
+  data$set <- factor(unlist(id), levels = c(0, 1), labels = c("train", "test"))
+  return(data)
 }
 

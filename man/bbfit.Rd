@@ -1,15 +1,20 @@
 \name{bbfit}
 \alias{bbfit}
+\alias{bbfitp}
 
-\title{Batch-Wise Backfitting}
+\title{Batchwise Backfitting}
 
 \description{
-  Batch-wise backfitting estimation engine for GAMLSS using very large data sets.
+  Batchwise backfitting estimation engine for GAMLSS using very large data sets.
 }
 
 \usage{
+## Batchwise backfitting engine.
 bbfit(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
-  epochs = 1, nbatch = 10, maxit = Inf, verbose = TRUE, ...)
+  epochs = 1, nbatch = 10, verbose = TRUE, ...)
+
+## Parallel version.
+bbfitp(x, y, family, mc.cores = 1, ...)
 }
 
 \arguments{
@@ -25,10 +30,11 @@ bbfit(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
   \item{offset}{Can be used to supply model offsets for use in fitting,
     returned from function \code{\link{bamlss.frame}}.}
   \item{epochs}{For how many epochs should the algorithm run?}
-  \item{nbatch}{Number of batches.}
-  \item{maxit}{Maximum number of iterations of the inner loop.}
+  \item{nbatch}{Number of batches. Can also be a number between 0 and 1, i.e., determining
+    the fraction of observations that should be used for fitting.}
   \item{verbose}{Print information during runtime of the algorithm.}
-  \item{\dots}{Not used.}
+  \item{mc.cores}{On how many cores should estimation be started?}
+  \item{\dots}{For \code{bbfitp()} all arguments to be passed to \code{bbfit()}.}
 }
 
 \details{
