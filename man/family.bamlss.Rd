@@ -24,6 +24,8 @@
 \alias{ALD_bamlss}
 \alias{nbinom_bamlss}
 \alias{weibull_bamlss}
+\alias{dirichlet_bamlss}
+\alias{logNN_bamlss}
 
 \title{
   Distribution Families in \pkg{bamlss}
@@ -47,10 +49,12 @@ binomial_bamlss(link = "logit", ...)
 cnorm_bamlss(...)
 cox_bamlss(...)
 dw_bamlss(...)
+dirichlet_bamlss(...)
 gaussian_bamlss(...)
 gaussian2_bamlss(...)
 Gaussian_bamlss(...)
 gamma_bamlss(...)
+logNN_bamlss(...)
 multinomial_bamlss(...)
 mvnorm_bamlss(k = 2, ...)
 mvnormAR1_bamlss(k = 2, ...)

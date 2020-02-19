@@ -84,14 +84,14 @@ bamlss.frame <- function(formula, data = NULL, family = "gaussian",
           }
         }
       }
-      if(family$family == "dirichlet") {
-        names(formula) <- colnames(bf$y)
-        family$bayesx <- rep(list(c("dirichlet", "alpha")), length(formula))
-        family$names <- names(family$bayesx) <- names(formula)
-        family$links <- rep(family$links, length(formula))
-        names(family$links) <- family$names
-        attr(family$bayesx, "nrcat") <- length(formula)
-      }
+#      if(family$family == "dirichlet") {
+#        names(formula) <- colnames(bf$y)
+#        family$bayesx <- rep(list(c("dirichlet", "alpha")), length(formula))
+#        family$names <- names(family$bayesx) <- names(formula)
+#        family$links <- rep(family$links, length(formula))
+#        names(family$links) <- family$names
+#        attr(family$bayesx, "nrcat") <- length(formula)
+#      }
     }
   } else {
     rn <- response.name(formula, hierarchical = FALSE, keep.functions = TRUE)
@@ -191,6 +191,23 @@ match.index.ff <- function(x)
 }
 
 
+bamlss_chunk <- function(x) {
+  N <- if(is.null(dim(x))) {
+    length(x)
+  } else {
+    nrow(x)
+  }
+  if(N > 100000L) {
+    n <- 0.05 * N
+    xc <- cut(seq_len(N), breaks = floor(N/n), include.lowest = TRUE)
+    chunks <- split(seq_len(N), xc)
+  } else {
+    chunks <- list(seq_len(N))
+  }
+  chunks
+}
+
+
 ## Compute the 'bamlss.frame' 'x' master object.
 design.construct <- function(formula, data = NULL, knots = NULL,
   model.matrix = TRUE, smooth.construct = TRUE, binning = FALSE,
@@ -225,7 +242,6 @@ design.construct <- function(formula, data = NULL, knots = NULL,
   if(!no_ff) {
     stopifnot(requireNamespace("ff"))
     stopifnot(requireNamespace("ffbase"))
-    stopifnot(requireNamespace("bit"))
   }
 
   if(!is.character(data) & no_ff) {
@@ -288,8 +304,11 @@ design.construct <- function(formula, data = NULL, knots = NULL,
           colnames(X) <- cn
           return(X)
         }
-        for(cff in bit::chunk(data)) {
-          obj$model.matrix <- ff_matrix_append(obj$model.matrix, ff_mm(data[cff, ]))
+        mm_test <- model.matrix(mm_terms, data = data[1:10, , drop = FALSE])
+        if(ncol(mm_test) > 0) {
+          for(cff in bamlss_chunk(data)) {
+            obj$model.matrix <- ff_matrix_append(obj$model.matrix, ff_mm(data[cff, ]))
+          }
         }
       }
     }
@@ -682,7 +701,6 @@ ff_matrix_append <- function(x, dat, recode = TRUE, adjustvmode = TRUE, ...)
 {
   stopifnot(requireNamespace("ff"))
   stopifnot(requireNamespace("ffbase"))
-  stopifnot(requireNamespace("bit"))
 
   w <- getOption("warn")
   options("warn" = -1)
@@ -714,32 +732,43 @@ smooth.construct_ff.default <- function(object, data, knots, ...)
   nd <- list()
   cat("  .. ff processing term", object$label, "\n")
   for(j in object$term) {
-    xr <- ffbase::range.ff(data[[j]], na.rm = TRUE)
-    nd[[j]] <- sample(seq(xr[1], xr[2], length = 500))
+    if(!is.factor(data[[j]][1:2])) {
+      xq <- ffbase::quantile.ff(data[[j]], probs = seq(0, 1, length = 100), na.rm = TRUE)
+      nd[[j]] <- sample(xq)
+    } else {
+      nd[[j]] <- sample(unique(data[[j]]), size = 500, replace = TRUE)
+    }
   }
   nd <- as.data.frame(nd)
   object <- smooth.construct(object, nd, knots)
   object[["X"]] <- NULL
   sX <- function(x) {
-    X <- PredictMat(object, data = x)
+    if(is.null(object$PredictMat)) {
+      X <- PredictMat(object, data = x)
+    } else {
+      X <- object$PredictMat(object, data = x)
+    }
     cn <- colnames(X)
     X <- ff::ff(X, dim = dim(X), dimorder = c(2, 1))
     colnames(X) <- cn
     return(X)
   }
-  for(ic in bit::chunk(data)) {
+  for(ic in bamlss_chunk(data)) {
     object[["X"]] <- ff_matrix_append(object[["X"]], sX(data[ic, ]))
   }
-  csum <- 0
-  for(ic in chunk_mat(object[["X"]])) {
-    csum <- csum + colSums(object[["X"]][ic, ])
-  }
-  QR <- qr(matrix(csum, ncol = 1L))
-  object[["Z"]] <- qr.Q(QR, complete = TRUE)[, -1]
-  object[["X"]] <- ffmatrixmult(object[["X"]], object[["Z"]])
-  for(j in seq_along(object[["S"]])) {
-    if(!is.function(object[["S"]][[j]]))
-      object[["S"]][[j]] <- crossprod(object[["Z"]], object[["S"]][[j]]) %*% object[["Z"]]
+  if(!inherits(object, "nnet0.smooth")) {
+    csum <- 0
+    for(ic in bamlss_chunk(object[["X"]])) {
+      csum <- csum + colSums(object[["X"]][ic, ])
+    }
+    QR <- qr(matrix(csum, ncol = 1L))
+    object[["Z"]] <- qr.Q(QR, complete = TRUE)[, -1]
+    object[["X"]] <- ffmatrixmult(object[["X"]], object[["Z"]])
+    for(j in seq_along(object[["S"]])) {
+      if(!is.function(object[["S"]][[j]])) {
+        object[["S"]][[j]] <- crossprod(object[["Z"]], object[["S"]][[j]]) %*% object[["Z"]]
+      }
+    }
   }
   object$orig.class <- class(object)
   class(object) <- "ff_smooth.smooth.spec"
@@ -749,17 +778,21 @@ smooth.construct_ff.default <- function(object, data, knots, ...)
 Predict.matrix.ff_smooth.smooth.spec <- function(object, data)
 {
   class(object) <- object$orig.class
-  X <- Predict.matrix(object, data)
-  return(X %*% object[["Z"]])
+  if(is.null(object$PredictMat)) {
+    X <- Predict.matrix(object, data)
+    X <- X %*% object[["Z"]]
+  } else {
+    X <- object$PredictMat(object, data)
+  }
+  return(X)
 }
 
 ## Copy from bootSVD.
 ffmatrixmult <- function(x,y=NULL,xt=FALSE,yt=FALSE,ram.output=FALSE, override.big.error=FALSE,...) {	
 	{i1<-NULL; i2<- NULL} #To avoid errors in R CMD check
 
-        stopifnot(requireNamespace("ff"))
-        stopifnot(requireNamespace("ffbase"))
-        stopifnot(requireNamespace("bit"))
+  stopifnot(requireNamespace("ff"))
+  stopifnot(requireNamespace("ffbase"))
 
 	dimx<-dim(x)
 	if(!is.null(y)) dimy<-dim(y)
@@ -823,32 +856,32 @@ ffmatrixmult <- function(x,y=NULL,xt=FALSE,yt=FALSE,ram.output=FALSE, override.b
 	return(out)
 }
 
-chunk_mat <- function (x, RECORDBYTES = sum(ff::.rambytes[ff::vmode(x)]),
-  BATCHBYTES = getOption("ffbatchbytes"), ...) 
-{
-    n <- nrow(x)
-    if (n) {
-        l <- list(...)
-        if (is.null(l$from)) 
-            l$from <- 1L
-        if (is.null(l$to)) 
-            l$to <- n
-        if (is.null(l$by) && is.null(l$len)) {
-            b <- BATCHBYTES%/%RECORDBYTES
-            if (b == 0L) {
-                b <- 1L
-                warning("single record does not fit into BATCHBYTES")
-            }
-            l$by <- b
-        }
-        l$maxindex <- n
-        ret <- do.call(bit::chunk.default, l)
-    }
-    else {
-        ret <- list()
-    }
-    ret
-}
+#chunk_mat <- function (x, RECORDBYTES = sum(ff::.rambytes[ff::vmode(x)]),
+#  BATCHBYTES = getOption("ffbatchbytes"), ...) 
+#{
+#    n <- nrow(x)
+#    if (n) {
+#        l <- list(...)
+#        if (is.null(l$from)) 
+#            l$from <- 1L
+#        if (is.null(l$to)) 
+#            l$to <- n
+#        if (is.null(l$by) && is.null(l$len)) {
+#            b <- BATCHBYTES%/%RECORDBYTES
+#            if (b == 0L) {
+#                b <- 1L
+#                warning("single record does not fit into BATCHBYTES")
+#            }
+#            l$by <- b
+#        }
+#        l$maxindex <- n
+#        ret <- do.call(bit::chunk.default, l)
+#    }
+#    else {
+#        ret <- list()
+#    }
+#    ret
+#}
 
 #smooth.construct_ff.ps.smooth.spec <- function(object, data, knots, ...)
 #{
@@ -2356,11 +2389,12 @@ complete.bamlss.family <- function(family)
   if(is.null(family$map2par)) {
     family$map2par <- function(eta) {
       if(inherits(eta[[1L]], "ff")) {
-        for(j in family$names)
+        for(j in family$names) {
           eta[[j]] <- ff_eval(eta[[j]], FUN = function(x) { linkinv[[j]](x) },
             lower = c(-Inf, -10), upper = c(Inf, 10))
+        }
       } else {
-        for(j in family$names) {        
+        for(j in family$names) {
           eta[[j]] <- linkinv[[j]](eta[[j]])
           eta[[j]][is.na(eta[[j]])] <- 0
           if(any(jj <- eta[[j]] == Inf))
@@ -2514,7 +2548,6 @@ bamlss.formula <- function(formula, family = NULL, specials = NULL, env = NULL, 
       }
     }
     fn[fn %in% c("1", "-1")] <- NA
-
     nas <- which(is.na(fn))
     if(!is.null(family)) {
       if(length(nas))
@@ -3193,6 +3226,8 @@ process.chains <- function(x, combine = TRUE, drop = FALSE, burnin = NULL, thin 
   if(!is.null(burnin) | !is.null(thin)) {
     for(i in seq_along(x)) {
       if(!is.null(burnin)) {
+        if(burnin >= nrow(x[[i]]))
+          stop("burnin >= nsamples!")
         x[[i]] <- as.mcmc(x[[i]][-c(1:burnin), , drop = FALSE])
       }
       if(!is.null(thin)) {
@@ -3936,7 +3971,13 @@ predict.bamlss <- function(object, newdata, model = NULL, term = NULL, match.nam
   if(length(i <- grep("s.", ec))) {
     for(j in enames2[i]) {
       for(jj in grep3(j, names(x))) {
-        sn <- snames[grep2(paste(id, "s", jj, sep = "."), snames, fixed = TRUE)]
+        sn <- snames[grep2(paste0(paste(id, "s", jj, sep = "."), "."), snames, fixed = TRUE)]
+        if(inherits(x[[jj]], "ff_smooth.smooth.spec")) {
+          if(!is.null(x[[jj]]$orig.class)) {
+            if("nnet0.smooth" %in% x[[jj]]$orig.class)
+              class(x[[jj]]) <- x[[jj]]$orig.class
+          }
+        }
         if(!inherits(x[[jj]], "no.mgcv") & !inherits(x[[jj]], "special")) {
           if(is.null(x[[jj]]$mono))
             x[[jj]]$mono <- 0
@@ -3971,7 +4012,11 @@ predict.bamlss <- function(object, newdata, model = NULL, term = NULL, match.nam
           if(is.null(x[[jj]]$PredictMat)) {
             X <- PredictMat(x[[jj]], data)
           } else {
-            X <- x[[jj]]$PredictMat(x[[jj]], data)
+            if(inherits(x[[jj]], "nnet0.smooth")) {
+              X <- Predict.matrix.nnet0.smooth(x[[jj]], data)
+            } else {
+              X <- x[[jj]]$PredictMat(x[[jj]], data)
+            }
           }
           fit <- apply(samps[, sn, drop = FALSE], 1, function(b) {
             x[[jj]]$fit.fun(X, b)
@@ -4001,8 +4046,10 @@ predict.bamlss <- function(object, newdata, model = NULL, term = NULL, match.nam
   }
   if(!is.null(x$smooth.construct)) {
     for(j in names(x$smooth.construct)) {
-      sn <- grep(paste(id, if(j != "model.matrix") "s" else "p", j, sep = "."), snames,
-        fixed = TRUE, value = TRUE)
+      ptxt <- paste(id, if(j != "model.matrix") "s" else "p", j, sep = ".")
+      if(j != "model.matrix")
+        ptxt <- paste0(ptxt, ".")
+      sn <- grep(ptxt, snames, fixed = TRUE, value = TRUE)
       if(!length(sn)) {
         if(j == "model.matrix")
           sn <- grep(paste(id, ".p.", sep = ""), snames, fixed = TRUE, value = TRUE)
@@ -5654,7 +5701,7 @@ smooth.construct.nnet0.smooth.spec <- function(object, data, knots, ...)
   object$nodes <- nodes
   class(object) <- c(class(object), "special")
 
-  object$prior <- function(...) 1
+  object$prior <- function(...) { 1 }
 
   object$PredictMat <- Predict.matrix.nnet0.smooth
 
@@ -6231,7 +6278,7 @@ forward_reg2 <- function(x, y, n = 4, nu, maxit = 100, ...)
 
 
 Predict.matrix.nnet0.smooth <- function(object, data)
-{
+{ 
   object[["standardize"]] <- standardize <- if(is.null(object$xt[["standardize"]])) TRUE else object$xt[["standardize"]]
   object[["standardize01"]] <- if(standardize) TRUE else FALSE
   X <- cbind(1, Predict.matrix.lasso.smooth(object, data))
@@ -9050,7 +9097,20 @@ coef.bamlss <- function(object, model = NULL, term = NULL,
   rval <- if(length(rval) < 2) {
     as.matrix(rval[[1]], ncol = 1)
   } else {
-    do.call("cbind", rval)
+    foo <- function(x) {
+      if(is.null(dim(x)))
+        return(length(x))
+      else
+        return(ncol(x))
+    }
+    rd <- sapply(rval, foo)
+    if(all(rd < 1)) {
+      NULL
+    } else {
+      if(any(rd < 1))
+        rval <- rval[!(rd < 1)]
+      do.call("cbind", rval)
+    }
   }
   if(!length(rval)) return(numeric(0))
   nx <- sapply(strsplit(rownames(rval), ".", fixed = TRUE), function(x) { x[1] })
@@ -10675,5 +10735,79 @@ ecdf_transform <- function(data, trans = NULL, notrans = NULL) {
   }
   attr(data, "ecdf_transform") <- trans
   return(data)
+}
+
+if(FALSE) {
+  library("bamlss")
+  library("MASS")
+
+  n <- 1000
+  x <- sort(runif(n, -pi, pi))
+  y <- 2 + 0.5 * x + sin(x) + rnorm(n, sd = 0.3)
+
+  ## P-spline design matrix.
+  sm <- smooth.construct(n(~x,k=1000,rint=0.05,sint=100,nocenter=TRUE), list(x=x), NULL)
+  Z <- sm$X
+  S <- sm$S[[1]]
+
+  ## Linear design matrix including intercept.
+  X <- matrix((x - mean(x)) / sd(x), ncol = 1)
+
+  ## Orthogonal complement of subspace.
+  R <- cbind(X)
+  A <- diag(n) - R %*% solve(t(R) %*% R) %*% t(R)
+  C <- A %*% Z
+
+  i <- fixDependence(R, C)
+  if(!is.null(i)) {
+    C <- Z[, -i]
+    S <- S[-i, -i]
+  }
+
+  ## Centering.
+#  Q <- qr.Q(qr(crossprod(C, rep(1, length = nrow(C)))), complete = TRUE)[, -1]
+#  C <- C %*% Q
+#  K <- crossprod(Q, S) %*% Q
+  C <- scale(C)
+  K <- diag(1, ncol(C))
+
+  ## Plot basis functions.
+  par(mfrow = c(2, 2))
+  matplot(x, C, type = "l", lty = 1, col = 1)
+
+  ## Final big design matrix used for estimation.
+  G <- cbind(1, X, C)
+
+  ## Estimate coefficients.
+  K <- as.matrix(Matrix::bdiag(list(matrix(0, 2, 2), K)))
+
+  GG <- crossprod(G)
+  tG <- t(G)
+
+  gcv <- function(lambda) {
+    S <- G %*% solve(GG + lambda * K) %*% tG
+    yhat <- S %*% y
+    trS <- sum(diag(S))
+    rss <- sum((y - yhat)^2)
+    drop(rss * n / (n - trS)^2)
+  }
+
+  lambda <- optimize(gcv, lower = 1e-20, upper = 1e+10)$minimum
+
+  beta <- solve(t(G) %*% G + lambda * K) %*% t(G) %*% y
+  fit <- G %*% beta
+  fitl <- G[, 1:2] %*% beta[1:2]
+  fits <- G[, -c(1:2)] %*% beta[-c(1:2)]
+
+  plot(x, y, main = "fit", ylim = range(c(y, fitl, fits)))
+  lines(fit ~ x, col = 2, lwd = 2)
+  lines(fitl ~ x, col = 4, lwd = 2)
+  lines(fits ~ x, col = 4, lwd = 2)
+
+  plot(x, fitl, type = "l", main = "linear", ylim = range(c(0.5*x, fitl)))
+  lines(2 + 0.5*x ~ x, col = 2)
+
+  plot(x, fits, type = "l", main = "smooth", ylim = range(c(sin(x), fits)))
+  lines(sin(x) ~ x, col = 2)
 }
 

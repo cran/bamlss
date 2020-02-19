@@ -548,7 +548,7 @@ get.eta <- function(x, expand = TRUE)
 ffdf_eval <- function(x, FUN)
 {
   #  res <- NULL
-  #  for(i in bit::chunk(x)) {
+  #  for(i in bamlss_chunk(x)) {
   #    res <- ffappend(res, FUN(x[i, ]))
   #  }
   #  res
@@ -559,7 +559,7 @@ ffdf_eval <- function(x, FUN)
 ffdf_eval_sh <- function(y, par, FUN)
 {
   #  res <- NULL
-  #  for(i in bit::chunk(y)) {
+  #  for(i in bamlss_chunk(y)) {
   #    tpar <- list()
   #    for(j in names(par))
   #      tpar[[j]] <- par[[j]][i]
@@ -573,7 +573,7 @@ ffdf_eval_sh <- function(y, par, FUN)
 ff_eval <- function(x, FUN, lower = NULL, upper = NULL)
 {
   #  res <- NULL
-  #  for(i in bit::chunk(x)) {
+  #  for(i in bamlss_chunk(x)) {
   #    tres <- FUN(x[i])
   #    if(!is.null(lower)) {
   #      if(any(jj <- tres == lower[1]))
@@ -940,7 +940,6 @@ bfit <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
             
             ## Score.
             score <- process.derivs(family$score[[nx[j]]](y, peta, id = nx[j]), is.weight = FALSE)
-
             if(length(score) != nobs) { 
               stop("something wrong in processing the family $score() function! More elements in return value of $score() than the response!")
             }
@@ -1419,7 +1418,7 @@ boostm_fit <- function(x, grad, hess, z, nu, stop.criterion, family, y, eta, edf
   return(state)
 }
 
-
+#x smooth construct selbst x$X design matrix x$S als Funktion
 bfit_lm <- function(x, family, y, eta, id, weights, criterion, ...)
 {
   args <- list(...)
@@ -1649,7 +1648,7 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
       x$state$log.prior <- x$prior(x$state$parameters)
   }
   
-  return(x$state)
+  return(x$state)# returing!
 }
 
 
@@ -3739,7 +3738,7 @@ print.boost_summary <- function(x, summary = TRUE, plot = TRUE,
         xn <- sapply(strsplit(colnames(x$loglik), ".", fixed = TRUE), function(x) { x[length(x)] })
         cols <- rainbow_hcl(length(unique(xn)))
         matplot(x$loglik, type = "l", lty = 1,
-                xlab = "Iteration", ylab = "LogLik contribution", col = cols[as.factor(xn)])
+                xlab = "Iteration", ylab = "LogLik contribution", col = cols[as.factor(xn)], ...)
         abline(v = x$mstop, lwd = 3, col = "lightgray")
         axis(4, at = x$loglik[nrow(x$loglik), ], labels = colnames(x$loglik), las = 1)
         axis(3, at = x$mstop, labels = paste("mstop =", x$mstop))
@@ -3857,7 +3856,6 @@ boost_plot <- function(x, which = c("loglik", "loglik.contrib", "parameters", "a
       at <- p[nrow(p), ]
       at <- at[labs != ""]
       labs <- labs[labs != ""]
-      
       matplot(p, type = "l", lty = 1, col = cols[as.factor(xn)], xlab = "Iteration", ...)
       abline(v = mstop, lwd = 3, col = "lightgray")
       axis(4, at = at, labels = labs, las = 1)
@@ -3915,7 +3913,7 @@ set.starting.values <- function(x, start)
           if(inherits(x[[id]]$smooth.construct[[j]], "nnet.boost")) {
             take <- tl
           } else {
-            take <- grep(tl, nstart[tns %in% id], fixed = TRUE, value = TRUE)
+            take <- grep(paste0(tl, "."), nstart[tns %in% id], fixed = TRUE, value = TRUE)
           }
           if(is.null(x[[id]]$smooth.construct[[j]]$by))
             x[[id]]$smooth.construct[[j]]$by <- "NA"
@@ -5376,7 +5374,7 @@ sgd_grep_X <- function(x) {
 
 #  ## Shuffle observations.
 #  shuffle_id <- NULL
-#  for(i in bit::chunk(y)) {
+#  for(i in bamlss_chunk(y)) {
 #    ind <- i[1]:i[2]
 #    shuffle_id <- ffbase::ffappend(shuffle_id, if(shuffle) sample(ind) else ind)
 #  }
@@ -5552,8 +5550,6 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
   if(is.null(K))
     K <- 2
 
-  batch_ids <- list(...)$batch_ids
-
   always <- list(...)$always
   if(is.null(always))
     always <- FALSE
@@ -5584,6 +5580,23 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
     stop("parameter names mismatch with family names!")
 
   N  <- nrow(y)
+
+  batch_ids <- list(...)$batch_ids
+
+  if(!is.null(batch_ids)) {
+    if(!is.list(batch_ids)) {
+      if(length(batch_ids) == 2L) {
+        yind <- 1:N
+        nb <- batch_ids[1]
+        ni <- batch_ids[2]
+        batch_ids <- vector(mode = "list", length = ni)
+        for(i in 1:ni)
+          batch_ids[[i]] <- sample(yind, size = nb, replace = FALSE)
+        rm(yind)
+      }
+    }
+  }
+
   random <- all(nbatch < 1) & all(nbatch > 0)
   batch_select <- srandom <- samp_ids <- FALSE
   if(is.null(batch_ids)) {
@@ -5610,6 +5623,11 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
     if(is.factor(batch_ids)) {
       batch <- split(1:N, batch_ids)
       batch <- lapply(batch, range)
+    } else {
+      if(is.list(batch_ids)) {
+        batch <- batch_ids
+        rm(batch_ids)
+      }
     }
     if(!is.list(batch))
       stop("argument batch_ids specified wrong!")
@@ -5624,16 +5642,19 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
   if(!is.null(start))
     start <- unlist(start)
 
-  beta <- eta <- etas <- tau2 <- ll_contrib <- medf <- parm <- list()
+  beta <- eta <- etas <- tau2 <- ll_contrib <- ll_contrib2 <- medf <- parm <- LLC <- list()
   for(i in nx) {
     beta[[i]] <- list()
     tau2[[i]] <- list()
     medf[[i]] <- list()
     parm[[i]] <- list()
-    ll_contrib[[i]] <- list()
+    LLC[[i]] <- list()
+    ll_contrib[[i]] <- ll_contrib2[[i]] <- list()
     eta[[i]] <- etas[[i]] <- 0
     if(!is.null(x[[i]]$model.matrix)) {
       ll_contrib[[i]][["p"]] <- medf[[i]][["p.edf"]] <- NA
+      ll_contrib2[[i]][["p"]] <- medf[[i]][["p.edf"]] <- NA
+      LLC[[i]][["p"]] <- 0
       parm[[i]][["p"]] <- matrix(nrow = 0, ncol = ncol(x[[i]]$model.matrix))
       colnames(parm[[i]][["p"]]) <- colnames(x[[i]]$model.matrix)
       if(!is.null(start)) {
@@ -5644,16 +5665,15 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
         names(beta[[i]][["p"]]) <- colnames(x[[i]]$model.matrix)
         if(!is.null(family$initialize) & is.null(offset)) {
           if(noff) {
-            shuffle_id <- sample(1:N)
+            shuffle_id <- sample(seq_len(N))
           } else {
             shuffle_id <- NULL
-            for(ii in bit::chunk(y)) {
-              ind <- ii[1]:ii[2]
-              shuffle_id <- ffbase::ffappend(shuffle_id, if(shuffle) sample(ind) else ind)
+            for(ii in bamlss_chunk(y)) {
+              shuffle_id <- ffbase::ffappend(shuffle_id, if(shuffle) sample(ii) else ii)
             }
           }
           if(!srandom) {
-            take <- batch[[1L]][1L]:batch[[1L]][2L]
+            take <- if(length(batch[[1L]]) > 2) batch[[1L]] else batch[[1L]][1L]:batch[[1L]][2L]
           } else {
             take <- sample(samp_ids, floor(batch[[1L]][1L] * N))
           }
@@ -5672,7 +5692,11 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
     }
     if(!is.null(x[[i]]$smooth.construct)) {
       for(j in names(x[[i]]$smooth.construct)) {
+        if(!is.null(x[[i]]$smooth.construct[[j]]$orig.class))
+          class(x[[i]]$smooth.construct[[j]]) <- x[[i]]$smooth.construct[[j]]$orig.class
         ll_contrib[[i]][[paste0("s.", j)]] <- medf[[i]][[paste0("s.", j, ".edf")]] <- -1
+        ll_contrib2[[i]][[paste0("s.", j)]] <- medf[[i]][[paste0("s.", j, ".edf")]] <- -1
+        LLC[[i]][[paste0("s.", j)]] <- 0
         ncX <- ncol(x[[i]]$smooth.construct[[j]]$X)
         if(inherits(x[[i]]$smooth.construct[[j]], "nnet0.smooth")) {
           tpar <- x[[i]]$smooth.construct[[j]]$state$parameters
@@ -5701,47 +5725,46 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
           }
           attr(x[[i]]$smooth.construct[[j]]$S[[lS + 1]], "npar") <- ncX
         }
-        if(inherits(x[[i]]$smooth.construct[[j]], "nnet0.smooth")) {
-#          if(noff) {
-#            shuffle_id <- sample(1:N)
-#          } else {
-#            shuffle_id <- NULL
-#            for(ii in bit::chunk(y)) {
-#              ind <- ii[1]:ii[2]
-#              shuffle_id <- ffbase::ffappend(shuffle_id, if(shuffle) sample(ind) else ind)
-#            }
-#          }
-#          if(!srandom) {
-#            take <- batch[[1L]][1L]:batch[[1L]][2L]
-#          } else {
-#            take <- sample(samp_ids, floor(batch[[1L]][1L] * N))
-#          }
-#          Xn <- x[[i]]$smooth.construct[[j]]$getZ(x[[i]]$smooth.construct[[j]]$X[shuffle_id[take], , drop = FALSE], unlist(x[[i]]$smooth.construct[[j]]$n.weights))
-#          XX <- crossprod(Xn)
-#          objfun <- function(tau2, retedf = FALSE) {
-#            S <- 0
-#            for(l in seq_along(x[[i]]$smooth.construct[[j]]$S)) {
-#              S <- S + 1 / tau2[l] * if(is.function(x[[i]]$smooth.construct[[j]]$S[[l]])) {
-#                x[[i]]$smooth.construct[[j]]$S[[l]](c("b" = rep(0, ncol(XX))))
-#              } else {
-#                x[[i]]$smooth.construct[[j]]$S[[l]]
-#              }
-#            }
-#            edf <- sum_diag(XX %*% matrix_inv(XX + S))
-#            if(retedf)
-#              return(edf)
-#            else
-#              return((min(c(100, ncX * 0.5)) - edf)^2)
-#          }
-#          tau2[[i]][[j]] <- rep(1/ncX, length(x[[i]]$smooth.construct[[j]]$S))
-#          opt <- tau2.optim(objfun, start = tau2[[i]][[j]], maxit = 1000, scale = 100,
-#            add = FALSE, force.stop = FALSE, eps = .Machine$double.eps^0.8)
-#          if(!inherits(opt, "try-error")) {
-#            tau2[[i]][[j]] <- opt
-#          }
-           tau2[[i]][[j]] <- rep(1, length(x[[i]]$smooth.construct[[j]]$S))
+        if(!inherits(x[[i]]$smooth.construct[[j]], "nnet0.smooth")) {
+          if(noff) {
+            shuffle_id <- sample(1:N)
+          } else {
+            shuffle_id <- NULL
+            for(ii in bamlss_chunk(y)) {
+              shuffle_id <- ffbase::ffappend(shuffle_id, if(shuffle) sample(ii) else ii)
+            }
+          }
+          if(!srandom) {
+            take <- batch[[1L]][1L]:batch[[1L]][2L]
+          } else {
+            take <- sample(samp_ids, floor(batch[[1L]][1L] * N))
+          }
+          Xn <- x[[i]]$smooth.construct[[j]]$X[shuffle_id[take], , drop = FALSE]
+          XX <- crossprod(Xn)
+          objfun1 <- function(tau2, retedf = FALSE) {
+            S <- 0
+            for(l in seq_along(x[[i]]$smooth.construct[[j]]$S)) {
+              S <- S + 1 / tau2[l] * if(is.function(x[[i]]$smooth.construct[[j]]$S[[l]])) {
+                x[[i]]$smooth.construct[[j]]$S[[l]](c("b" = rep(0, ncol(XX))))
+              } else {
+                x[[i]]$smooth.construct[[j]]$S[[l]]
+              }
+            }
+            edf <- sum_diag(XX %*% matrix_inv(XX + S))
+            if(retedf)
+              return(edf)
+            else
+              return((min(c(100, ncX * 0.5)) - edf)^2)
+          }
+          tau2[[i]][[j]] <- rep(1000, length(x[[i]]$smooth.construct[[j]]$S))
+          opt <- tau2.optim(objfun1, start = tau2[[i]][[j]], maxit = 1000, scale = 100,
+            add = FALSE, force.stop = FALSE, eps = .Machine$double.eps^0.8)
+          if(!inherits(opt, "try-error")) {
+            tau2[[i]][[j]] <- opt
+          }
+          ## tau2[[i]][[j]] <- rep(1, length(x[[i]]$smooth.construct[[j]]$S))
         } else {
-          tau2[[i]][[j]] <- rep(1/ncX, length(x[[i]]$smooth.construct[[j]]$S))
+          tau2[[i]][[j]] <- rep(1, length(x[[i]]$smooth.construct[[j]]$S))
         }
         if(is.null(start)) {
           beta[[i]][[paste0("s.", j)]] <- rep(0, ncX)
@@ -5793,9 +5816,8 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
         shuffle_id <- sample(1:N)
       } else {
         shuffle_id <- NULL
-        for(ii in bit::chunk(y)) {
-          ind <- ii[1]:ii[2]
-          shuffle_id <- ffbase::ffappend(shuffle_id, if(shuffle) sample(ind) else ind)
+        for(ii in bamlss_chunk(y)) {
+          shuffle_id <- ffbase::ffappend(shuffle_id, if(shuffle) sample(ii) else ii)
         }
       }
     } else {
@@ -5810,11 +5832,20 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
 
     for(bid in bind) {
       if(!srandom) {
-        take <- batch[[bid]][1L]:batch[[bid]][2L]
-        take2 <- if(bid < 2) {
-          batch[[bid + 1L]][1L]:batch[[bid + 1L]][2L]
+        if(length(batch[[bid]]) > 2) {
+          take <- batch[[bid]]
+          take2 <- if(bid < 2) {
+            batch[[bid + 1L]]
+          } else {
+            batch[[bid - 1L]]
+          }
         } else {
-          batch[[bid - 1L]][1L]:batch[[bid - 1L]][2L]
+          take <- batch[[bid]][1L]:batch[[bid]][2L]
+          take2 <- if(bid < 2) {
+            batch[[bid + 1L]][1L]:batch[[bid + 1L]][2L]
+          } else {
+            batch[[bid - 1L]][1L]:batch[[bid - 1L]][2L]
+          }
         }
       } else {
         take <- sample(samp_ids, floor(batch[[bid]][1L] * N))
@@ -5890,9 +5921,9 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
 
           etas[[i]] <- etas[[i]] - drop(Xt %*% b0)
 
-          objfun <- function(tau2, retLL = FALSE) {
+          objfun2 <- function(tau2, retLL = FALSE) {
             P <- matrix_inv(XWX + 1/tau2 * I)
-            b <- drop(P %*% crossprod(Xn * hess, e)) * nu + b0 * (1-nu)
+            b <- drop(P %*% crossprod(Xn * hess, e)) ##* nu + b0 * (1-nu)
             etas[[i]] <- etas[[i]] + drop(Xt %*% b)
             if(retLL) {
               return(family$loglik(yt, family$map2par(etas)))
@@ -5908,10 +5939,11 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
             }
             return(ll)
           }
-          tau2fe <- try(tau2.optim(objfun, tau2f), silent = TRUE)
+          tau2fe <- try(tau2.optim(objfun2, tau2f), silent = TRUE)
           ll_contrib[[i]][["p"]] <- NA
+          ll_contrib2[[i]][["p"]] <- NA
           if(!inherits(tau2fe, "try-error")) {
-            ll1 <- objfun(tau2fe, retLL = TRUE)
+            ll1 <- objfun2(tau2fe, retLL = TRUE)
             epsll <- abs((ll1 - ll0)/ll0)
             if(((ll1 > ll0) & (epsll > eps_loglik)) | always) {
               tau2f <- tau2fe
@@ -5921,9 +5953,14 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
               } else {
                 beta[[i]][["p"]] <- drop(P %*% crossprod(Xn * hess, e)) * nu + b0 * (1-nu)
               }
-              ll_contrib[[i]][["p"]] <- ll1 - ll0
               tedf <- sum_diag(XWX %*% P)
               edf <- edf + tedf
+              ll_contrib[[i]][["p"]] <- if(aic) {
+                -2 * ll1 + K * ncol(Xt)
+              } else {
+                ll1 - ll0
+              }
+              ll_contrib2[[i]][["p"]] <- ll1 - ll0
               medf[[i]][["p.edf"]] <- c(medf[[i]][["p.edf"]], tedf)
             }
           }
@@ -5981,7 +6018,7 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
 
             XWX <- crossprod(Xn * hess, Xn)
 
-            objfun <- function(tau2, retLL = FALSE) {
+            objfun3 <- function(tau2, retLL = FALSE) {
               S <- 0
               for(l in 1:length(tau2)) {
                 S <- S + 1/tau2[l] * if(is.function(x[[i]]$smooth.construct[[j]]$S[[l]])) {
@@ -5991,7 +6028,7 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
                 }
               }
               P <- matrix_inv(XWX + S)
-              b <- drop(P %*% crossprod(Xn * hess, e)) * nu + b0 * (1-nu)
+              b <- drop(P %*% crossprod(Xn * hess, e)) ##* nu + b0 * (1-nu)
               etas[[i]] <- etas[[i]] + xcenter(Xt %*% b)
               if(retLL) {
                 return(family$loglik(yt, family$map2par(etas)))
@@ -6015,12 +6052,12 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
             }
 
             if(!slice) {
-              tau2s <- try(tau2.optim(objfun, tau2[[i]][[j]], maxit = 10), silent = TRUE)
+              tau2s <- try(tau2.optim(objfun3, tau2[[i]][[j]], maxit = 10), silent = TRUE)
             } else {
               theta <- c(b0, "tau2" = tau2[[i]][[j]])
               ii <- grep("tau2", names(theta))
               logP <- function(g, x, ll, ...) {
-                -1 * objfun(get.par(g, "tau2"))
+                -1 * objfun3(get.par(g, "tau2"))
               }
               for(jj in ii) {
                 theta <- uni.slice(theta, x[[i]]$smooth.construct[[j]], family, NULL,
@@ -6029,14 +6066,20 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
               tau2s <- as.numeric(get.par(theta, "tau2"))
             }
             ll_contrib[[i]][[paste0("s.", j)]] <- NA
+            ll_contrib2[[i]][[paste0("s.", j)]] <- NA
             accept <- TRUE
             if(!inherits(tau2s, "try-error")) {
-              ll1 <- objfun(tau2s, retLL = TRUE)
+              ll1 <- objfun3(tau2s, retLL = TRUE)
               epsll <- abs((ll1 - ll0)/ll0)
-              if(!slice) {
-                accept <- TRUE
+#              if(!slice) {
+#                accept <- TRUE
+#              } else {
+#                epsll < 0.5
+#              }
+              if(!always) {
+                accept <- epsll <= 0.5
               } else {
-                epsll < 0.5
+                accept <- TRUE
               }
               if((((ll1 > ll0) & (epsll > eps_loglik)) | always) & accept) {
                 tau2[[i]][[j]] <- tau2s
@@ -6065,7 +6108,12 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
                 }
                 tedf <- sum_diag(XWX %*% P)
                 edf <- edf + tedf
-                ll_contrib[[i]][[paste0("s.", j)]] <- ll1 - ll0
+                ll_contrib[[i]][[paste0("s.", j)]] <- if(aic) {
+                  -2 * family$loglik(yt, family$map2par(etas)) + K * tedf
+                } else {
+                  ll1 - ll0
+                }
+                ll_contrib2[[i]][[paste0("s.", j)]] <- ll1 - ll0
                 medf[[i]][[paste0("s.", j, ".edf")]] <- c(medf[[i]][[paste0("s.", j, ".edf")]], tedf)
               }
             }
@@ -6098,8 +6146,17 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
 
       if(select) {
         llc <- unlist(ll_contrib)
+        llc2 <- unlist(ll_contrib2)
         if(!all(is.na(llc))) {
-          llc <- names(llc)[which.max(llc)]
+          if(aic) {
+            llval <- min(llc, na.rm = TRUE)
+            llval2 <- llc2[which.min(llc)]
+            llc <- names(llc)[which.min(llc)]
+          } else {
+            llval <- max(llc, na.rm = TRUE)
+            llval2 <- llc2[which.max(llc)]
+            llc <- names(llc)[which.max(llc)]
+          }
           llc <- strsplit(llc, ".", fixed = TRUE)[[1]]
           llc <- c(llc[1], paste0(llc[-1], collapse = "."))
           beta[[llc[1]]][[llc[2]]] <- tbeta[[llc[1]]][[llc[2]]]
@@ -6111,6 +6168,10 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
             Xn <- x[[llc[1]]]$model.matrix[shuffle_id[take], , drop = FALSE]
             Xt <- x[[llc[1]]]$model.matrix[shuffle_id[take2], , drop = FALSE]
           }
+          ll_iter <- attr(LLC[[llc[1]]][[llc[2]]], "iteration")
+          ll_iter <- c(ll_iter, iter)
+          LLC[[llc[1]]][[llc[2]]] <- c(LLC[[llc[1]]][[llc[2]]], llval2)
+          attr(LLC[[llc[1]]][[llc[2]]], "iteration") <- ll_iter
           eta[[llc[1]]] <- eta[[llc[1]]] + xcenter(Xn %*% beta[[llc[1]]][[llc[2]]])
           etas[[llc[1]]] <- etas[[llc[1]]] + xcenter(Xt %*% beta[[llc[1]]][[llc[2]]])
         }
@@ -6140,7 +6201,15 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
 
       if(verbose) {
         edf <- abs(edf)
-        btxt <- if(srandom) NA else batch[[bid]][2L]
+        btxt <- if(srandom) {
+          NA
+        } else {
+          if(length(batch[[bid]]) > 2) {
+            length(batch[[bid]]) * iter
+          } else {
+            batch[[bid]][2L]
+          }
+        }
         if(iter < 2) {
           cat(sprintf("   * iter %i, no. obs %i, edf %f\r", iter, btxt, round(edf, 4)))
         } else {
@@ -6190,8 +6259,47 @@ bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
   rval$nbatch <- nbatch
   rval$parpaths <- parm
   rval$epochs <- epochs
+  rval$n.iter <- iter
+  if(select) {
+    rval$llcontrib <- LLC
+  }
 
   rval
+}
+
+contribplot <- function(x, ...) {
+  if(is.null(ll <- x$model.stats$optimizer$llcontrib))
+    stop("nothing to plot")
+  iter <- x$model.stats$optimizer$n.iter - 1L
+  sf <- list()
+  for(i in names(ll)) {
+    sf[[i]] <- list()
+    for(j in names(ll[[i]])) {
+      if(!is.null(ll[[i]][[j]])) {
+        ii <- attr(ll[[i]][[j]], "iteration")
+        sf[[i]][[j]] <- length(ii) / iter
+        llv <- rep(0, iter)
+        llv[ii] <- ll[[i]][[j]][-1]
+        llv <- cumsum(llv)
+        ll[[i]][[j]] <- llv
+      } else {
+        ll[[i]][[j]] <- rep(0, iter)
+        sf[[i]][[j]] <- 0
+      }
+    }
+    sf[[i]] <- do.call("rbind", sf[[i]])
+    sf[[i]] <- sf[[i]][order(sf[[i]][, 1], decreasing = TRUE), , drop = FALSE]
+    colnames(sf[[i]]) <- "Sel. freq."
+    cat(i, "\n", sep = "")
+    printCoefmat(sf[[i]])
+    cat("\n")
+    ll[[i]] <- do.call("cbind", ll[[i]])
+    colnames(ll[[i]]) <- paste0(i, ".", colnames(ll[[i]]))
+  }
+  ll <- do.call("cbind", ll)
+  print.boost_summary(list("loglik" = ll, "mstop" = iter),
+    summary = FALSE, plot = TRUE, which = "loglik.contrib", ...)
+  invisible(list("loglik" = ll, "selfreqs" = sf))
 }
 
 
@@ -6204,14 +6312,21 @@ bbfitp <- function(x, y, family, mc.cores = 1, ...)
   }
   b <- parallel::mclapply(1:mc.cores, parallel_fun, mc.cores = mc.cores)
   rval <- list()
-  rval$samples <- as.mcmc.list(lapply(b, function(x) {
+  rval$samples <- lapply(b, function(x) {
     if(inherits(x, "try-error")) {
       writeLines(x)
-      return(NULL)
+      return(x)
     } else {
       return(as.mcmc(x$parpaths))
     }
-  }))
+  })
+  is_err <- sapply(rval$samples, is.character)
+  if(all(is_err))
+    stop("something went wrong in bbfitp()!")
+  if(any(is_err))
+    warning("one core reports an error.")
+  b <- b[!is_err]
+  rval$samples <- as.mcmc.list(rval$samples[!is_err])
   rval$parameters <- colMeans(do.call("rbind", lapply(b, function(x) x$parpaths)))
   rval$nbatch <- b[[1]]$nbatch
   rval$runtime <- mean(sapply(b, function(x) x$runtime))

@@ -2541,6 +2541,15 @@ bivnorm_bamlss <- function(...)
     "family" = "mvnorm",
     "names" = c("mu1", "mu2", "sigma1", "sigma2", "rho"),
     "links" = c("identity", "identity", "log", "log", "rhogit"),
+		"bayesx" = list(
+      "mu1" = c("bivnormal", "mu"),
+      "mu2" = c("bivnormal", "mu"),
+      "sigma1" = c("bivnormal", "sigma"),
+      "sigma2" = c("bivnormal", "sigma"),
+      "rho" = c("bivnormal", "rho"),
+      "order" = 5:1,
+      "rm.number" = TRUE
+    ),
     "d" = function(y, par, log = FALSE) {
       d <- .Call("bivnorm_loglik", as.numeric(y[, 1]), as.numeric(y[, 2]),
         as.numeric(par$mu1), as.numeric(par$mu2), as.numeric(par$sigma1),
@@ -3066,12 +3075,12 @@ bivlogit_bamlss <- function(...)
 mvt_bamlss <- function(...)
 {
   links <- c(mu1 = "identity", mu2 = "identity",
-    sigma1 = "log", sigma2 = "log", rho = "fisherz", df = "log")
+    sigma1 = "log", sigma2 = "log", rho = "rhogit", df = "log")
   rval <- list(
     "family" = "mvt",
     "names" = c("mu1", "mu2", "sigma1", "sigma2", "rho", "df"),
     "links" = parse.links(links, c(mu1 = "identity", mu2 = "identity",
-      sigma1 = "log", sigma2 = "log", rho = "fisherz", df = "log"), ...),
+      sigma1 = "log", sigma2 = "log", rho = "rhogit", df = "log"), ...),
     "bayesx" = list(
       "mu1" = c("bivt", "mu"),
       "mu2" = c("bivt", "mu"),
@@ -3084,7 +3093,35 @@ mvt_bamlss <- function(...)
     ),
     "mu" = function(par, ...) {
       c(par$mu1, par$mu2)
-    }
+    },
+    "d" = function(y, par, log = FALSE, ...) {
+      c1 <- 1 + 1/(par$df*(1 - par$rho)) * ( ((y[,1] - par$mu1)/par$sigma1)^2 -
+        2*par$rho*((y[,1] - par$mu1)/par$sigma1) * ((y[,2] - par$mu2)/par$sigma2) +
+        ((y[,2] - par$mu2)/par$sigma2)^2 )
+      d <- lgamma((par$df + 2)*0.5) - lgamma(par$df*0.5) - 1.1447298858494 - log(par$df) -
+        log(par$sigma1) - log(par$sigma2) - 0.5*log(1 - par$rho^2) -
+        (par$df + 2)*0.5 * log(c1)
+      if(!log)
+        d <- exp(d)
+      return(d)
+    },
+   "hess" = list(
+      "mu1" = function(y, par, ...) {
+        1 / ((1 - par$rho^2) * par$sigma1^2)
+      },
+      "mu2" = function(y, par, ...) {
+        1 / ((1 - par$rho^2) * par$sigma2^2)
+      },
+      "sigma1" = function(y, par, ...) {
+        1 + 1 / (1 - par$rho^2)
+      },
+      "sigma2" = function(y, par, ...) {
+        1 + 1 / (1 - par$rho^2)
+      },
+      "rho" = function(y, par, ...) {
+        1 - par$rho^4
+      }
+    )
   )
   class(rval) <- "family.bamlss"
   rval
@@ -3093,20 +3130,99 @@ mvt_bamlss <- function(...)
 
 dirichlet_bamlss <- function(...)
 {
-  link <- "logit"
-
+  k <- list(...)$k
+  if(is.null(k))
+    stop("argument k is missing, number of parameters need to be specified!")
   rval <- list(
     "family" = "dirichlet",
-    "names" = "alpha",
-    "links" = parse.links(link, c(alpha = "logit"), ...),
-    "bayesx" = list(
-      "alpha" = c("dirichlet", "alpha")
-    )
+    "names" = paste0("alpha", 1:k)
   )
+  rval$links <- rep("log", k)
+  names(rval$links) <- rval$names
+
+  rval$d <- function(y, par, log = FALSE, ...) {
+    par <- do.call("cbind", par)
+    s1 <- -1 * rowSums(lgamma(par))
+    s2 <- lgamma(rowSums(par))
+    s3 <- rowSums((par - 1) * log(y))
+    ll <- s1 + s2 + s3
+    if(!log)
+      ll <- exp(ll)
+    ll
+  }
+  score <- function(y, par, id, ...) {
+    rval <- -1 * par[[id]] * digamma(par[[id]]) +
+      par[[id]] * digamma(rowSums(do.call("cbind", par))) +
+      par[[id]] * log(y[, grep(id, names(par))])
+    rval
+  }
+  rval$score <- rep(list(score), k)
+  names(rval$score) <- rval$names
+  hess <- function(y, par, id, ...) {
+    rval <- par[[id]]^2 * (-1 * trigamma(rowSums(do.call("cbind", par))) +
+      trigamma(par[[id]]))
+    rval
+  }
+  rval$hess <- rep(list(hess), k)
+  names(rval$hess) <- rval$names
+
+  rval$initialize <- list()
+  for(j in 1:k) {
+    ft <- c(
+      "function(y, ...) {",
+         paste0("mj <- mean(y[, ", j, "]);"),
+         "return(rep(mj, nrow(y)))",
+      "}"
+    )
+    rval$initialize[[paste0("alpha", j)]] <- eval(parse(text = paste(ft, collapse = "")))
+  }
 
   class(rval) <- "family.bamlss"
   rval
 }
+
+#if(FALSE) {
+#  data("ArcticLake", package = "DirichletReg")
+
+#  AL <- as.matrix(ArcticLake[, 1:3])
+
+#  d <- data.frame("depth" = ArcticLake$depth)
+#  d$y <- AL
+
+#  f <- list(
+#    y ~ s(depth),
+#      ~ s(depth),
+#      ~ s(depth)
+#  )
+
+#  b <- bamlss(f, data = d, family = dirichlet_bamlss(k = 3))
+
+#  p <- predict(b, type = "parameter")
+#  p <- as.data.frame(p)
+#  p <- p / rowSums(p)
+#  par(mfrow = c(1, 3))
+#  for(j in 1:3) {
+#    plot(d$y[, j] ~ d$depth, ylab = colnames(d$y)[j], xlab = "depth")
+#    plot2d(p[, j] ~ d$depth, lwd = 2, add = TRUE)
+#  }
+
+#  ###
+#  p <- predict(b, type = "parameter", FUN = function(x) x)
+#  p <- lapply(p, as.matrix)
+#  alpha_0 <- purrr::reduce(p, `+`)
+#  props <- lapply(p, function(x) x / alpha_0)
+#  props_95 <- lapply(props, function(x) t(apply(x, 1L, c95)))
+
+#  cols <- hcl.colors(3, "Dark 2")
+#  for(j in 1:3) {
+#    plot2d(props_95[[j]] ~ d$depth, lwd = 2,
+#	   ylab = colnames(d$y)[j], xlab = "depth")
+#    points(d$y[, j] ~ d$depth, pch = 19, col = cols[j])
+#    points(d$y[, j] ~ d$depth)
+#  }
+
+#  
+#}
 
 
 multinomial_bamlss <- multinom_bamlss <- function(...)
@@ -4998,4 +5114,183 @@ gpareto2_bamlss <- function(...)
 #  class(rval) <- "family.bamlss"
 #  rval
 #}
+
+
+## logNN model.
+logNN_bamlss <- function(...)
+{
+  stopifnot(requireNamespace("statmod"))
+
+  N <- list(...)$N
+  if(is.null(N))
+    N <- 100
+  check <- list(...)$check
+  if(is.null(check))
+    check <- FALSE
+
+  gq <- statmod::gauss.quad(N, kind = "hermite")
+
+  gq$weights <- gq$weights * exp(gq$nodes^2)
+
+  A <- function(t, y, mu, sigma, lambda) {
+    exp(-(((t - mu) / sigma)^2 + ((y - exp(t))/lambda)^2 )/2 ) / (2*pi*sigma*lambda)
+  }
+
+  rval <- list(
+    "family" = "logNormal-Normal Convolution",
+    "names" = c("mu", "sigma", "lambda"),
+    "links" = c("identity", "log", "log"),
+    "d" = function(y, par, log = FALSE, ...) {
+      if(check) {
+        d <- .Call("logNN_dens", gq$nodes, gq$weights, y, par$mu,
+          par$sigma, par$lambda, package = "bamlss")
+        foo <- function(t, y, mu, sigma, lambda) {
+          A(t, y, mu, sigma, lambda)
+        }
+        n <- length(y)
+        di <- rep(0, n)
+        for(i in 1:n) {
+          di[i] <- integrate(foo, -Inf, Inf, y = y[i], mu = par$mu[i],
+            sigma = par$sigma[i], lambda = par$lambda[i],
+            rel.tol = .Machine$double.eps^.75, subdivisions = 500L)$value
+        }
+        plot(d, di,
+          main = paste("Mean absolute difference:", round(mean(abs(d - di)), 4)),
+          xlab = "Gauss quadrature", ylab = "integrate()", ...)
+        abline(0, 1)
+      } else {
+        d <- .Call("logNN_dens", gq$nodes, gq$weights, y, par$mu,
+          par$sigma, par$lambda, package = "bamlss")
+      }
+      if(log)
+        d <- log(d)
+      return(d)
+    },
+    "p" = function(y, par, lower.tail = TRUE, log.p = FALSE, ...) {
+      foo <- function(t, y, mu, sigma, lambda) {
+        dnorm(t, mean = mu, sd = sigma) * pnorm(y - exp(t), sd = lambda)
+      }
+      n <- length(y)
+      p <- rep(0, n)
+      for(i in 1:n) {
+        p[i] <- integrate(foo, -Inf, Inf,
+          y = y[i], mu = par$mu[i], sigma = par$sigma[i], lambda = par$lambda[i],
+          rel.tol = .Machine$double.eps^.75)$value
+      }
+      if(!lower.tail)
+        p <- 1 - p
+     if(log.p)
+       return(log(p))
+     else
+      return(p)
+    },
+    "score" = list(
+      "mu" = function(y, par, ...) {
+#        d <- .Call("logNN_dens", ba2, nodes, gq$weights, y, par$mu,
+#          par$sigma, par$lambda, package = "bamlss")
+#        foo <- function(t, y, mu, sigma, lambda) {
+#          A(t, y, mu, sigma, lambda) * (t - mu)
+#        }
+#        n <- length(y)
+#        rval <- rep(0, n)
+#        for(i in 1:n) {
+#          fx <- foo(nodes, y = y[i], mu = par$mu[i],
+#            sigma = par$sigma[i], lambda = par$lambda[i])
+#          rval[i] <- sum(gq$weights * fx) * ba2
+#        }
+#        rval <- 1/d * rval/par$sigma^2
+        rval <- .Call("logNN_score_mu", gq$nodes, gq$weights, y, par$mu,
+          par$sigma, par$lambda, package = "bamlss")
+        return(rval)
+      },
+      "sigma" = function(y, par, ...) {
+#        d <- .Call("logNN_dens", ba2, nodes, gq$weights, y, par$mu,
+#          par$sigma, par$lambda, package = "bamlss")
+#        foo <- function(t, y, mu, sigma, lambda) {
+#          A(t, y, mu, sigma, lambda) * ((t - mu)^2 - sigma^2)
+#        }
+#        n <- length(y)
+#        rval <- rep(0, n)
+#        for(i in 1:n) {
+#          fx <- foo(nodes, y = y[i], mu = par$mu[i],
+#            sigma = par$sigma[i], lambda = par$lambda[i])
+#          rval[i] <- sum(gq$weights * fx) * ba2
+#        }
+#        rval <- 1/d * rval/par$sigma^2
+        rval <- .Call("logNN_score_sigma", gq$nodes, gq$weights, y, par$mu,
+          par$sigma, par$lambda, package = "bamlss")
+        rval
+      },
+      "lambda" = function(y, par, ...) {
+#        d <- .Call("logNN_dens", ba2, nodes, gq$weights, y, par$mu,
+#          par$sigma, par$lambda, package = "bamlss")
+#        foo <- function(t, y, mu, sigma, lambda) {
+#          A(t, y, mu, sigma, lambda) * ((y - exp(t))^2 - lambda^2)
+#        }
+#        n <- length(y)
+#        rval <- rep(0, n)
+#        for(i in 1:n) {
+#          fx <- foo(nodes, y = y[i], mu = par$mu[i],
+#            sigma = par$sigma[i], lambda = par$lambda[i])
+#          rval[i] <- sum(gq$weights * fx) * ba2
+#        }
+#        rval <- 1/d * rval/par$lambda^2
+        rval <- .Call("logNN_score_lambda", gq$nodes, gq$weights, y, par$mu,
+          par$sigma, par$lambda, package = "bamlss")
+        rval
+      }
+    ),
+    "initialize" = list(
+      "mu"    = function(y, ...) {
+        rep(mean(log(y[y > 0])), length(y))
+      },
+      "sigma" = function(y, ...) {
+        rep(sd(log(y[y > 0])), length(y))
+      },
+      "lambda" = function(y, ...) {
+        e <- y - exp(mean(log(y[y > 0])))
+        rep(sd(e), length(y))
+      }
+    )
+  )
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+if(FALSE) {
+  ## Simulate logNN data.
+  set.seed(123)
+
+  n <- 3000
+
+  ## Round observations for using the binning option.
+  x <- round(runif(n, -3, 3), 2)
+  mu <- 0.1 + sin(x)
+  Z <- rlnorm(n, mu, sd = exp(-2 + cos(x)))
+  y <- Z + rnorm(n, 0, 0.3)
+
+  f <- list(
+    y ~ s(x),
+    sigma ~ s(x),
+    lambda ~ 1
+  )
+
+  b <- bamlss(f, family = logNN_bamlss(N=200,check=FALSE), binning = TRUE, eps = 0.01)
+
+  mu <- as.matrix(predict(b, model = "mu", FUN = identity))
+  sigma <- as.matrix(predict(b, model = "sigma", type = "parameter", FUN = identity))
+  fit <- t(apply(exp(mu + sigma^2/2), 1, FUN = c95))
+  fsigma <- predict(b, model = "sigma", FUN = c95)
+
+  par(mfrow = c(1, 3))
+  plot(y ~ x, ylim = range(c(fit, y)), col = rgb(0.1, 0.1, 0.1, alpha = 0.3),
+    main = "Data and fit")
+  plot2d(fit ~ x, add = TRUE, col.lines = 4, lwd = 3)
+  fmu <- t(apply(mu, 1, c95))
+  plot2d(fmu ~ x, main = "True mu and fit")
+  plot2d(I(0.1 + sin(x)) ~ x, col.lines = 2, add = TRUE)
+  plot2d(fsigma ~ x, main = "True log(sigma) and fit")
+  plot2d(I(-2 + cos(x)) ~ x, col.lines = 2, add = TRUE)
+}
 

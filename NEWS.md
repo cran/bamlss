@@ -1,3 +1,11 @@
+# bamlss 1.1-2
+
+* Bug fixing.
+
+* Removed bit package depends.
+
+* More stable implementation of the batchwise backfitting optimizer.
+
 # bamlss 1.1-1
 
 * Bug fixing.

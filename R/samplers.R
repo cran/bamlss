@@ -64,7 +64,11 @@ GMCMC <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
         if(!is.null(x[[i]][[j]]$xt$propose))
           x[[i]][[j]]$propose <- x[[i]][[j]]$xt$propose
       }
-      propose2[[i]][[j]] <- if(is.null(x[[i]][[j]]$propose)) propose else x[[i]][[j]]$propose
+      if(is.null(family$propose)) {
+        propose2[[i]][[j]] <- if(is.null(x[[i]][[j]]$propose)) propose else x[[i]][[j]]$propose
+      } else {
+        propose2[[i]][[j]] <- family$propose[[i]]
+      }
       fitfun[[i]][[j]] <- function(x, p) {
         attr(p, "fitted.values")
       }

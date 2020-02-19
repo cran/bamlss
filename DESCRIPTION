@@ -1,6 +1,6 @@
 Package: bamlss
-Version: 1.1-1
-Date: 2019-11-13
+Version: 1.1-2
+Date: 2020-02-19
 Title: Bayesian Additive Models for Location, Scale, and Shape (and
         Beyond)
 Authors@R: c(person(given = "Nikolaus", family = "Umlauf", role = c("aut", "cre"), email = "Nikolaus.Umlauf@uibk.ac.at",
@@ -19,10 +19,11 @@ Description: Infrastructure for estimating probabilistic distributional regressi
   <doi:10.1080/10618600.2017.1407325> and the R package in Umlauf, Klein, Simon, Zeileis (2019)
   <arXiv:1909.11784>.
 Depends: R (>= 3.5.0), coda, colorspace, mgcv
-Imports: Formula, MBA, mvtnorm, sp, Matrix, survival, methods, parallel
-Suggests: akima, bit, ff, ffbase, fields, gamlss, geoR, rjags, BayesX,
-        BayesXsrc, R2BayesX, mapdata, maps, maptools, nnet, raster,
-        spatstat, spdep, zoo, keras, splines2, sdPrior, glogis, glmnet,
+Imports: Formula, MBA, mvtnorm, sp, Matrix, survival, methods,
+        parallel, raster
+Suggests: akima, ff, ffbase, fields, gamlss, geoR, rjags, BayesX,
+        BayesXsrc, R2BayesX, mapdata, maps, maptools, nnet, spatstat,
+        spdep, zoo, keras, splines2, sdPrior, statmod, glogis, glmnet,
         scoringRules, knitr, MASS
 License: GPL-2 | GPL-3
 LazyLoad: yes
@@ -30,7 +31,7 @@ RoxygenNote: 6.1.1
 URL: http://www.bamlss.org/
 VignetteBuilder: knitr
 NeedsCompilation: yes
-Packaged: 2019-11-13 15:00:27 UTC; nik
+Packaged: 2020-02-19 21:33:19 UTC; nik
 Author: Nikolaus Umlauf [aut, cre] (<https://orcid.org/0000-0003-2160-9803>),
   Nadja Klein [aut],
   Achim Zeileis [aut] (<https://orcid.org/0000-0003-0918-3766>),
@@ -39,4 +40,4 @@ Author: Nikolaus Umlauf [aut, cre] (<https://orcid.org/0000-0003-2160-9803>),
   Stanislaus Stadlmann [ctb]
 Maintainer: Nikolaus Umlauf <Nikolaus.Umlauf@uibk.ac.at>
 Repository: CRAN
-Date/Publication: 2019-11-13 16:10:02 UTC
+Date/Publication: 2020-02-19 22:20:03 UTC

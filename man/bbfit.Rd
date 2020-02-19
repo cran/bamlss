@@ -1,6 +1,7 @@
 \name{bbfit}
 \alias{bbfit}
 \alias{bbfitp}
+\alias{contribplot}
 
 \title{Batchwise Backfitting}
 
@@ -15,13 +16,18 @@ bbfit(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
 
 ## Parallel version.
 bbfitp(x, y, family, mc.cores = 1, ...)
+
+## Loglik contribution plot.
+contribplot(x, ...)
 }
 
 \arguments{
    \item{x}{For function \code{bfit()} the \code{x} list, as returned from function
     \code{\link{bamlss.frame}}, holding all model matrices and other information that is used for
     fitting the model. For the updating functions an object as returned from function
-    \code{\link[mgcv]{smooth.construct}} or \code{\link[mgcv]{smoothCon}}.}
+    \code{\link[mgcv]{smooth.construct}} or \code{\link[mgcv]{smoothCon}}. For function
+    \code{contribplot()}, a \code{"bamlss"} object using \code{bbfit()} with argument
+    \code{select = TRUE}.}
   \item{y}{The model response, as returned from function \code{\link{bamlss.frame}}.}
   \item{family}{A \pkg{bamlss} family object, see \code{\link{family.bamlss}}.}
   \item{shuffle}{Should observations be shuffled?}

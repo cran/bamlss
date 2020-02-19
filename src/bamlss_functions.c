@@ -4346,7 +4346,7 @@ SEXP ztnbinom_score_theta(SEXP y, SEXP mu, SEXP theta)
 }
 
 
-// Nested multiomial.
+// Nested multiomial.//
 /*SEXP nlogit_p(SEXP P1, SEXP P2, SEXP id, SEXP y)*/
 /*{*/
 /*  int i, j;*/
@@ -4375,4 +4375,146 @@ SEXP ztnbinom_score_theta(SEXP y, SEXP mu, SEXP theta)
 /*  UNPROTECT(1);*/
 /*  return(d);*/
 /*}*/
+
+// logNN density.
+SEXP logNN_dens(SEXP NODES, SEXP WEIGHTS, SEXP Y, SEXP MU, SEXP SIGMA, SEXP LAMBDA)
+{
+  int i, j;
+  int n = length(Y);
+  int k = length(NODES);
+
+  double *NODESptr = REAL(NODES);
+  double *WEIGHTSptr = REAL(WEIGHTS);
+  double *Yptr = REAL(Y);
+  double *MUptr = REAL(MU);
+  double *SIGMAptr = REAL(SIGMA);
+  double *LAMBDAptr = REAL(LAMBDA);
+
+  SEXP d = PROTECT(allocVector(REALSXP, n));
+  double *dptr = REAL(d);
+
+  double sum = 0.0;
+
+  for(i = 0; i < n; i++) {
+    sum = 0.0;
+    for(j = 0; j < k; j++) {
+      sum += WEIGHTSptr[j] * exp(-1.0/(2.0*pow(SIGMAptr[i],2.0)) * pow(NODESptr[j] - MUptr[i],2.0) -
+        1.0/(2.0*pow(LAMBDAptr[i],2.0)) * pow(Yptr[i] - exp(NODESptr[j]),2.0));
+    }
+    dptr[i] = 1.0 / (6.28318530717959 * SIGMAptr[i] * LAMBDAptr[i]) * sum;
+    if(dptr[i] <= 0.0)
+      dptr[i] = 1e-20;
+  }
+
+  UNPROTECT(1);
+  return(d);
+}
+
+SEXP logNN_score_mu(SEXP NODES, SEXP WEIGHTS, SEXP Y, SEXP MU, SEXP SIGMA, SEXP LAMBDA)
+{
+  int i, j;
+  int n = length(Y);
+  int k = length(NODES);
+
+  double *NODESptr = REAL(NODES);
+  double *WEIGHTSptr = REAL(WEIGHTS);
+  double *Yptr = REAL(Y);
+  double *MUptr = REAL(MU);
+  double *SIGMAptr = REAL(SIGMA);
+  double *LAMBDAptr = REAL(LAMBDA);
+
+  SEXP rval = PROTECT(allocVector(REALSXP, n));
+  double *rvalptr = REAL(rval);
+
+  double sum1 = 0.0;
+  double sum2 = 0.0;
+  double A = 0.0;
+
+  for(i = 0; i < n; i++) {
+    sum1 = 0.0;
+    sum2 = 0.0;
+    for(j = 0; j < k; j++) {
+      A = WEIGHTSptr[j] * exp(-1.0/(2.0*pow(SIGMAptr[i],2.0)) * pow(NODESptr[j] - MUptr[i],2.0) -
+        1.0/(2.0*pow(LAMBDAptr[i],2.0)) * pow(Yptr[i] - exp(NODESptr[j]),2.0)) * 1 / (6.28318530717959*SIGMAptr[i]*LAMBDAptr[i]);
+      sum1 += A;
+      sum2 += A * (NODESptr[j] - MUptr[i]);
+    }
+    rvalptr[i] = 1 / sum1 * sum2 * pow(SIGMAptr[i], -2.0);
+  }
+
+  UNPROTECT(1);
+  return(rval);
+}
+
+SEXP logNN_score_sigma(SEXP NODES, SEXP WEIGHTS, SEXP Y, SEXP MU, SEXP SIGMA, SEXP LAMBDA)
+{
+  int i, j;
+  int n = length(Y);
+  int k = length(NODES);
+
+  double *NODESptr = REAL(NODES);
+  double *WEIGHTSptr = REAL(WEIGHTS);
+  double *Yptr = REAL(Y);
+  double *MUptr = REAL(MU);
+  double *SIGMAptr = REAL(SIGMA);
+  double *LAMBDAptr = REAL(LAMBDA);
+
+  SEXP rval = PROTECT(allocVector(REALSXP, n));
+  double *rvalptr = REAL(rval);
+
+  double sum1 = 0.0;
+  double sum2 = 0.0;
+  double A = 0.0;
+
+  for(i = 0; i < n; i++) {
+    sum1 = 0.0;
+    sum2 = 0.0;
+    for(j = 0; j < k; j++) {
+      A = WEIGHTSptr[j] * exp(-1.0/(2.0*pow(SIGMAptr[i],2.0)) * pow(NODESptr[j] - MUptr[i],2.0) -
+        1.0/(2.0*pow(LAMBDAptr[i],2.0)) * pow(Yptr[i] - exp(NODESptr[j]),2.0)) * 1 / (6.28318530717959*SIGMAptr[i]*LAMBDAptr[i]);
+      sum1 += A;
+      sum2 += A * (pow(NODESptr[j] - MUptr[i], 2.0) - pow(SIGMAptr[i], 2.0));
+    }
+    rvalptr[i] = 1 / sum1 * sum2 * pow(SIGMAptr[i], -2.0);
+  }
+
+  UNPROTECT(1);
+  return(rval);
+}
+
+SEXP logNN_score_lambda(SEXP NODES, SEXP WEIGHTS, SEXP Y, SEXP MU, SEXP SIGMA, SEXP LAMBDA)
+{
+  int i, j;
+  int n = length(Y);
+  int k = length(NODES);
+
+  double *NODESptr = REAL(NODES);
+  double *WEIGHTSptr = REAL(WEIGHTS);
+  double *Yptr = REAL(Y);
+  double *MUptr = REAL(MU);
+  double *SIGMAptr = REAL(SIGMA);
+  double *LAMBDAptr = REAL(LAMBDA);
+
+  SEXP rval = PROTECT(allocVector(REALSXP, n));
+  double *rvalptr = REAL(rval);
+
+  double sum1 = 0.0;
+  double sum2 = 0.0;
+  double A = 0.0;
+
+  for(i = 0; i < n; i++) {
+    sum1 = 0.0;
+    sum2 = 0.0;
+    for(j = 0; j < k; j++) {
+      A = WEIGHTSptr[j] * exp(-1.0/(2.0*pow(SIGMAptr[i],2.0)) * pow(NODESptr[j] - MUptr[i],2.0) -
+        1.0/(2.0*pow(LAMBDAptr[i],2.0)) * pow(Yptr[i] - exp(NODESptr[j]),2.0)) * 1 / (6.28318530717959*SIGMAptr[i]*LAMBDAptr[i]);
+      sum1 += A;
+      sum2 += A * (pow(Yptr[i] - exp(NODESptr[j]), 2.0) - pow(LAMBDAptr[i], 2.0));
+    }
+    rvalptr[i] = 1 / sum1 * sum2 * pow(LAMBDAptr[i], -2.0);
+  }
+
+  UNPROTECT(1);
+  return(rval);
+}
 
