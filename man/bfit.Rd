@@ -1,5 +1,6 @@
-\name{bfit}
+\name{opt_bfit}
 \alias{bfit}
+\alias{opt_bfit}
 \alias{bfit_iwls}
 \alias{bfit_iwls_Matrix}
 \alias{bfit_iwls_lm}
@@ -21,13 +22,20 @@
 }
 
 \usage{
-## Optimizer function:
+## Optimizer functions:
+opt_bfit(x, y, family, start = NULL, weights = NULL, offset = NULL,
+  update = "iwls", criterion = c("AICc", "BIC", "AIC"),
+  eps = .Machine$double.eps^0.25, maxit = 400,
+  outer = NULL, inner = FALSE, mgcv = FALSE,
+  verbose = TRUE, digits = 4, flush = TRUE,
+  nu = TRUE, stop.nu = NULL, ...)
+
 bfit(x, y, family, start = NULL, weights = NULL, offset = NULL,
   update = "iwls", criterion = c("AICc", "BIC", "AIC"),
   eps = .Machine$double.eps^0.25, maxit = 400,
   outer = NULL, inner = FALSE, mgcv = FALSE,
   verbose = TRUE, digits = 4, flush = TRUE,
-  nu = NULL, stop.nu = NULL, ...)
+  nu = TRUE, stop.nu = NULL, ...)
 
 ## Model term updating functions:
 bfit_iwls(x, family, y, eta, id, weights, criterion, ...)
@@ -38,7 +46,7 @@ bfit_glmnet(x, family, y, eta, id, weights, criterion, ...)
 }
 
 \arguments{
-  \item{x}{For function \code{bfit()} the \code{x} list, as returned from function
+  \item{x}{For function \code{opt_bfit()} the \code{x} list, as returned from function
     \code{\link{bamlss.frame}}, holding all model matrices and other information that is used for
     fitting the model. For the updating functions an object as returned from function
     \code{\link[mgcv]{smooth.construct}} or \code{\link[mgcv]{smoothCon}}.}
@@ -75,12 +83,14 @@ bfit_glmnet(x, family, y, eta, id, weights, criterion, ...)
   \item{verbose}{Print information during runtime of the algorithm.}
   \item{digits}{Set the digits for printing when \code{verbose = TRUE}.}
   \item{flush}{use \code{\link{flush.console}} for displaying the current output in the console.}
-  \item{nu}{Numeric or logical. Function \code{bfit} uses step length optimization of parameters when 
-    updating a model term, useful when the algorithm encounters convergence problems. If
-    \code{nu = TRUE} the step length parameter is optimized for each model term in each iteration of
-    the backfitting algorithm. If \code{nu} is numeric, e.g. \code{nu = 1}, then \code{nu} is
-    halfed until an improvement in the log-posterior is obtained or nu is smaller than
-    \code{.Machine$double.eps}.}
+  \item{nu}{Logical, numeric or \code{NULL}. Function \code{opt_bfit()} uses step length
+    optimization of parameters when updating a model term, useful to encounter convergence problems
+    of the algorithm. If \code{nu = TRUE} the step length parameter is optimized for each model term
+    in each iteration of the backfitting algorithm. If \code{nu} is numeric, e.g. \code{nu = 1},
+    then \code{nu} is halfed until an improvement in the log-posterior is obtained or nu is
+    smaller than \code{.Machine$double.eps}. If \code{nu = NULL}, no step length optimization
+    is performed. Note, using very large data sets it is usually better to switch of
+    step length optimization.}
   \item{stop.nu}{Integer. Should step length reduction be stopped after \code{stop.nu} iterations
     of the backfitting algorithm?}
   \item{eta}{The current value of the predictors, provided as a named list, one list entry
@@ -90,7 +100,7 @@ bfit_glmnet(x, family, y, eta, id, weights, criterion, ...)
     standard deviation by \code{eta\$sigma}.}
   \item{id}{Character, the name of the current parameter for which the model term should
     be updated.}
-  \item{\dots}{For function \code{bfit()}, arguments passed to function
+  \item{\dots}{For function \code{opt_bfit()}, arguments passed to function
     \code{\link{bamlss.engine.setup}}. For updating functions, within the dots argument the
     actual \code{iteration} number of the backfitting algorithm, the actual total number of
     equivalent degrees of freedom \code{edf} and vectors \code{z} and \code{hess}
@@ -164,8 +174,8 @@ bfit_glmnet(x, family, y, eta, id, weights, criterion, ...)
   sparse matrix infrastructures of package \pkg{Matrix}. The \pkg{Matrix} package and
   \code{bfit_iwls_Matrix()} is used for model terms where
   the maximum number of non-zero entries in the design matrix is less than half of the total number
-  of columns, if an additional argument \code{force.Matrix} is set to \code{TRUE} in the \code{bfit()}
-  call.
+  of columns, if an additional argument \code{force.Matrix} is set to \code{TRUE} in the
+  \code{opt_bfit()} call.
 
   The IWLS updating functions find optimum smoothing variances according to an information criterion
   using a stepwise approach, i.e., in each iteration and for each model term update the updating
@@ -177,7 +187,7 @@ bfit_glmnet(x, family, y, eta, id, weights, criterion, ...)
 }
 
 \value{
-  For function \code{bfit()} a list containing the following objects:
+  For function \code{opt_bfit()} a list containing the following objects:
   \item{fitted.values}{A named list of the fitted values of the modeled parameters
     of the selected distribution.}
   \item{parameters}{The estimated set regression coefficients and smoothing variances.}
@@ -223,7 +233,7 @@ bfit_glmnet(x, family, y, eta, id, weights, criterion, ...)
 d <- GAMart(n = 200)
 f <- num ~ s(x1) + s(x2) + s(x3)
 bf <- bamlss.frame(f, data = d, family = "gaussian")
-opt <- with(bf, bfit(x, y, family))
+opt <- with(bf, opt_bfit(x, y, family))
 print(str(opt))
 
 ## Same with bamlss().
@@ -295,7 +305,7 @@ f <- list(
 
 ## Fit model with special model term.
 b <- bamlss(f, data = d,
-  optimizer = bfit, sampler = GMCMC)
+  optimizer = opt_bfit, sampler = sam_GMCMC)
 
 ## Plot the fitted curves.
 plot(b)

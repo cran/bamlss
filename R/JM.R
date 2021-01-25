@@ -25,7 +25,7 @@ jm_bamlss <- function(...)
         }
         attr(x2, "bamlss.engine.setup") <- TRUE
         cat2("generating starting model for longitudinal part...\n")
-        gpar <- bfit(x = x2, y = rval$y[[1]][, "obs", drop = FALSE],
+        gpar <- opt_bfit(x = x2, y = rval$y[[1]][, "obs", drop = FALSE],
                      family = gF2(gaussian), start = NULL, maxit = 100)$parameters
         if(plot) {
           b <- list("x" = x2, "model.frame" = x$model.frame, "parameters" = gpar)
@@ -38,7 +38,7 @@ jm_bamlss <- function(...)
         attr(y, "width") <- attr(rval$y[[1]], "width")
         attr(y, "subdivisions") <- attr(rval$y[[1]], "subdivisions")
         cat2("generating starting model for survival part...\n")
-        spar <- cox_mode(x = x2, y = list(y), family = gF2("cox"),
+        spar <- opt_Cox(x = x2, y = list(y), family = gF2("cox"),
                          start = NULL, maxit = 100)$parameters
         if(plot) {
           b <- list("x" = x2, "model.frame" = x$model.frame, "parameters" = spar)
@@ -50,8 +50,8 @@ jm_bamlss <- function(...)
       
       return(rval)
     },
-    "optimizer" = jm_mode,
-    "sampler" = jm_mcmc,
+    "optimizer" = opt_JM,
+    "sampler" = sam_JM,
     "predict" = jm_predict
   )
   
@@ -478,7 +478,7 @@ sparse_Matrix_setup <- function(x, sparse = TRUE, force = FALSE, take, nonlinear
 }
 
 
-jm_mode <- function(x, y, start = NULL, weights = NULL, offset = NULL,
+opt_JM <- jm_mode <- function(x, y, start = NULL, weights = NULL, offset = NULL,
   criterion = c("AICc", "BIC", "AIC"), maxit = c(100, 1),
   nu = c("lambda" = 0.1, "gamma" = 0.1, "mu" = 0.1, "sigma" = 0.1, "alpha" = 0.1, "dalpha" = 0.1),
   update.nu = FALSE, eps = 0.0001, alpha.eps = 0.001, ic.eps = 1e-08, nback = 40,
@@ -1884,7 +1884,7 @@ update_jm_dalpha <- function(x, eta, eta_timegrid,
 
 
 ## (5) Joint model MCMC.
-jm_mcmc <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
+sam_JM <- jm_mcmc <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
   n.iter = 1200, burnin = 200, thin = 1, verbose = TRUE, 
   digits = 4, step = 20, ...)
 {

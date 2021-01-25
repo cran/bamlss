@@ -70,11 +70,11 @@ bamlss(formula, family = "gaussian", data = NULL,
     See, e.g., function \code{\link{randomize}} and \code{\link{bamlss.engine.setup}}.}
   \item{optimizer}{An optimizer function that returns, e.g., posterior mode estimates
     of the parameters as a named numeric vector. The default optimizer function is
-    \code{\link{bfit}}. If set to \code{FALSE}, no optimizer function will be used.}
+    \code{\link{opt_bfit}}. If set to \code{FALSE}, no optimizer function will be used.}
   \item{sampler}{A sampler function that returns a matrix of samples, the columns represent the
     parameters, the rows the iterations. The returned matrix must be coerced to an object of
     class \code{"mcmc"}, see \code{\link[coda]{as.mcmc}}. The default sampler function is
-    \code{\link{GMCMC}}. If set to \code{FALSE}, no sampler function will be used.}
+    \code{\link{sam_GMCMC}}. If set to \code{FALSE}, no sampler function will be used.}
   \item{samplestats}{A function computing statistics from samples, per default function
     \code{\link{samplestats}} is used. If set to \code{FALSE}, no \code{samplestats} function
     will be used. Note that this option is crucial for very large datasets, as computing
@@ -211,7 +211,7 @@ bamlss(formula, family = "gaussian", data = NULL,
 \seealso{
   \code{\link{bamlss.frame}}, \code{\link{family.bamlss}}, \code{\link{bamlss.formula}},
   \code{\link{randomize}}, \code{\link{bamlss.engine.setup}},
-  \code{\link{bfit}}, \code{\link{GMCMC}}, \code{\link{continue}},
+  \code{\link{opt_bfit}}, \code{\link{sam_GMCMC}}, \code{\link{continue}},
   \code{\link{coef.bamlss}}, \code{\link{parameters}}, \code{\link{predict.bamlss}},
   \code{\link{plot.bamlss}}
 }
@@ -228,12 +228,12 @@ plot(b, which = "samples")
 
 ## Use of optimizer and sampler functions:
 ## * first run optimizer,
-b1 <- bamlss(f, data = d, optimizer = bfit, sampler = FALSE)
+b1 <- bamlss(f, data = d, optimizer = opt_bfit, sampler = FALSE)
 print(b1)
 summary(b1)
 
 ## * afterwards, start sampler with staring values,
-b2 <- bamlss(f, data = d, start = coef(b1), optimizer = FALSE, sampler = GMCMC)
+b2 <- bamlss(f, data = d, start = coef(b1), optimizer = FALSE, sampler = sam_GMCMC)
 print(b2)
 summary(b2)
 

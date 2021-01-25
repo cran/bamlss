@@ -14,8 +14,8 @@ cox_bamlss <- function(...)
     "transform" = function(x, ...) {
       surv_transform(x = x$x, y = x$y, data = model.frame(x), family = x$family, is.cox = TRUE, ...)
     },
-    "optimizer" = cox_mode,
-    "sampler" = cox_mcmc,
+    "optimizer" = opt_Cox,
+    "sampler" = sam_Cox,
     "predict" = cox_predict
   )
 
@@ -24,7 +24,7 @@ cox_bamlss <- function(...)
 }
 
 ## Posterior mode estimation.
-cox_mode <- function(x, y, start, weights, offset, criterion = c("AICc", "BIC", "AIC"),
+opt_Cox <- cox_mode <- function(x, y, start, weights, offset, criterion = c("AICc", "BIC", "AIC"),
   nu = 0.1, update.nu = TRUE, eps = .Machine$double.eps^0.25, maxit = 400,
   verbose = TRUE, digits = 4, ...)
 {
@@ -359,8 +359,7 @@ update_surv_tc <- function(x, y, eta, eeta, int, criterion, edf, ...)
 
 
 ## The MCMC sampling engine.
-## Posterior mode estimation.
-cox_mcmc <- function(x, y, family, start, weights, offset,
+sam_Cox <- cox_mcmc <- function(x, y, family, start, weights, offset,
   n.iter = 1200, burnin = 200, thin = 1,
   verbose = TRUE, digits = 4, step = 20, ...)
 {

@@ -19,6 +19,17 @@ WAIC(object, ..., newdata = NULL)
   \item{newdata}{Optionally, use new data for computing the WAIC.}
 }
 
+\value{
+  A data frame containing the WAIC and estimated number of parameters.
+}
+
+\references{
+  Watanabe S. (2010). Asymptotic Equivalence of {B}ayes Cross Validation and Widely
+  Applicable Information Criterion in Singular Learning Theory. \emph{The Journal of Machine
+  Learning Research}, \bold{11}, 3571--3594.
+  \url{https://jmlr.org/papers/v11/watanabe10a.html}
+}
+
 \examples{
 \dontrun{d <- GAMart()
 b1 <- bamlss(num ~ s(x1), data = d)

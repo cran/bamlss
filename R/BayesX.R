@@ -38,7 +38,7 @@ BayesX.control <- function(n.iter = 1200, thin = 1, burnin = 200,
 }
 
 
-BayesX <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
+sam_BayesX <- BayesX <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
   data = NULL, control = BayesX.control(...), ...)
 {
   stopifnot(requireNamespace("BayesXsrc"))

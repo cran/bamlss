@@ -56,7 +56,7 @@ object.
 }
 
 \seealso{
-\code{\link{bamlss.frame}}, \code{\link{bamlss}}, \code{\link{bfit}}, \code{\link{GMCMC}},
+\code{\link{bamlss.frame}}, \code{\link{bamlss}}, \code{\link{opt_bfit}}, \code{\link{sam_GMCMC}},
 \code{\link{get.par}}, \code{\link{set.par}}
 }
 

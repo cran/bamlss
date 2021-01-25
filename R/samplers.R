@@ -13,7 +13,7 @@
 #}
 
 
-GMCMC <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
+sam_GMCMC <- GMCMC <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
   n.iter = 1200, burnin = 200, thin = 1, verbose = TRUE, step = 20,
   propose = "iwlsC_gp", chains = NULL, ...)
 {
@@ -129,7 +129,9 @@ gmcmc <- function(fun, theta, priors = NULL, propose = NULL,
   }
   class(theta) <- c("gmcmc.theta", "list")
 
-  plot <- !is.null(list(...)$plot)
+  plot <- list(...)$plot
+  if(is.null(plot))
+    plot <- FALSE
 
   parse_input <- function(input = NULL, default, type) {
     ninput <- deparse(substitute(input), backtick = TRUE, width.cutoff = 500)
@@ -312,9 +314,13 @@ gmcmc <- function(fun, theta, priors = NULL, propose = NULL,
         if(is.list(theta[[i]])) {
           for(j in names(theta[[i]])) {
             ## Get proposed states.
-            state <- propose[[i]][[j]](fun, theta, id = c(i, j),
+            state <- try(propose[[i]][[j]](fun, theta, id = c(i, j),
               prior = priors[[i]][[j]], data = data[[i]][[j]], eta = eta,
-              iteration = iter, n.iter = n.iter, burnin = burnin, rho = rho, ...)
+              iteration = iter, n.iter = n.iter, burnin = burnin, rho = rho, ...), silent = TRUE)
+
+            if(inherits(state, "try-error")) {
+              state <- list("alpha" = NA)
+            }
 
             ## If accepted, set current state to proposed state.
             accepted <- if(is.na(state$alpha)) FALSE else log(runif(1)) <= state$alpha
@@ -357,9 +363,13 @@ gmcmc <- function(fun, theta, priors = NULL, propose = NULL,
           }
         } else {
           ## Get proposed states.
-          state <- propose[[i]](fun, theta, id = i,
+          state <- try(propose[[i]](fun, theta, id = i,
             prior = priors[[i]], data = data[[i]], eta = eta,
-            iteration = iter, n.iter = n.iter, burnin = burnin, rho = rho, ...)
+            iteration = iter, n.iter = n.iter, burnin = burnin, rho = rho, ...), silent = TRUE)
+
+          if(inherits(state, "try-error")) {
+            state <- list("alpha" = NA)
+          }
 
           ## If accepted, set current state to proposed state.
           accepted <- if(is.na(state$alpha)) FALSE else log(runif(1)) <= state$alpha
@@ -1534,20 +1544,20 @@ gmcmc_newton <- function(fun, theta, id, prior, ...)
 
 
 ## Naive sampler.
-MVNORM <- function(x, y = NULL, family = NULL, start = NULL, n.samples = 500, hessian = NULL, ...)
+sam_MVNORM <- MVNORM <- function(x, y = NULL, family = NULL, start = NULL, n.samples = 500, hessian = NULL, ...)
 {
   if(!is.null(start))
     start <- unlist(start)
   if(is.null(hessian)) {
     if(inherits(x, "bamlss")) {
       if(is.null(x$hessian)) {
-        hessian <- opt(x = x$x, y = x$y, family = x$family,
+        hessian <- opt_optim(x = x$x, y = x$y, family = x$family,
           start = start, hessian = TRUE, ...)
       } else {
         hessian <- x$hessian
       }
     } else {
-      hessian <- opt(x = x, y = y, family = family, start = start, hessian = TRUE, ...)
+      hessian <- opt_optim(x = x, y = y, family = family, start = start, hessian = TRUE, ...)
     }
   }
 

@@ -1,4 +1,5 @@
-\name{isgd}
+\name{opt_isgd}
+\alias{opt_isgd}
 \alias{isgd}
 \title{
 Implicit Stochastic Gradient Descent Optimizer
@@ -8,7 +9,7 @@ This optimizer performs an implicit stochastic gradient descent
 algorithm. It is mainly used within a \code{\link{bamlss}} call.
 }
 \usage{
-isgd(x, y, family, weights = NULL, offset = NULL,
+opt_isgd(x, y, family, weights = NULL, offset = NULL,
      gammaFun = function(i) 1/(1 + i), shuffle = TRUE,
      CFun = function(beta) diag(length(beta)),
      start = NULL, i.state = 0)
@@ -34,7 +35,7 @@ isgd(x, y, family, weights = NULL, offset = NULL,
 tpf
 }
 \value{
-  For function \code{isgd()} a list containing the following objects:
+  For function \code{opt_isgd()} a list containing the following objects:
   \item{fitted.values}{A named list of the fitted values based on the last iteration
     of the modeled parameters of the selected distribution.}
   \item{parameters}{A matrix, each row corresponds to the parameter values of one iteration.}
@@ -66,11 +67,11 @@ CAUTION: Arguments \code{weights} and \code{offset} are not implemented yet!
 set.seed(111)
 d <- GAMart(n = 10000)
 f <- num ~ s(x1) + s(x2) + s(x3) + te(lon, lat)
-b <- bamlss(f, data = d, optimizer = bamlss:::isgd, sampler = FALSE)
+b <- bamlss(f, data = d, optimizer = opt_isgd, sampler = FALSE)
 plot(b, ask = F)
 
 ## loop over observations a 2nd time
-b <- bamlss(f, data = d, optimizer = bamlss:::isgd, sampler = FALSE, start = parameters(b),
+b <- bamlss(f, data = d, optimizer = opt_isgd, sampler = FALSE, start = parameters(b),
             i.state = b$model.stats$optimizer$sgd.summary$i.state)
 plot(b, ask = F)
 
@@ -79,10 +80,10 @@ plot(b, ask = F)
 
 ## testing some families
 f2 <- bin ~ s(x1) + s(x2) + s(x3) + te(lon, lat)
-b2 <- bamlss(f2, data = d, optimizer = isgd, sampler = FALSE, family = "binomial")
+b2 <- bamlss(f2, data = d, optimizer = opt_isgd, sampler = FALSE, family = "binomial")
 
 f3 <- cens ~ s(x1) + s(x2) + s(x3) + te(lon, lat)
-b3 <- bamlss(f3, data = d, optimizer = isgd, sampler = FALSE, family = "cnorm")
+b3 <- bamlss(f3, data = d, optimizer = opt_isgd, sampler = FALSE, family = "cnorm")
 }
 }
 \keyword{regression}

@@ -24,7 +24,7 @@ The \code{Golf} data contains the following variables:
 \references{
   Fahrmeir, L., Kneib, T., Lang, S. and Marx, B. (2013).
   Regression - Models, Methods and Applications, Springer.
-  \url{https://www.uni-goettingen.de/de/books/550514.html}.
+  \code{https://www.uni-goettingen.de/de/551357.html}.
 }
 
 \examples{

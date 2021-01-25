@@ -1,4 +1,5 @@
-\name{cox_mcmc}
+\name{sam_Cox}
+\alias{sam_Cox}
 \alias{cox_mcmc}
 
 \title{
@@ -11,6 +12,10 @@
 }
 
 \usage{
+sam_Cox(x, y, family, start, weights, offset,
+  n.iter = 1200, burnin = 200, thin = 1,
+  verbose = TRUE, digits = 4, step = 20, ...)
+
 cox_mcmc(x, y, family, start, weights, offset,
   n.iter = 1200, burnin = 200, thin = 1,
   verbose = TRUE, digits = 4, step = 20, ...)
@@ -60,7 +65,7 @@ cox_mcmc(x, y, family, start, weights, offset,
 }
 
 \seealso{
-  \code{\link{cox_mcmc}}, \code{\link{cox_bamlss}}, \code{\link{surv_transform}},
+  \code{\link{opt_Cox}}, \code{\link{cox_bamlss}}, \code{\link{surv_transform}},
   \code{\link{simSurv}}, \code{\link{bamlss}}
 }
 
@@ -82,8 +87,8 @@ f <- list(
 ## Note the the family object cox_bamlss() sets
 ## the default optimizer and sampler function!
 ## First, posterior mode estimates are computed
-## using function cox_mode(), afterwards the
-## sampler cox_mcmc() is started.
+## using function opt_Cox(), afterwards the
+## sampler sam_Cox() is started.
 b <- bamlss(f, family = "cox", data = d)
 
 ## Plot estimated effects.

@@ -103,7 +103,7 @@ set.seed(111)
 b1 <- bamlss(f, family = "gaussian", data = Golf)
 ```
 Note that the default number of iterations for the MCMC sampler is 1200, the burnin-phase is 200 and
-thinning is 1 (see the manual of the default MCMC sampler <code>[GMCMC()](`r prefix2`GMCMC.html)</code>).
+thinning is 1 (see the manual of the default MCMC sampler <code>[sam_GMCMC()](`r prefix2`GMCMC.html)</code>).
 The reason is that during the modeling process, users usually want to obtain first
 results rather quickly. Afterwards, if a final model is estimated the number of iterations of the
 sampler is usually set much higher to get close to i.i.d. samples from the posterior distribution.
@@ -258,7 +258,7 @@ set.seed(123)
 b <- bamlss(f, data = mcycle, family = "gaussian")
 ```
 using the default of 1200 iterations of the MCMC sampler to obtain first results quickly (see
-the documentation <code>[GMCMC()](`r prefix2`GMCMC.html)</code> for further details on tuning
+the documentation <code>[sam_GMCMC()](`r prefix2`GMCMC.html)</code> for further details on tuning
 parameters). Note that per default <code>[bamlss()](`r prefix2`bamlss.html)</code> uses a
 backfitting algorithm to compute posterior mode estimates, afterwards these estimates are used as
 starting values for the MCMC chains.
@@ -291,7 +291,7 @@ plot(bsp, which = "samples")
 Note again that this call would show all traceplots, for convenience we only show the plots for the intercepts.
 In this case, the traceplots do not indicate convergence of the Markov chains for parameter `"mu"`.
 To fix this, the number of iterations can be increased and also the burnin and thinning parameters
-can be adapted (see <code>[GMCMC()](`r prefix2`GMCMC.html)</code>). Further inspections are the
+can be adapted (see <code>[sam_GMCMC()](`r prefix2`GMCMC.html)</code>). Further inspections are the
 maximum autocorrelation of all parameters, using <code>[plot.bamlss()](`r prefix2`plot.bamlss.html)</code>
 setting argument `which = "max-acf"`, besides other convergence diagnostics, e.g., diagnostics that
 are part of the _coda_ package [@bamlss:Plummer+Best+Cowles+Vines:2006].

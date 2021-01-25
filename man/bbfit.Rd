@@ -1,6 +1,8 @@
-\name{bbfit}
+\name{opt_bbfit}
 \alias{bbfit}
+\alias{opt_bbfit}
 \alias{bbfitp}
+\alias{opt_bbfitp}
 \alias{contribplot}
 
 \title{Batchwise Backfitting}
@@ -11,11 +13,14 @@
 
 \usage{
 ## Batchwise backfitting engine.
+opt_bbfit(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
+  epochs = 1, nbatch = 10, verbose = TRUE, ...)
+
 bbfit(x, y, family, shuffle = TRUE, start = NULL, offset = NULL,
   epochs = 1, nbatch = 10, verbose = TRUE, ...)
 
 ## Parallel version.
-bbfitp(x, y, family, mc.cores = 1, ...)
+opt_bbfitp(x, y, family, mc.cores = 1, ...)
 
 ## Loglik contribution plot.
 contribplot(x, ...)
@@ -78,7 +83,7 @@ f <- list(
   sigma ~ s(x1,k=40) + s(x2,k=40) + s(x3,k=40) + te(lon,lat,k=10)
 )
 
-b <- bamlss(f, data = file.path(tf, "d.raw"), optimizer = bbfit,
+b <- bamlss(f, data = file.path(tf, "d.raw"), optimizer = opt_bbfit,
   sampler = FALSE, nbatch = 10, epochs = 2, loglik = TRUE)
 
 ## Show estimated effects.

@@ -22,7 +22,7 @@
 
 
 \seealso{
-\code{\link{bamlss}}, \code{\link{predict.bamlss}}, \code{\link{bfit}}, \code{\link{boost}}
+\code{\link{bamlss}}, \code{\link{predict.bamlss}}, \code{\link{opt_bfit}}, \code{\link{opt_boost}}
 }
 
 \examples{

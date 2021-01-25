@@ -19,7 +19,7 @@ stabsel(formula, data, family = "gaussian",
 \item{family}{ A \code{\link{bamlss.family}} object. }
 \item{q}{ An integer specifying how many terms to select in each boosting run. }
 \item{maxit}{ An integer specifying the maximum number of boosting iterations.
-  See \code{\link{boost}}. Either choose \code{q} or \code{maxit} as hyper-parameter
+  See \code{\link{opt_boost}}. Either choose \code{q} or \code{maxit} as hyper-parameter
   for regularization.}
 \item{B}{ An integer. The boosting is run B times. }
 \item{thr}{ Cut-off threshold of relative frequencies (between 0 and 1) for selection. }
@@ -36,7 +36,7 @@ A object of class stabsel.
 }
 \details{
 \code{stabsel} performs stability selection based on gradient
-boosting (\code{\link{boost}}): The boosting algorithm is run
+boosting (\code{\link{opt_boost}}): The boosting algorithm is run
 \code{B} times on a randomly drawn \code{fraction} of the \code{data}.
 Each boosting run is stopped either when \code{q} terms have been selected,
 or when \code{maxit} iterations have been performed, i.e. either \code{q}

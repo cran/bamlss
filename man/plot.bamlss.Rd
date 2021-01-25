@@ -35,7 +35,7 @@
     \code{"max-acf"} shows an \code{\link[stats]{acf}} plot of the maximum autocorrelation of
     all parameter samples.}
   \item{parameters}{For trace plots of parameters, should corresponding parameter values as returned
-    from an optimizer function (e.g., \code{\link{bfit}}) be added as horizontal lines?}
+    from an optimizer function (e.g., \code{\link{opt_bfit}}) be added as horizontal lines?}
   \item{ask}{For multiple plots, the user is asked to show the next plot.}
   \item{scale}{If set to \code{1}, effect plots all have the same scale on the y-axis. If set to
     \code{0} each effect plot has its own scale for the y-axis.}

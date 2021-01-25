@@ -1,4 +1,5 @@
-\name{MVNORM}
+\name{sam_MVNORM}
+\alias{sam_MVNORM}
 \alias{MVNORM}
 
 \title{
@@ -13,6 +14,9 @@
 }
 
 \usage{
+sam_MVNORM(x, y = NULL, family = NULL, start = NULL,
+  n.samples = 500, hessian = NULL, ...)
+
 MVNORM(x, y = NULL, family = NULL, start = NULL,
   n.samples = 500, hessian = NULL, ...)
 }
@@ -40,8 +44,8 @@ MVNORM(x, y = NULL, family = NULL, start = NULL,
 
 \seealso{
   \code{\link{bamlss}}, \code{\link{bamlss.frame}},
-  \code{\link{bamlss.engine.setup}}, \code{\link{set.starting.values}}, \code{\link{bfit}},
-  \code{\link{GMCMC}}
+  \code{\link{bamlss.engine.setup}}, \code{\link{set.starting.values}}, \code{\link{opt_bfit}},
+  \code{\link{sam_GMCMC}}
 }
 
 \examples{
@@ -54,10 +58,10 @@ f <- num ~ s(x1, bs = "ps")
 bf <- bamlss.frame(f, data = d, family = "gaussian")
 
 ## First, find starting values with optimizer.
-o <- with(bf, bfit(x, y, family))
+o <- with(bf, opt_bfit(x, y, family))
 
 ## Sample.
-samps <- with(bf, MVNORM(x, y, family, start = o$parameters))
+samps <- with(bf, sam_MVNORM(x, y, family, start = o$parameters))
 plot(samps)
 }
 

@@ -1,3 +1,17 @@
+# bamlss 1.1-3
+
+* New naming convention for optimizer and sampling functions.
+  Optimizer are now indicated with prefix opt_*, sampler
+  functions with prefix sam_*. Old optimizer and sampler
+  functions are still supported for reverse compatibility.
+
+* New function engines(), which lists available optimizer and sampling
+  functions for families.
+
+* New function CRPS() for computing the continuous rank probability score.
+
+* Bug fixing.
+
 # bamlss 1.1-2
 
 * Bug fixing.

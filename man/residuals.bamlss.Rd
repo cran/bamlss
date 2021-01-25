@@ -14,7 +14,7 @@
 \method{residuals}{bamlss}(object, type = c("quantile", "response"),
   nsamps = NULL, ...)
 
-\method{plot}{bamlss.residuals}(x, which = c("hist-resid", "qq-resid"),
+\method{plot}{bamlss.residuals}(x, which = c("hist-resid", "qq-resid", "wp"),
   spar = TRUE, ...)
 }
 
@@ -27,7 +27,7 @@
     be useful to compute residuals only based on \code{nsamps} samples, i.e., \code{nsamps}
     specifies the number of samples which are extracted on equidistant intervals.}
   \item{x}{Object returned from function \code{residuals.bamlss()}.}
-  \item{which}{Should a histogram with kernel density estimates be plotted or a qq-plot?}
+  \item{which}{Should a histogram with kernel density estimates be plotted, a qq-plot or a worm plot?}
   \item{spar}{Should graphical parameters be set by the plotting function?}
   \item{\dots}{For function \code{residuals.bamlss()} arguments passed to possible
     \code{$residuals()} functions that may be part of a \code{\link{bamlss.family}}. For function
@@ -52,7 +52,10 @@
 
 \references{
   Dunn P. K., and Smyth G. K. (1996). Randomized Quantile Residuals.
-    \emph{Journal of Computational and Graphical Statistics} \bold{5}, 236-244. 
+    \emph{Journal of Computational and Graphical Statistics} \bold{5}, 236--244.
+
+  van Buuren S., and Fredriks M. (2001) Worm Plot: Simple Diagnostic Device for Modelling Growth
+    Reference Curves. \emph{Statistics in Medicine}, \bold{20}, 1259--1277
 }
 
 \seealso{

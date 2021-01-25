@@ -35,7 +35,7 @@ d <- GAMart()
 ## Increasing: constr = 1.
 ## Decreasing: constr = 2.
 b <- bamlss(num ~ s2(x1,bs="ms",xt=list(constr=2)),
-  data = d, sampler = FALSE, optimizer = boost)
+  data = d, sampler = FALSE, optimizer = opt_boost)
 
 plot(b)
 }}

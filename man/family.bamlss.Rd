@@ -26,6 +26,8 @@
 \alias{weibull_bamlss}
 \alias{dirichlet_bamlss}
 \alias{logNN_bamlss}
+\alias{Sichel_bamlss}
+\alias{GEV_bamlss}
 
 \title{
   Distribution Families in \pkg{bamlss}
@@ -67,6 +69,8 @@ nbinom_bamlss(...)
 ztnbinom_bamlss(...)
 lognormal_bamlss(...)
 weibull_bamlss(...)
+Sichel_bamlss(...)
+GEV_bamlss(...)
 
 ## Extractor functions:
 \method{family}{bamlss}(object, ...)
@@ -99,7 +103,7 @@ weibull_bamlss(...)
   }
   For most optimizer and sampling functions at least the density function, including a \code{log}
   argument, should be provided.
-  When using generic model fitting engines like \code{\link{bfit}} or \code{\link{GMCMC}}, as
+  When using generic model fitting engines like \code{\link{opt_bfit}} or \code{\link{sam_GMCMC}}, as
   well as for computing post-modeling statistics with function \code{\link{samplestats}}, and others,
   it is assumed that the density function in a family object has the following arguments:
 
@@ -112,7 +116,7 @@ weibull_bamlss(...)
   on the type of model this feature is usually not needed.
 
   Similarly, for derivative based algorithms, e.g. using iteratively weighted least squares
-  (IWLS, see function \code{\link{bfit}}, the family object holds derivative functions evaluating
+  (IWLS, see function \code{\link{opt_bfit}}, the family object holds derivative functions evaluating
   derivatives of the log-likelihood w.r.t. the predictors (or expectations of derivatives).
   For each parameter, these functions also hold the following arguments:
  
@@ -140,9 +144,9 @@ weibull_bamlss(...)
   \code{samplestats()}, \code{results()}, \code{residuals()} and \code{predict()} function that
   should be used with this family. See for example the setup of \code{\link{cox_bamlss}}.
 
-  For using specialized estimation engines like \code{\link{JAGS}} it is recommended to supply
+  For using specialized estimation engines like \code{\link{sam_JAGS}} it is recommended to supply
   any extra arguments needed by those engines with an additional list entry within the family
-  object, e.g., using \code{gaussian_bamlss()} with \code{\link{JAGS}} the family objects holds
+  object, e.g., using \code{gaussian_bamlss()} with \code{\link{sam_JAGS}} the family objects holds
   special details in an element named \code{"bugs"}.
 
   The examples below illustrate this setup. See also the code of the \pkg{bamlss} family
@@ -155,7 +159,7 @@ weibull_bamlss(...)
 
 \examples{
 ## New family object for the normal distribution,
-## can be used by function bfit() and GMCMC().
+## can be used by function opt_bfit() and sam_GMCMC().
 normal_bamlss <- function(...) {
   f <- list(
     "family" = "normal",
@@ -207,9 +211,9 @@ norm4JAGS_bamlss <- function(...) {
   return(f)
 }
 
-## Now with bfit() and JAGS().
+## Now with opt_bfit() and sam_JAGS().
 b <- bamlss(num ~ s(x1) + s(x2) + s(x3), data = d,
-  optimizer = bfit, sampler = JAGS, family = "norm4JAGS")
+  optimizer = opt_bfit, sampler = sam_JAGS, family = "norm4JAGS")
 plot(b)
 }
 }

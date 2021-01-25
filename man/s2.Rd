@@ -30,7 +30,7 @@ s2(...)
 }
 
 \seealso{
-  \code{\link{bamlss}}, \code{\link{bamlss.frame}}, \code{\link{bamlss.formula}}, \code{\link{bfit}}
+  \code{\link{bamlss}}, \code{\link{bamlss.frame}}, \code{\link{bamlss.formula}}, \code{\link{opt_bfit}}
 }
 
 \examples{

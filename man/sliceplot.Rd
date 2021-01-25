@@ -75,7 +75,7 @@ sliceplot(x, y = NULL, z = NULL, view = 1, c.select = NULL,
   surfaces, therefore, package \pkg{akima} needs to be installed. The \pkg{akima} package has an ACM
   license that restricts applications to non-commercial usage, see
 
-  \url{http://www.acm.org/publications/policies/softwarecrnotice}
+  \url{https://www.acm.org/publications/policies/software-copyright-notice}
   
   Function \code{sliceplot} prints a note referring to the ACM license. This note can be suppressed by
   setting

@@ -29,20 +29,20 @@ The \code{LondonFire} data contains the following variables:
 
 \references{
   London Fire (2015). London Fire Brigade Incident Records.
-    \emph{London Data Store}, UK Open Government Licence (OGL v2),
-    \url{https://data.london.gov.uk/dataset/london-fire-brigade-incident-records}.
+    \emph{London Data Store}, UK Open Government Licence (OGL v2).
+    \url{https://data.london.gov.uk/dataset/london-fire-brigade-incident-records}
 
   London Boroughs/Boundaries (2015). Statistical GIS Boundary Files for London.
-    \emph{London Data Store}, UK Open Government Licence (OGL v2),
-    \url{https://data.london.gov.uk/dataset/statistical-gis-boundary-files-london}.
+    \emph{London Data Store}, UK Open Government Licence (OGL v2).
+    \url{https://data.london.gov.uk/dataset/statistical-gis-boundary-files-london}
 
   London Fire Stations (2015). \emph{London Fire Brigade},
-    \url{https://www.london-fire.gov.uk/},
-    (old url \code{http://www.london-fire.gov.uk/A-ZFireStations.asp}).
+    \url{https://www.london-fire.gov.uk/}.
+    (old url \code{http://www.london-fire.gov.uk/A-ZFireStations.asp})
 
   Taylor BM (2016). Spatial Modelling of Emergency Service Response Times.
     \emph{Journal of the Royal Statistical Society}: Series A (Statistics in Society),
-    pp. n/a-n/a. URL \url{http://dx.doi.org/10.1111/rssa.12192}.
+    \bold{180}(2), 433--453. \doi{10.1111/rssa.12192}
 }
 
 \examples{

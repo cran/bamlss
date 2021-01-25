@@ -39,20 +39,43 @@ stabsel <- function(formula, data, family = "gaussian",
         seeds <- as.integer(seed) + seq(B)
     }
 
+    cores <- list(...)$cores
+
     ## --- Stability Selection ---
-    ## TODO: parallel option
-    stabselection <- NULL
-    for (i in seq(B)) {
+    if(!is.null(cores)) {
+      parallel_fun <- function(i) {
         cat(sprintf("Stability selection boosting run %d / %d \r", i, B))
-        xx <- StabStep(formula = formula, data = data,
+        xx <- try(StabStep(formula = formula, data = data,
                        family  = family, q = q, maxit = maxit, seed = seeds[i],
-                       fraction = fraction, ...)
-        stabselection <- c(stabselection, xx$sel)
+                       fraction = fraction, ...), silent = TRUE)
+        if(inherits(xx, "try-error")) {
+          return(NULL)
+        } else {
+          return(list("sel" = xx$sel, "formula" = xx$formula, "family" = xx$family))
+        }
+      }
+      psel <- parallel::mclapply(seq(B), parallel_fun, mc.cores = cores)
+      psel <- psel[!sapply(psel, is.null)]
+      if(length(psel) < 1)
+        stop("parallel stability selection failed, please debug in sequential mode!")
+      stabselection <- unlist(sapply(psel, function(x) { x$sel }))
+      formula <- psel[[1L]]$formula
+      environment(formula) <- NULL
+      family <- psel[[1L]]$family
+    } else {
+      stabselection <- NULL
+      for (i in seq(B)) {
+          cat(sprintf("Stability selection boosting run %d / %d \r", i, B))
+          xx <- StabStep(formula = formula, data = data,
+                         family  = family, q = q, maxit = maxit, seed = seeds[i],
+                         fraction = fraction, ...)
+          stabselection <- c(stabselection, xx$sel)
+      }
+      cat("\n")
+      formula <- xx$formula
+      environment(formula) <- NULL
+      family  <- xx$family
     }
-    cat("\n")
-    formula <- xx$formula
-    environment(formula) <- NULL
-    family  <- xx$family
 
     ## --- Re-build formula ---
     tabsel <- sort(table(stabselection), decreasing = FALSE)
@@ -84,7 +107,7 @@ StabStep <- function(formula, data, family = "gaussian", q, maxit, seed = NULL,
     }
     d <- data[sample(nrow(data), size = round(nrow(data) * fraction)), ]
     b <- bamlss(formula, data = d, family = family,
-                optimizer = boost, maxit = maxit, maxq = q,
+                optimizer = opt_boost, maxit = maxit, maxq = q,
                 sampler = FALSE, binning = TRUE,
                 plot = FALSE, verbose = TRUE, ...)
 
@@ -142,8 +165,8 @@ StabStep <- function(formula, data, family = "gaussian", q, maxit, seed = NULL,
     }
 
     rval <- list("sel"     = rval,
-                 "family"  = family(b),
-                 "formula" = formula(b))
+                 "family"  = b$family,
+                 "formula" = b$formula)
     return(rval)
 }
 

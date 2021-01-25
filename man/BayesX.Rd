@@ -1,5 +1,6 @@
-\name{BayesX}
+\name{sam_BayesX}
 \alias{BayesX}
+\alias{sam_BayesX}
 \alias{BayesX.control}
 \alias{sx}
 \alias{tx}
@@ -18,13 +19,17 @@
 }
 
 \description{
-  This sampler function for BAMLSS is an interface to the \pkg{BayesX} (\url{http://www.BayesX.org})
+  This sampler function for BAMLSS is an interface to the \pkg{BayesX}
+  (\code{https://www.uni-goettingen.de/de/bayesx/550513.html})
   command-line binary from \R. The sampler is based on the command line version and functions
   provided in the \pkg{BayesXsrc} package.
 }
 
 \usage{
-## Sampler function:
+## Sampler functions:
+sam_BayesX(x, y, family, start = NULL, weights = NULL, offset = NULL,
+  data = NULL, control = BayesX.control(...), ...)
+
 BayesX(x, y, family, start = NULL, weights = NULL, offset = NULL,
   data = NULL, control = BayesX.control(...), ...)
 
@@ -101,28 +106,28 @@ get_BayesXsrc(dir = NULL, install = TRUE)
   \item{\dots}{Not used in \code{BayesX.control}. For function \code{sx()} any extra arguments that
     should be passed to \pkg{BayesX} for this model term can be specified here. For function
     \code{tx()}, all variables the smooth should be a function of are specified here. For function
-    \code{BayesX()} all arguments that should be passed to \code{BayesX.control}.}
+    \code{sam_BayesX()} all arguments that should be passed to \code{BayesX.control}.}
   \item{ctr}{Specifies the type of constraints that should be applied. \code{"main"}, both
     main effects should be removed; \code{"both"}, both main effects and varying effects should
     be removed; \code{"none"}, no constraint should be applied.}
   \item{xt}{A list of extra arguments to be passed to \pkg{BayesX}.}
   \item{special}{Should the \code{tx()} model term be treated as a special smooth. This must
-    be set to \code{TRUE} if using the \code{BayesX} sampler and should be set to \code{FALSE},
-    e.g., when using the \code{\link{GMCMC}} sampler.}
+    be set to \code{TRUE} if using the \code{sam_BayesX} sampler and should be set to \code{FALSE},
+    e.g., when using the \code{\link{sam_GMCMC}} sampler.}
   \item{object, knots}{See, function \code{\link[mgcv]{smooth.construct}}.}
   \item{prob}{Numeric, specifies the quantile to be modeled, see the examples.}
   \item{install}{Should package \pkg{BayesXsrc} be installed?}
 }
 
 \details{
-  Function \code{BayesX()} writes a \pkg{BayesX} \code{.prg} file and processes the data.
+  Function \code{sam_BayesX()} writes a \pkg{BayesX} \code{.prg} file and processes the data.
   Then, the function call the \pkg{BayesX} binary via function
   \code{\link[BayesXsrc]{run.bayesx}}. After the \pkg{BayesX} sampler has finished, the function
   reads back in all the parameter samples that can then be used for further processing within
   \code{\link{bamlss}}, i.a.
 
   The smooth term constructor functions \code{\link[mgcv]{s}} and \code{\link[mgcv]{te}} can
-  be used with the \code{BayesX()} sampler. When using \code{\link[mgcv]{te}} note that only
+  be used with the \code{sam_BayesX()} sampler. When using \code{\link[mgcv]{te}} note that only
   one smoothing variance is estimated by \pkg{BayesX}.
 
   For anisotropic penalties use function \code{tx()} and \code{tx3()}, the former currently
@@ -132,7 +137,7 @@ get_BayesXsrc(dir = NULL, install = TRUE)
 }
 
 \value{
-  Function \code{BayesX()} returns samples of parameters. The samples are provided as a
+  Function \code{sam_BayesX()} returns samples of parameters. The samples are provided as a
   \code{\link[coda]{mcmc}} matrix.
 
   Function \code{BayesX.control()} returns a \code{list} with control arguments for
@@ -150,7 +155,7 @@ get_BayesXsrc(dir = NULL, install = TRUE)
   can be installed with function \code{get_BayesXsrc}. Note that the function assumes that sh,
   subversion (svn) and \R can be run from the command line!
 
-  Note that for setting up a new family object to be used with \code{BayesX()} additional
+  Note that for setting up a new family object to be used with \code{sam_BayesX()} additional
   information needs to be supplied. The extra information must be placed within the
   family object in an named \code{list} element named \code{"bayesx"}. For each parameter of
   the distribution a character string with the corresponding \pkg{BayesX} \code{family} name and the
@@ -189,23 +194,23 @@ get_BayesXsrc(dir = NULL, install = TRUE)
   ## these are not required by some optimizer function
   ## in bamlss()
   b1 <- bamlss(num ~ s(x1) + s(x2) + s(x3) + s(lon,lat),
-    data = d, optimizer = FALSE, sampler = BayesX)
+    data = d, optimizer = FALSE, sampler = sam_BayesX)
 
   plot(b1)
 
   ## Same model with anisotropic penalty.
   b2 <- bamlss(num ~ s(x1) + s(x2) + s(x3) + tx(lon,lat),
-    data = d, optimizer = FALSE, sampler = BayesX)
+    data = d, optimizer = FALSE, sampler = sam_BayesX)
 
   plot(b2)
 
   ## Quantile regression.
   b3_0.1 <- bamlss(num ~ s(x1) + s(x2) + s(x3) + tx(lon,lat),
-    data = d, optimizer = FALSE, sampler = BayesX,
+    data = d, optimizer = FALSE, sampler = sam_BayesX,
     family = gF("quant", prob = 0.1))
 
   b3_0.9 <- bamlss(num ~ s(x1) + s(x2) + s(x3) + tx(lon,lat),
-    data = d, optimizer = FALSE, sampler = BayesX,
+    data = d, optimizer = FALSE, sampler = sam_BayesX,
     family = gF("quant", prob = 0.9))
 
   ## Predict quantiles.

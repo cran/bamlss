@@ -6,8 +6,8 @@
 }
 
 \description{
-  This function takes a fitted Cox model, i.e., a model estimated by \code{\link{cox_mode}}
-  or \code{\link{cox_mcmc}} and computes predictions given a new data set or the
+  This function takes a fitted Cox model, i.e., a model estimated by \code{\link{opt_Cox}}
+  or \code{\link{sam_Cox}} and computes predictions given a new data set or the
   original values. Survival probabilities are computed using numerical integration, therefore,
   computation may take some time. To avoid problems with computer memory, the prediction
   of survival probabilities can be split into chunks and computed parallel on different cores.
@@ -23,7 +23,7 @@ cox_predict(object, newdata,
 
 \arguments{
   \item{object}{A \code{"bamlss"} object as returned from function \code{\link{bamlss}}
-    using the optimizer \code{\link{cox_mode}} or sampler function \code{\link{cox_mcmc}}.}
+    using the optimizer \code{\link{opt_Cox}} or sampler function \code{\link{sam_Cox}}.}
   \item{newdata}{A data frame or list containing the values of the model
     covariates at which predictions are required. If missing \code{newdata} is the
     \code{model.frame} of the provided model.}
@@ -50,7 +50,7 @@ cox_predict(object, newdata,
 }
 
 \seealso{
-  \code{\link{cox_mcmc}}, \code{\link{cox_bamlss}}, \code{\link{surv_transform}},
+  \code{\link{sam_Cox}}, \code{\link{cox_bamlss}}, \code{\link{surv_transform}},
   \code{\link{simSurv}}, \code{\link{bamlss}}, \code{\link{predict.bamlss}}
 }
 
@@ -72,8 +72,8 @@ f <- list(
 ## Note the the family object cox_bamlss() sets
 ## the default optimizer and sampler function!
 ## First, posterior mode estimates are computed
-## using function cox_mode(), afterwards the
-## sampler cox_mcmc() is started.
+## using function opt_Cox(), afterwards the
+## sampler sam_Cox() is started.
 b <- bamlss(f, family = "cox", data = d)
 
 ## Predict survival probabilities P(T > t).

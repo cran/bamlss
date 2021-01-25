@@ -52,7 +52,7 @@ surv_transform(x, y, data, family,
 }
 
 \seealso{
-  \code{\link{cox_bamlss}}, \code{\link{cox_mode}}, \code{\link{cox_mcmc}},
+  \code{\link{cox_bamlss}}, \code{\link{opt_Cox}}, \code{\link{sam_Cox}},
   \code{\link{simSurv}}, \code{\link{bamlss}}
 }
 

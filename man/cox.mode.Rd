@@ -1,4 +1,5 @@
-\name{cox_mode}
+\name{opt_Cox}
+\alias{opt_Cox}
 \alias{cox_mode}
 
 \title{
@@ -13,6 +14,12 @@
 }
 
 \usage{
+opt_Cox(x, y, start, weights, offset,
+  criterion = c("AICc", "BIC", "AIC"),
+  nu = 0.1, update.nu = TRUE,
+  eps = .Machine$double.eps^0.25, maxit = 400,
+  verbose = TRUE, digits = 4, ...)
+
 cox_mode(x, y, start, weights, offset,
   criterion = c("AICc", "BIC", "AIC"),
   nu = 0.1, update.nu = TRUE,
@@ -63,12 +70,12 @@ cox_mode(x, y, start, weights, offset,
 }
 
 \seealso{
-  \code{\link{cox_mcmc}}, \code{\link{cox_bamlss}}, \code{\link{surv_transform}},
+  \code{\link{sam_Cox}}, \code{\link{cox_bamlss}}, \code{\link{surv_transform}},
   \code{\link{simSurv}}, \code{\link{bamlss}}
 }
 
 \examples{
-## Please see the examples of function cox_mcmc()!
+## Please see the examples of function sam_Cox()!
 }
 
 \keyword{regression}

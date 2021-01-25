@@ -39,7 +39,7 @@ Summary for BAMLSS
 
   Note that summaries not based on samples can be user defined, e.g., as returned from function
   \code{\link{samplestats}} or the return values of optimizer function, e.g., see function
-  \code{\link{bfit}}.
+  \code{\link{opt_bfit}}.
 }
 
 \value{

@@ -34,6 +34,8 @@ print.family.bamlss <- function(x, full = TRUE, ...)
 ## Second make.link function.
 make.link2 <- function(link)
 {
+  if(is.null(link))
+    link <- "identity"
   link0 <- link
   if(link0 == "tanhalf"){
     rval <- list(
@@ -705,7 +707,7 @@ gaussian_bamlss <- function(...)
       qnorm(p, mean = par$mu, sd = par$sigma)
     },
     "crps" = function(y, par, ...) {
-      sum(scoringRules::crps_norm(y, mean = par$mu, sd = par$sigma), na.rm = TRUE)
+      scoringRules::crps_norm(y, mean = par$mu, sd = par$sigma)
     },
     "initialize" = list(
       "mu"    = function(y, ...) { (y + mean(y)) / 2 },
@@ -2541,7 +2543,7 @@ bivnorm_bamlss <- function(...)
     "family" = "mvnorm",
     "names" = c("mu1", "mu2", "sigma1", "sigma2", "rho"),
     "links" = c("identity", "identity", "log", "log", "rhogit"),
-		"bayesx" = list(
+    "bayesx" = list(
       "mu1" = c("bivnormal", "mu"),
       "mu2" = c("bivnormal", "mu"),
       "sigma1" = c("bivnormal", "sigma"),
@@ -3177,26 +3179,40 @@ dirichlet_bamlss <- function(...)
     rval$initialize[[paste0("alpha", j)]] <- eval(parse(text = paste(ft, collapse = "")))
   }
 
+  rval$expectation <- function(par, log = FALSE) {
+    if (log) {
+      par <- do.call("cbind", par)
+      alpha0 <- rowSums(par)
+      par <- digamma(par) - digamma(alpha0)
+      as.list(as.data.frame(par))
+    } else {
+      par <- do.call("cbind", par)
+      alpha0 <- rowSums(par)
+      par <- par / alpha0
+      as.list(as.data.frame(par))
+    }
+  }
+
   class(rval) <- "family.bamlss"
   rval
 }
 
 #if(FALSE) {
 #  data("ArcticLake", package = "DirichletReg")
-
+# 
 #  AL <- as.matrix(ArcticLake[, 1:3])
-
+# 
 #  d <- data.frame("depth" = ArcticLake$depth)
 #  d$y <- AL
-
+# 
 #  f <- list(
 #    y ~ s(depth),
 #      ~ s(depth),
 #      ~ s(depth)
 #  )
-
+# 
 #  b <- bamlss(f, data = d, family = dirichlet_bamlss(k = 3))
-
+# 
 #  p <- predict(b, type = "parameter")
 #  p <- as.data.frame(p)
 #  p <- p / rowSums(p)
@@ -3590,6 +3606,7 @@ ztnbinom_bamlss <- function(...) {
     }
     return(rps)
   }
+  rval$type <- "discrete"
 
   class(rval) <- "family.bamlss"
   rval
@@ -3779,10 +3796,16 @@ kde_bamlss <- function(..., err)
 
 ## General bamlss family creator.
 gF <- function(x, ...) {
+  if(is.function(x)) {
+    if(inherits(x(), "gamlss.family"))
+      return(tF(x, ...))
+  }
+
   if(!is.character(x))
     x <- deparse(substitute(x), backtick = TRUE, width.cutoff = 500)
-  F <- get(paste(x, "bamlss", sep = "_"), mode = "function")
-  F(...)
+  fam <- get(paste(x, "bamlss", sep = "_"), mode = "function")
+
+  return(fam(...))
 }
 
 gF2 <- function(x, ...) {
@@ -3819,6 +3842,16 @@ tF <- function(x, ...)
   args <- list(...)
   bd <- if(is.null(args$bd)) 1 else args$bd
   args$bd <- NULL
+  pr <- args$range
+  check_range <- function(par) {
+    for(j in names(par)) {
+      if(!is.null(pr[[j]])) {
+        par[[j]][par[[j]] < min(pr[[j]])] <- min(pr[[j]])
+        par[[j]][par[[j]] > max(pr[[j]])] <- max(pr[[j]])
+      }
+    }
+    par
+  }
   nx <- names(x$parameters)
   score <- hess <- initialize <- list()
 
@@ -3844,12 +3877,14 @@ tF <- function(x, ...)
     mu.cs <- make_call(x$dldm)
     mu.hs <- make_call(x$d2ldm2)
     score$mu  <- function(y, par, ...) {
+      par <- check_range(par)
       res <- eval(mu.cs) * mu.link$mu.eta(mu.link$linkfun(par$mu))
       if(!is.null(dim(res)))
         res <- res[, 1]
       res
     }
     hess$mu <- function(y, par, ...) {
+      par <- check_range(par)
       score <- eval(mu.cs)
       hess <- -1 * eval(mu.hs)
       eta <- mu.link$linkfun(par$mu)
@@ -3879,12 +3914,14 @@ tF <- function(x, ...)
     sigma.cs <- make_call(x$dldd)
     sigma.hs <- make_call(x$d2ldd2)
     score$sigma  <- function(y, par, ...) {
+      par <- check_range(par)
       res <- eval(sigma.cs) * sigma.link$mu.eta(sigma.link$linkfun(par$sigma))
       if(!is.null(dim(res)))
         res <- res[, 1]
       res
     }
     hess$sigma <- function(y, par, ...) {
+      par <- check_range(par)
       score <- eval(sigma.cs)
       hess <- -1 * eval(sigma.hs)
       eta <- sigma.link$linkfun(par$sigma)
@@ -3910,12 +3947,14 @@ tF <- function(x, ...)
     nu.cs <- make_call(x$dldv)
     nu.hs <- make_call(x$d2ldv2)
     score$nu  <- function(y, par, ...) {
+      par <- check_range(par)
       res <- eval(nu.cs) * nu.link$mu.eta(nu.link$linkfun(par$nu))
       if(!is.null(dim(res)))
         res <- res[, 1]
       res
     }
     hess$nu <- function(y, par, ...) {
+      par <- check_range(par)
       score <- eval(nu.cs)
       hess <- -1 * eval(nu.hs)
       eta <- nu.link$linkfun(par$nu)
@@ -3941,12 +3980,14 @@ tF <- function(x, ...)
     tau.cs <- make_call(x$dldt)
     tau.hs <- make_call(x$d2ldt2)
     score$tau  <- function(y, par, ...) {
+      par <- check_range(par)
       res <- eval(tau.cs) * tau.link$mu.eta(tau.link$linkfun(par$tau))
       if(!is.null(dim(res)))
         res <- res[, 1]
       res
     }
     hess$tau <- function(y, par, ...) {
+      par <- check_range(par)
       score <- eval(tau.cs)
       hess <- -1 * eval(tau.hs)
       eta <- tau.link$linkfun(par$tau)
@@ -3972,14 +4013,21 @@ tF <- function(x, ...)
   qfun <- try(get(paste("q", x$family[1], sep = "")), silent = TRUE)
   rfun <- try(get(paste("r", x$family[1], sep = "")), silent = TRUE)
 
+  nf <- names(formals(dfun))
+  bdc <- "bd" %in% nf
+
   dc <- parse(text = paste('dfun(y,', paste(paste(nx, 'par$', sep = "="),
-    nx, sep = '', collapse = ','), ',log=log,...)', sep = ""))
+    nx, sep = '', collapse = ','), ',log=log,...',
+    if(bdc) paste0(",bd=", bd) else NULL, ")", sep = ""))
   pc <- parse(text = paste('pfun(q,', paste(paste(nx, 'par$', sep = "="),
-    nx, sep = '', collapse = ','), ',log=log,...)', sep = ""))
+    nx, sep = '', collapse = ','), ',log=log,...',
+    if(bdc) paste0(",bd=", bd) else NULL, ")", sep = ""))
   qc <- parse(text = paste('qfun(p,', paste(paste(nx, 'par$', sep = "="),
-    nx, sep = '', collapse = ','), ',log=log,...)', sep = ""))
+    nx, sep = '', collapse = ','), ',log=log,...',
+    if(bdc) paste0(",bd=", bd) else NULL, ")", sep = ""))
   rc <- parse(text = paste('rfun(n,', paste(paste(nx, 'par$', sep = "="),
-    nx, sep = '', collapse = ','), ',...)', sep = ""))
+    nx, sep = '', collapse = ','), ',...',
+    if(bdc) paste0(",bd=", bd) else NULL, ")", sep = ""))
 
   rval <- list(
     "family" = x$family[1],
@@ -3987,14 +4035,56 @@ tF <- function(x, ...)
     "links" = unlist(x[paste(nx, "link", sep = ".")]),
     "score" = score,
     "hess" = hess,
-    "d" = function(y, par, log = FALSE, ...) { eval(dc) },
-    "p" = if(!inherits(pfun, "try-error")) function(q, par, log = FALSE, ...) { eval(pc) } else NULL,
-    "q" = if(!inherits(qfun, "try-error")) function(p, par, log = FALSE, ...) { eval(qc) } else NULL,
-    "r" = if(!inherits(rfun, "try-error")) function(n, par, ...) { eval(rc) } else NULL
+    "d" = function(y, par, log = FALSE, ...) {
+       par <- check_range(par)
+       d <- try(eval(dc), silent = TRUE)
+       if(inherits(d, "try-error"))
+         d <- rep(NA, length(par[[1L]]))
+       return(d)
+    },
+    "p" = if(!inherits(pfun, "try-error")) function(q, par, log = FALSE, ...) {
+      par <- check_range(par)
+      eval(pc)
+    } else NULL,
+    "q" = if(!inherits(qfun, "try-error")) function(p, par, log = FALSE, ...) {
+      par <- check_range(par)
+      eval(qc)
+    } else NULL,
+    "r" = if(!inherits(rfun, "try-error")) function(n, par, ...) {
+      par <- check_range(par)
+      eval(rc)
+    } else NULL
   )
   names(rval$links) <- nx
   rval$valid.response <- x$y.valid
   rval$initialize <- initialize
+  rval$type <- tolower(x$type)
+
+  if(!is.null(x$mean)) {
+    meanc <- make_call(x$mean)
+    rval$mean  <- function(par, ...) {
+      par <- check_range(par)
+      res <- eval(meanc)
+      if(!is.null(dim(res)))
+        res <- res[, 1]
+      res
+    }
+  } else {
+    rval$mean <- function(par, ...) { par[[1L]] }
+  }
+
+  if(!is.null(x$variance)) {
+    varc <- make_call(x$variance)
+    rval$variance  <- function(par, ...) {
+      par <- check_range(par)
+      res <- eval(varc)
+      if(!is.null(dim(res)))
+        res <- res[, 1]
+      res
+    }
+  } else {
+    rval$variance <- function(par, ...) { par[[2L]] }
+  }
 
   class(rval) <- "family.bamlss"
   rval
@@ -4465,7 +4555,7 @@ mlt_bamlss <- function(todistr = "Normal")
     "family" = "mlt",
     "names" = "mu",
     "links" = c("mu" = "identity"),
-    "optimizer" = mlt.mode,
+    "optimizer" = opt_mlt,
     "sampler" = FALSE
   )
   rval$distr <- mlt_distr(todistr)
@@ -4845,8 +4935,8 @@ ALD_bamlss <- function(..., tau = 0.5, eps = 0.01)
       r <- y - par$mu
       i <- r > 0
       d <- rep(0, length(r))
-      d[i] <- tau * abs(r[i]) / par$sigma[i]^2
-      d[!i] <- (1 - tau) * abs(r[!i]) / par$sigma[!i]^2
+      d[i] <- tau * absx(r[i]) / par$sigma[i]^2
+      d[!i] <- (1 - tau) * absx(r[!i]) / par$sigma[!i]^2
       d <- log(tau * (1 - tau)) - 2 * log(par$sigma) - d
       if(!log)
         d <- exp(d)
@@ -4856,7 +4946,7 @@ ALD_bamlss <- function(..., tau = 0.5, eps = 0.01)
       "mu" = function(y, par, ...) {
         r <- (y - par$mu)
         i <- r > 0
-        score <- r/(par$sigma^2 * abs(r))
+        score <- r/(par$sigma^2 * absx(r))
         score[i] <- tau * score[i]
         score[!i] <- (1 - tau) * score[!i]
         return(score)
@@ -4865,8 +4955,8 @@ ALD_bamlss <- function(..., tau = 0.5, eps = 0.01)
         r <- (y - par$mu)
         i <- r > 0
         score <- rep(0, length(r))
-        score[i] <- (2 * (tau * abs(r[i])/par$sigma[i]^2) - 2)/par$sigma[i]
-        score[!i] <- (2 * ((1 - tau) * abs(r[!i])/par$sigma[!i]^2) - 2)/par$sigma[!i]
+        score[i] <- (2 * (tau * absx(r[i])/par$sigma[i]^2) - 2)/par$sigma[i]
+        score[!i] <- (2 * ((1 - tau) * absx(r[!i])/par$sigma[!i]^2) - 2)/par$sigma[!i]
         return(score)
       }
     ),
@@ -4875,18 +4965,18 @@ ALD_bamlss <- function(..., tau = 0.5, eps = 0.01)
         r <- (y - par$mu)
         i <- r > 0
         hess <- rep(0, length(r))
-        hess[i] <- tau * (par$sigma[i]^2 * sign(r[i]) * r[i]/(par$sigma[i]^2 * abs(r[i]))^2 -
-          1/(par$sigma[i]^2 * abs(r[i])))
-        hess[!i] <- (1 - tau) * (par$sigma[!i]^2 * sign(r[!i]) * (r[!i])/(par$sigma[!i]^2 * abs(r[!i]))^2 -
-          1/(par$sigma[!i]^2 * abs(r[!i])))
+        hess[i] <- tau * (par$sigma[i]^2 * sign(r[i]) * r[i]/(par$sigma[i]^2 * absx(r[i]))^2 -
+          1/(par$sigma[i]^2 * absx(r[i])))
+        hess[!i] <- (1 - tau) * (par$sigma[!i]^2 * sign(r[!i]) * (r[!i])/(par$sigma[!i]^2 * absx(r[!i]))^2 -
+          1/(par$sigma[!i]^2 * absx(r[!i])))
         return(-hess)
       },
       "sigma" = function(y, par, ...) {
         r <- (y - par$mu)
         i <- r > 0
         hess <- rep(0, length(r))
-        hess[i] <- -((6 * (tau * abs(r[i])/par$sigma[i]^2) - 2)/par$sigma[i]^2)
-        hess[!i] <- -((6 * ((1 - tau) * abs(r[!i])/par$sigma[!i]^2) - 2)/par$sigma[!i]^2)
+        hess[i] <- -((6 * (tau * absx(r[i])/par$sigma[i]^2) - 2)/par$sigma[i]^2)
+        hess[!i] <- -((6 * ((1 - tau) * absx(r[!i])/par$sigma[!i]^2) - 2)/par$sigma[!i]^2)
         return(-hess)
       }
     ),
@@ -5292,5 +5382,516 @@ if(FALSE) {
   plot2d(I(0.1 + sin(x)) ~ x, col.lines = 2, add = TRUE)
   plot2d(fsigma ~ x, main = "True log(sigma) and fit")
   plot2d(I(-2 + cos(x)) ~ x, col.lines = 2, add = TRUE)
+}
+
+pgev <- function(q, loc = 0, scale = 1, shape = 0, log = FALSE) 
+{
+  q <- (q - loc)/scale
+  rval <- rep(0, length(q))
+  i <- shape == 0
+  if(log) {
+    rval[i] <- -exp(-q[i])
+    rval[!i] <- -pmax(1 + shape[!i] * q[!i], 0)^(-1/shape[!i])
+  } else {
+    rval[i] <- exp(-exp(-q[i]))
+    rval[!i] <- exp(-pmax(1 + shape[!i] * q[!i], 0)^(-1/shape[!i]))
+  }
+  return(rval)
+}
+
+pgev_bamlss <- function(...)
+{
+  rval <- list(
+    "family" = "pgev",
+    "names" = c("mu", "lambda"),
+    "links" = c(mu = "identity", lambda = "identity"),
+    "valid.response" = function(x) {
+      if(length(unique(x)) > 2)
+        stop("only binary responses!") 
+    },
+    "d" = function(y, par, log = FALSE) {
+      p <- pgev(par$mu, loc = 0, scale = 1, shape = par$lambda)
+      d <- y * log(p) + (1 - y) * log(1 - p)
+      if(!log)
+        d <- exp(d)
+      d
+    },
+    "initialize" = list(
+      "mu" = function(y, ...) {
+        y <- process_factor_response(y)
+        rep(log(-log(mean(y))), length = length(y))
+      },
+      "lambda" = function(y) { rep(0, length(y)) }
+    )
+  )
+
+  rval$probabilities <- function(par, ...) {
+    pgev(par$mu, loc = 0, scale = 1, shape = par$lambda)
+  }
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+eel <- function(x, mu = 0, sigma = 1, lambda = 0.5, alpha = 0.5) {
+  (1 - (1 + exp((x - mu)/sigma))^(-lambda))^alpha
+}
+
+eel_bamlss <- function(...)
+{
+  rval <- list(
+    "family" = "eel",
+    "names" = c("mu", "lambda", "alpha"),
+    "links" = c(mu = "identity", lambda = "identity", alpha = "identity"),
+    "valid.response" = function(x) {
+      if(length(unique(x)) > 2)
+        stop("only binary responses!") 
+    },
+    "d" = function(y, par, log = FALSE) {
+      p <- eel(par$mu, mu = 0, sigma = 1, lambda = par$lambda, alpha = par$alpha)
+      p[p < 1e-10] <- 1e-10
+      p[p > 0.9999999] <- 0.9999999
+      d <- y * log(p) + (1 - y) * log(1 - p)
+      if(!log)
+        d <- exp(d)
+      d
+    },
+    "initialize" = list(
+      "mu" = function(y, ...) {
+        y <- process_factor_response(y)
+        rep(mean(y), length = length(y))
+      },
+      "lambda" = function(y) { rep(1, length(y)) },
+      "alpha" = function(y) { rep(1, length(y)) }
+    )
+  )
+
+  rval$probabilities <- function(par, ...) {
+    eel(par$mu, mu = 0, sigma = 1, lambda = par$lambda, alpha = par$alpha)
+  }
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+
+Sbqr <- function(u, tau = 0.5, alpha = 0.05) {
+  tau * u + alpha * log(1 + exp(-u / alpha))
+}
+
+bqr_bamlss <- function(...)
+{
+  tau <- list(...)$tau
+  if(is.null(tau))
+    tau <- 0.5
+
+  rval <- list(
+    "family" = "bqr",
+    "names" = "mu",
+    "links" = c(mu = "identity"),
+    "valid.response" = function(x) {
+      if(length(unique(x)) > 2)
+        stop("only binary responses!") 
+    },
+    "d" = function(y, par, ...) {
+      -1 * Sbqr(y - pnorm(par$mu), tau = tau)^2
+    },
+    "loglik" = function(y, par, ...) {
+      -1 * sum(Sbqr(y - pnorm(par$mu), tau = tau)^2, na.rm = TRUE)
+    },
+    "initialize" = list(
+      "mu" = function(y, ...) {
+        y <- process_factor_response(y)
+        rep(qnorm(tau), length = length(y))
+      }
+    )
+  )
+
+  rval$probabilities <- function(par, ...) {
+    pnorm(par$mu)
+  }
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+
+dgp_bamlss <- function(...)
+{
+  fam <- gpareto_bamlss()
+
+  rval <- list(
+    "family" = "discrete generalized pareto",
+    "names" = c("xi", "sigma"),
+    "links" = c(xi = "log", sigma = "log"),
+    "valid.response" = function(x) {
+      if(is.factor(x)) return(FALSE)
+      if(ok <- !all(x >= 0)) stop("response values smaller than 0 not allowed!", call. = FALSE)
+      ok
+    },
+    "d" = function(y, par, log = FALSE, ...) {
+      d <- fam$p(y + 1, par) - fam$p(y, par)
+      if(log)
+        d <- log(d)
+      return(d)
+    },
+    "p" = function(y, par, log = FALSE, ...) {
+      par <- as.data.frame(par)
+      n <- length(y)
+      p <- rep(0, n)
+      for(i in 1:n) {
+        dy <- fam$p((y[i] + 1):1, par[i, ]) - fam$p((y[i]):0, par[i, ])
+        p[i] <- sum(dy)
+      }
+      return(p)
+    }
+  )
+  rval$type <- "discrete"
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+
+discretize <- function(family)
+{
+  family <- bamlss.family(family)
+  rval <- list()
+  rval$family <- paste("discrete", family$family)
+  rval$names <- family$names
+  rval$links <- family$links
+  rval$valid.response <- function(x) {
+    if(is.factor(x)) return(FALSE)
+    if(ok <- !all(x >= 0)) stop("response values smaller than 0 not allowed!", call. = FALSE)
+    ok
+  }
+  rval$d <- function(y, par, log = FALSE, ...) {
+    d <- family$p(y + 1, par) - family$p(y, par)
+    if(log)
+      d <- log(d)
+    return(d)
+  }
+  rval$p <- function(y, par, log = FALSE, ...) {
+    par <- as.data.frame(par)
+    n <- length(y)
+    p <- rep(0, n)
+    for(i in 1:n) {
+      dy <- family$p((y[i] + 1):1, par[i, ]) - family$p((y[i]):0, par[i, ])
+      p[i] <- sum(dy)
+    }
+    return(p)
+  }
+  rval$q <- function(p, par, ...) {
+    par <- as.data.frame(par)
+    n <- nrow(par)
+    x <- rep(NA, n)
+    p <- rep(p, length.out = n)
+    for(i in 1:n) {
+      alpha <- 0
+      y <- 0
+      while(alpha < p[i]) {
+        alpha <- rval$p(y, par[i, ])
+        y <- y + 1
+      }
+      x[i] <- y
+    }
+    return(x)
+  }
+  rval$initialize <- family$initialize
+  rval$type <- "discrete"
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+
+## https://www.jstor.org/stable/2288808?seq=1#metadata_info_tab_contents
+dSichel <- function(x, alpha = 1, zeta = 1, gamma = 1, log = FALSE, ...)
+{
+  w <- sqrt(zeta^2 + alpha^2) - zeta
+
+  d <- gamma * log(w) - gamma * log(alpha) - log(besselK(w, gamma, expon.scaled = TRUE)) +
+    x * log(zeta * w) - x * log(alpha) -
+    lfactorial(x) + log(besselK(alpha, x + gamma, expon.scaled = TRUE))
+
+  if(!log)
+    d <- exp(d)
+
+  return(d)
+}
+
+if(FALSE) {
+  x <- 0:100
+  d <- dSichel(x)
+  plot(d ~ x, type = "h")
+  print(sum(d))
+}
+
+Sichel_bamlss <- function(...)
+{
+  rval <- list(
+    "family" = "Sichel",
+    "names" = c("alpha", "zeta", "gamma"),
+    "links" = c(alpha = "log", zeta = "log", gamma = "log"),
+    "valid.response" = function(x) {
+      if(is.factor(x)) return(FALSE)
+      if(ok <- !all(x > 0)) stop("response values smaller than 0 not allowed!", call. = FALSE)
+      ok
+    },
+    "d" = function(y, par, log = FALSE) {
+      dSichel(y, alpha = par$alpha, zeta = par$zeta, gamma = par$gamma, log = log)
+    },
+    "mean" = function(par, ...) {
+      w <- sqrt(par$zeta^2 + par$alpha^2) - par$zeta
+      R <- besselK(w, par$gamma + 1, expon.scaled = TRUE) / besselK(w, par$gamma, expon.scaled = TRUE)
+      par$zeta * R
+    }
+  )
+
+  rval$p <- function(y, par, log = FALSE, ...) {
+    par <- as.data.frame(par)
+    n <- length(y)
+    p <- rep(0, n)
+    for(i in 1:n) {
+      dy <- dSichel(0:y[i], alpha = par$alpha[i], zeta = par$zeta[i], gamma = par$gamma[i])
+      p[i] <- sum(dy)
+    }
+    return(p)
+  }
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+
+exp2 <- function(x) {
+  x[x > 20] <- 20
+  x <- exp(x)
+  x
+}
+
+
+GEV_bamlss <- function(...)
+{
+   ## log(1/s) - (1+xi*((y-m)/s))^(-1/xi) - (1/xi+1) * log(1 + xi*((y-m)/s))
+   ## log(1/exp(s)) - (1+xi*((y-m)/exp(s)))^(-1/xi) - (1/xi+1) * log(1 + xi*((y-m)/exp(s)))
+
+   eps <- 1e-05
+
+   rval <- list(
+    "family" = "GEV",
+    "names" = c("mu", "sigma", "xi"),
+    "links" = c(mu = "identity", sigma = "log", xi = "identity"),
+    "d" = function(y, par, log = FALSE, ...) {
+      par$xi[par$xi >= 0 & par$xi < eps] <- eps
+      par$xi[par$xi < 0 & par$xi > -eps] <- -eps
+      par$sigma[par$sigma < 0.001] <- 0.001
+      x <- (y - par$mu) / par$sigma
+      xx <- 1 + par$xi * x
+      xx[xx < eps] <- eps
+      d <- -log(par$sigma) - xx^(-1/par$xi) - (1 / par$xi + 1) * log(xx)
+      if(!log)
+        d <- exp2(d)
+      return(d)
+    },
+    "p" = function(y, par, ...) {
+      par$xi[par$xi >= 0 & par$xi < eps] <- eps
+      par$xi[par$xi < 0 & par$xi > -eps] <- -eps
+      par$sigma[par$sigma < 0.001] <- 0.001
+      x <- (y - par$mu) / par$sigma
+      xx <- 1 + par$xi * x
+      xx[xx < eps] <- eps
+      p <- exp2(-xx^(-1/par$xi))
+      return(p)
+    },
+    "q" = function(p, par, ...) {
+      par$xi[par$xi >= 0 & par$xi < eps] <- eps
+      par$xi[par$xi < 0 & par$xi > -eps] <- -eps
+      par$sigma[par$sigma < 0.001] <- 0.001
+      par$mu + par$sigma / par$xi * ((-log(p))^(-par$xi) - 1)
+    },
+    "score" = list(
+      "mu" = function(y, par, ...) {
+        m <- par$mu
+        s <- par$sigma
+        xi <- par$xi
+
+        xi[xi >= 0 & xi < eps] <- eps
+        xi[xi < 0 & xi > -eps] <- -eps
+        s[s < 0.001] <- 0.001
+
+        yms <- (y - m)/s
+        xi1 <- 1/xi
+        xiyms <- 1 + xi * yms
+        xiyms[xiyms < eps] <- eps
+        s1 <- 1/s
+        smu <- xiyms^(-xi1 - 1) * -xi1 * xi * s1 + (xi1 + 1) * xi * s1/xiyms
+
+        return(smu)
+      },
+      "sigma" = function(y, par, ...) {
+        m <- par$mu
+        s <- par$sigma
+        xi <- par$xi
+
+        xi[xi >= 0 & xi < eps] <- eps
+        xi[xi < 0 & xi > -eps] <- -eps
+        s[s < 0.001] <- 0.001
+
+        yms <- (y - m)/s
+        xiyms <- 1 + xi * yms
+        xiyms[xiyms < eps] <- eps
+        xi1 <- 1/xi
+
+        ssigma <- -(s/s^2/(1/s) - xiyms^(-xi1 - 1) * -xi1 * xi * (y - m) * s/s^2 -
+          (xi1 + 1) * (xi * ((y - m) * s/s^2)/xiyms))
+
+        return(ssigma)
+      },
+      "xi" = function(y, par, ...) {
+        m <- par$mu
+        s <- par$sigma
+        xi <- par$xi
+
+        xi[xi >= 0 & xi < eps] <- eps
+        xi[xi < 0 & xi > -eps] <- -eps
+        s[s < 0.001] <- 0.001
+
+        xi1 <- 1/xi
+        yms <- (y - m)/s
+        xiyms <- 1 + xi * yms
+        xiyms[xiyms < eps] <- eps
+        lxiyms <- log(xiyms)
+
+        sxi <- -(xiyms^((-xi1) - 1) * ((-xi1) * yms) +
+          xiyms^(-xi1) * (lxiyms *  (xi1^2)) +
+          ((xi1 + 1) * (yms/xiyms) -
+          xi1^2 * lxiyms))
+
+        return(sxi)
+      }
+    ),
+    "hess" = list(
+      "mu" = function(y, par, ...) {
+        m <- par$mu
+        s <- par$sigma
+        xi <- par$xi
+
+        xi[xi >= 0 & xi < eps] <- eps
+        xi[xi < 0 & xi > -eps] <- -eps
+        s[s < 0.001] <- 0.001
+
+        yms <- (y - m)/s
+        xiyms <- 1 + xi * yms
+        xiyms[xiyms < eps] <- eps
+        xi1 <- 1/xi
+        s1 <- 1/s
+        xis1 <- xi * s1
+
+        hmu <- (xi1 + 1) * xis1^2/xiyms^2 - xiyms^(-xi1 - 1 - 1) * ((-xi1 - 1) * xis1) * -xi1 * xis1
+
+        return(-hmu)
+      },
+      "sigma" = function(y, par, ...) {
+        m <- par$mu
+        s <- par$sigma
+        xi <- par$xi
+
+        xi[xi >= 0 & xi < eps] <- eps
+        xi[xi < 0 & xi > -eps] <- -eps
+        s[s < 0.001] <- 0.001
+
+        ym <- y - m
+        yms <- ym/s
+        s2 <- s^2
+        xiyms <- 1 + xi * yms
+        xiyms[xiyms < eps] <- eps
+        xi1 <- 1/xi
+        yms2 <- ym * s
+        yms2s2 <- yms2/s2
+
+        hsigma <- -((s/s2 - s * (2 * s2)/s2^2)/(1/s) + 
+          s/s2 * (s/s2)/(1/s)^2 - (xiyms^(-xi1 - 1) *
+          (-xi1 * (xi * (yms2s2 - yms2 * (2 * (s2))/s2^2))) -
+          xiyms^(-xi1 - 1 - 1) * ((-xi1 - 1) *
+          (xi * yms2s2)) * (-xi1 * xi * yms2s2)) -
+          (xi1 + 1) * (xi * (yms2s2 - yms2 * 
+          (2 * s2)/s2^2)/xiyms + 
+          xi * yms2s2 * (xi * yms2s2)/xiyms^2))
+
+        return(-hsigma)
+      },
+      "xi" = function(y, par, ...) {
+        m <- par$mu
+        s <- par$sigma
+        xi <- par$xi
+
+        xi[xi >= 0 & xi < eps] <- eps
+        xi[xi < 0 & xi > -eps] <- -eps
+        s[s < 0.001] <- 0.001
+
+        yms <- (y - m)/s
+        xiyms <- 1 + xi * yms
+        xiyms[xiyms < eps] <- eps
+        xi1 <- 1 / xi
+        a <- -xi1 - 1
+        lxiyms <- log(xiyms)
+
+        hxi <- -((xiyms^(a - 1) * (a * yms) +
+          xiyms^a * (lxiyms * xi1^2)) * (-xi1 * yms) + 
+          xiyms^a * (xi1^2 * yms) + 
+          ((xiyms^a * (-xi1 * yms) +
+          xiyms^(-xi1) * (lxiyms * xi1^2)) * (lxiyms * (xi1^2)) +
+          xiyms^(-xi1) * (yms/xiyms * xi1^2 - lxiyms * (2 * xi/(xi^2)^2))) -
+          ((xi1 + 1) * yms^2/xiyms^2 + xi1^2 * yms/xiyms +
+          (xi1^2 * (yms/xiyms) - 2 * xi/(xi^2)^2 * lxiyms)))
+
+        return(-hxi)
+      }
+    )
+  )
+
+  rval$initialize <- list(
+    "mu" = function(y, ...) { (y + mean(y)) / 2 },
+    "sigma" = function(y, ...) { rep(sd(y), length(y)) },
+    "xi" = function(y, ...) { rep(1e-02, length(y)) }
+  )
+
+  rval$mean <- function(par, ...) {
+    par$mu + par$sigma * (gamma(1 - par$xi) - 1) / par$xi
+  }
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+gamlss_distributions <- function(type = c("continuous", "discrete"))
+{
+  stopifnot(requireNamespace("gamlss.dist"))
+  if(!("package:gamlss.dist" %in% search()))
+    attachNamespace("gamlss.dist")
+  funs <- ls("package:gamlss.dist")
+  type <- match.arg(type)
+  d <- list()
+  tf <- tempfile()
+  tf2 <- tempfile()
+  warn <- getOption("warn")
+  options("warn" = -1)
+  for(j in seq_along(funs)) {
+    fj0 <- get(funs[j])
+    png(tf)
+    capture.output(fj <- try(fj0(), silent = TRUE), file = tf2)
+    dev.off()
+    if(!inherits(fj, "try-error")) {
+      if(inherits(fj, "gamlss.family")) {
+        if(tolower(fj$type) == tolower(type)) {
+          d[[funs[j]]] <- fj0
+        }
+      }
+    }
+  }
+  unlink(tf)
+  unlink(tf2)
+  options("warn" = warn)
+  return(d)
 }
 
