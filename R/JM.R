@@ -726,8 +726,8 @@ opt_JM <- jm_mode <- function(x, y, start = NULL, weights = NULL, offset = NULL,
           if(myplots){
             plot(eta_timegrid_mu, state$fitted_timegrid, 
                  main=paste0("alpha: iteration ", iter, ", edf ", round(state$edf, 2), ", term: ", names(x$alpha$smooth.construct)[sj]))
-            abline(h = 0, col = "red")
-            abline(v = median(y[, 3]), col = "red")
+            abline(h = 0, col = 2)
+            abline(v = median(y[, 3]), col = 2)
             plot(eta_timegrid_mu, eta_timegrid_alpha, main=paste0("alpha: iteration ", iter, ", edf ", round(state$edf, 2)))
             plot(eta_timegrid_mu[, ncol(eta_timegrid_mu)], eta$alpha)
             matplot(t(times), t(eta_timegrid_alpha), main=paste0("alpha: iteration ", iter, ", edf ", round(state$edf, 2)), type = "l")
@@ -2194,8 +2194,8 @@ sam_JM <- jm_mcmc <- function(x, y, family, start = NULL, weights = NULL, offset
               plot(eta_timegrid_mu[, ncol(eta_timegrid_mu)], eta$alpha, main=paste0("alpha: iteration ", iter, ", edf ", round(p.state$edf, 2)))
               plot(eta_timegrid_mu, p.state$fitted_timegrid, 
                    main=paste0("alpha: iteration ", iter, ", edf ", round(p.state$edf, 2), ", term: ", sj))
-              abline(h = 0, col = "red")
-              abline(v = median(y[, 3]), col = "red")
+              abline(h = 0, col = 2)
+              abline(v = median(y[, 3]), col = 2)
               matplot(t(times), t(eta_timegrid_alpha), main=paste0("alpha: iteration ", iter, ", edf ", round(p.state$edf, 2)), type = "l")
              Sys.sleep(2)
               }

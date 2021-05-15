@@ -1,5 +1,6 @@
 \name{randomize}
 \alias{randomize}
+\alias{trans_random}
 
 \title{
   Transform Smooth Constructs to Random Effects
@@ -13,6 +14,7 @@
 }
 
 \usage{
+trans_random(x)
 randomize(x)
 }
 

@@ -1,3 +1,11 @@
+# bamlss 1.1-4
+
+* Improved batchwise backfitting algorithm. Data is not copied anymore.
+
+* New setup for neural network model terms.
+
+* Bug fixing.
+
 # bamlss 1.1-3
 
 * New naming convention for optimizer and sampling functions.

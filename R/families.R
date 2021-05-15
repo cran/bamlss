@@ -117,6 +117,27 @@ make.link2 <- function(link)
             eta <- pmin(eta, 700)
             pmax(-exp(eta) * exp(-exp(eta)), .Machine$double.eps)
           }
+        ),
+        "sigmoid" = list(
+          "linkfun" = function(mu) {
+            i <- mu <= -1
+            if(any(i))
+              mu[i] <- mu[i] <- -0.9999
+            i <- mu >= 1
+            if(any(i))
+              mu[i] <- mu[i] <- 0.9999 
+            -log(2/(mu + 1) - 1)
+          },
+          "linkinv" = function(eta) {
+            tanh(eta/2)
+          },
+          "mu.eta" = function(eta) {
+            0.5 / cosh(eta * 0.5)^2
+          },
+          "mu.eta2" = function(eta) {
+            eta2 <- eta * 0.5
+            -(0.5 * (2 * (sinh(eta2) * 0.5 * cosh(eta2)))/(cosh(eta2)^2)^2)
+          }
         )
       )
     }
@@ -856,7 +877,177 @@ AR0_bamlss <- function(ar.start = NULL, ...)
 }
 
 
-AR1_bamlss <- function(ar.start = NULL, ...)
+AR1_bamlss <- function(...)
+{
+  ## https://arxiv.org/pdf/1711.05204.pdf
+  rval <- list(
+    "family" = "AR1",
+    "names" = c("mu", "sigma", "rho"),
+    "links" = c(mu = "identity", sigma = "log", rho = "sigmoid"),
+    "d" = function(y, par, log = FALSE, ...) {
+      if(!is.null(dim(y))) {
+        i <- which(y[, 2L] > 0)
+        y <- y[, 1L]
+      } else {
+        i <- 1L
+      }
+      e <- y - par$mu
+      e <- c(0, e[-length(e)])
+      e[i] <- 0
+      mu <- par$mu + par$rho * e
+      d <- dnorm(y, mu, par$sigma, log = log)
+      if(!log)
+        d <- exp(d)
+      return(d)
+    },
+    "p" = function(y, par, ...) {
+      if(!is.null(dim(y))) {
+        i <- which(y[, 2L] > 0)
+        y <- y[, 1L]
+      } else {
+        i <- 1L
+      }
+      e <- y - par$mu
+      e <- c(0, e[-length(e)])
+      e[i] <- 0
+      mu <- par$mu + par$rho * e
+      d <- pnorm(y, mu, par$sigma)
+    },
+    "score" = list(
+      "mu" = function(y, par, ...) {
+        if(!is.null(dim(y))) {
+          i <- which(y[, 2L] > 0)
+          y <- y[, 1L]
+        } else {
+          i <- 1L
+        }
+        e <- y - par$mu
+        e <- c(0, e[-length(e)])
+        e[i] <- 0
+        mu <- par$mu + par$rho * e
+        (y - mu) / par$sigma^2
+      },
+      "sigma" = function(y, par, ...) {
+        if(!is.null(dim(y))) {
+          i <- which(y[, 2L] > 0)
+          y <- y[, 1L]
+        } else {
+          i <- 1L
+        }
+        e <- y - par$mu
+        e <- c(0, e[-length(e)])
+        e[i] <- 0
+        mu <- par$mu + par$rho * e
+        (y - mu)^2 / par$sigma^2 - 1
+      },
+      "rho" = function(y, par, ...) {
+        if(!is.null(dim(y))) {
+          i <- which(y[, 2L] > 0)
+          y <- y[, 1L]
+        } else {
+          i <- 1L
+        }
+        e <- y - par$mu
+        e <- c(0, e[-length(e)])
+        e[i] <- 0
+        mu <- par$mu + par$rho * e
+        eta_rho <- tanh(par$rho / 2)
+        (y - mu) / par$sigma^2 * 2 * exp(-eta_rho) * e / (exp(-eta_rho) + 1)^2
+      }
+    ),
+    "hess" = list(
+      "mu" = function(y, par, ...) {
+        1 / par$sigma^2
+      },
+      "sigma" = function(y, par, ...) {
+        rep(2, length(par[[1L]]))
+      },
+      "rho" = function(y, par, ...) {
+        if(!is.null(dim(y))) {
+          i <- which(y[, 2L] > 0)
+          y <- y[, 1L]
+        } else {
+          i <- 1L
+        }
+        e <- y - par$mu
+        e <- c(0, e[-length(e)])
+        e[i] <- 0
+        eta_rho <- tanh(par$rho / 2)
+        4 * e^2 * exp(2 * (eta_rho - log(par$sigma))) / (exp(eta_rho) + 1)^4
+      }
+    ),
+    "crps" = function(y, par, ...) {
+      if(!is.null(dim(y))) {
+        i <- which(y[, 2L] > 0)
+        y <- y[, 1L]
+      } else {
+        i <- 1L
+      }
+      e <- y - par$mu
+      e <- c(0, e[-length(e)])
+      e[i] <- 0
+      mu <- par$mu + par$rho * e
+      scoringRules::crps_norm(y, mean = mu, sd = par$sigma)
+    },
+    "initialize" = list(
+      "mu"    = function(y, ...) {
+        start <- if(is.null(dim(y))) {
+          (y + mean(y, na.rm = TRUE)) / 2
+        } else {
+          (y[, 1L] + mean(y[, 1L], na.rm = TRUE)) / 2
+        }
+        start
+      },
+      "sigma" = function(y, ...) {
+        start <- if(is.null(dim(y))) {
+          rep(sd(y), length(y))
+        } else {
+          rep(sd(y[, 1L], na.rm = TRUE), nrow(y))
+        }
+        start
+      },
+      "rho" = function(y, ...) {
+        rep(1e-05, if(is.null(dim(y))) length(y) else nrow(y))
+      }
+    )
+  )
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+
+if(FALSE) {
+  time <- seq(-3, 3, length = 5000)
+  y <- rep(0, length(time))
+  rho <- bamlss:::make.link2("sigmoid")$linkinv
+
+  for(i in 2:length(time)) {
+    y[i] <- sin(time[i]) + rho(0.6 * cos(time[i] * 4)) * (y[i - 1] - sin(time[i - 1])) + rnorm(1, sd = 0.2)
+  }
+  time <- time[-1]
+  y <- y[-1]
+
+  plot(time, y)
+
+  f <- list(
+    Y ~ s(time),
+    sigma ~ s(time),
+    rho ~ s(lag1time)
+  )
+
+  d <- data.frame("time" = time[-1], "lag1time" = time[-length(time)])
+  d$Y <- cbind("y" = y[-1], "ar.start" = c(1, rep(0, nrow(d) - 1)))
+
+  b <- bamlss(f, family = AR1_bamlss, data = d)
+
+  p <- predict(b, model = "rho")
+  plot(d$lag1time, p, type = "l")
+  lines(0.6 * cos(d$lag1time * 4) ~ d$lag1time, col = 2, lwd = 2)
+}
+
+
+AR00_bamlss <- function(ar.start = NULL, ...)
 {
   if(is.null(list(...)$mu)) {
     rval <- list(
@@ -3074,7 +3265,7 @@ bivlogit_bamlss <- function(...)
 }
 
 
-mvt_bamlss <- function(...)
+mvt_bamlss <- function(...) 
 {
   links <- c(mu1 = "identity", mu2 = "identity",
     sigma1 = "log", sigma2 = "log", rho = "rhogit", df = "log")
@@ -3596,10 +3787,10 @@ ztnbinom_bamlss <- function(...) {
     )
   )
 
-  rval$rps <- function(y, par) {
-    K <- sort(unique(y))
-    rps <- 0
-    for(k in K) {
+  rval$rps <- function(y, par, ymin = 1L, ymax = max(max(y), 100L)) {
+    K <- seq(ymin, ymax, by = 1L)
+    rps <- rep(0, length(y))
+    for (k in K) {
       P <- rval$p(k, par)
       O <- y <= k
       rps <- rps + (P - O)^2
@@ -4913,7 +5104,7 @@ nmult_bamlss <- function(K)
 #p3 <- predict(b3, model = "mu")
 
 #plot(x, y)
-#plot2d(cbind(p1, p2, p3) ~ x, col.lines = "blue", lty = c(2, 1, 2), add = TRUE)
+#plot2d(cbind(p1, p2, p3) ~ x, col.lines = 4, lty = c(2, 1, 2), add = TRUE)
 #}
 
 ALD_bamlss <- function(..., tau = 0.5, eps = 0.01)

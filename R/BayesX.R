@@ -186,10 +186,19 @@ sam_BayesX <- BayesX <- function(x, y, family, start = NULL, weights = NULL, off
 
     if(!family$family == "dirichlet") {
       if(is.null(family$cat)) {
-        if(rn %in% family$names)
-          rn <- NA
-        if(is.na(rn))
-          rn <- yname
+        if(length(cny) > 1) {
+          for(ii in 0:9) {
+            if(grepl(ii, rn))
+              rn <- grep(ii, cny, value = TRUE)
+          }
+          if(rn %in% family$names)
+            rn <- yname
+        } else {
+          if(rn %in% family$names)
+            rn <- NA
+          if(is.na(rn))
+            rn <- yname
+        }
       }
     }
 
@@ -325,10 +334,22 @@ sam_BayesX <- BayesX <- function(x, y, family, start = NULL, weights = NULL, off
     } else {
       if(!is.null(x[[i]]$model.matrix)) {
         sf <- grepl(paste("_", i, "_", sep = ""), sfiles, fixed = TRUE) & grepl(paste("LinearEffects", sep = ""), sfiles, fixed = TRUE)
+        if(!any(sf) & (length(cny) > 1)) {
+          for(ii in 0:9) {
+            if(grepl(ii, i) & any(grepl(ii, cny))) {
+              jj <- gsub(ii, "", i)
+              ii <- grep(ii, cny, value = TRUE)
+              break
+            }
+          }
+          sf <- grepl(paste("_", jj, "_", sep = ""), sfiles, fixed = TRUE) & grepl(paste(ii, "_LinearEffects", sep = ""), sfiles, fixed = TRUE)
+        }
         sf <- sfiles[sf]
-        samps <- as.matrix(read.table(file.path(dir, "output", sf), header = TRUE)[, -1, drop = FALSE])
-        colnames(samps) <- paste(i, ".p.", colnames(x[[i]]$model.matrix), sep = "")
-        samples <- cbind(samples, samps)
+        if(length(sf)) {
+          samps <- as.matrix(read.table(file.path(dir, "output", sf), header = TRUE)[, -1, drop = FALSE])
+          colnames(samps) <- paste(i, ".p.", colnames(x[[i]]$model.matrix), sep = "")
+          samples <- cbind(samples, samps)
+        }
       }
       if(!is.null(x[[i]]$smooth.construct)) {
         for(j in seq_along(x[[i]]$smooth.construct)) {
@@ -350,6 +371,19 @@ sam_BayesX <- BayesX <- function(x, y, family, start = NULL, weights = NULL, off
           #term <- paste("of", term, "sample", sep = "")
           sf <- grepl(paste("_", i, "_", sep = ""), sfiles, fixed = TRUE) & grepl(term, sfiles, fixed = TRUE) & !grepl("_variance_", sfiles, fixed = TRUE)
           sf <- sfiles[sf]
+
+          if((length(sf) < 1) & (length(cny) > 1)) {
+            for(ii in 0:9) {
+              if(grepl(ii, i) & any(grepl(ii, cny))) {
+                jj <- gsub(ii, "", i)
+                ii <- grep(ii, cny, value = TRUE)
+                break
+              }
+            }
+            sf <- grepl(paste("_", jj, "_", sep = ""), sfiles, fixed = TRUE) & grepl(term, sfiles, fixed = TRUE) & !grepl("_variance_", sfiles, fixed = TRUE) & grepl(paste0("_", ii, "_"), sfiles, fixed = TRUE)
+            sf <- sfiles[sf]
+          }
+
           if(inherits(x[[i]]$smooth.construct[[j]], "mrf.smooth")) {
             if(!inherits(x[[i]]$smooth.construct[[j]], "mgcv.smooth"))
               sf <- grep("_spatial_", sf, fixed = TRUE, value = TRUE)
@@ -365,6 +399,10 @@ sam_BayesX <- BayesX <- function(x, y, family, start = NULL, weights = NULL, off
             sf <- if(is.tx(x[[i]]$smooth.construct[[j]]) & (length(x[[i]]$smooth.construct[[j]]$term) > 1)) sf[tj] else sf[-tj]
           if((x[[i]]$smooth.construct[[j]]$by != "NA") & !is.user(x[[i]]$smooth.construct[[j]]))
             sf <- grep(x[[i]]$smooth.construct[[j]]$by, sf, fixed = TRUE, value = TRUE)
+
+          if(length(sf) < 1)
+            next
+
           samps <- as.matrix(read.table(file.path(dir, "output", sf), header = TRUE)[, -1, drop = FALSE])
           cn <- colnames(x[[i]]$smooth.construct[[j]]$X)
           if(is.null(cn))

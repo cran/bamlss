@@ -88,7 +88,7 @@ dim(X)
 grid <- attr(bf$y[[1]], "grid")
 gdim <- c(length(grid), length(grid[[1]]))
 b <- runif(ncol(X))
-fit <- X %*% b
+fit <- X \%*\% b
 fit <- matrix(fit, nrow = gdim[1], ncol = gdim[2], byrow = TRUE)
 
 plot(as.vector(fit) ~ unlist(grid), type = "n",

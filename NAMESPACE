@@ -89,6 +89,9 @@ export(
 
   ## engine setup functions
   "randomize",
+  "trans_random",
+  "trans_AR1",
+  "AR1",
   "set.starting.values",
   "bamlss.engine.setup",
   "get.state",

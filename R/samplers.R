@@ -326,7 +326,7 @@ gmcmc <- function(fun, theta, priors = NULL, propose = NULL,
             accepted <- if(is.na(state$alpha)) FALSE else log(runif(1)) <= state$alpha
 
             if(accepted) {
-              if (is.null(attr(theta[[i]][[j]], "fitted.values"))) {
+              if(is.null(attr(theta[[i]][[j]], "fitted.values"))) {
                 eta[[i]] <- eta[[i]] - fitfun[[i]][[j]](data[[i]][[j]], theta[[i]][[j]])
               } else {
                 eta[[i]] <- eta[[i]] - attr(theta[[i]][[j]], "fitted.values")
@@ -334,7 +334,7 @@ gmcmc <- function(fun, theta, priors = NULL, propose = NULL,
 
               theta[[i]][[j]] <- state$parameters
 
-              if (is.null(attr(theta[[i]][[j]], "fitted.values"))) {
+              if(is.null(attr(theta[[i]][[j]], "fitted.values"))) {
                 eta[[i]] <- eta[[i]] + fitfun[[i]][[j]](data[[i]][[j]], theta[[i]][[j]])
               } else {
                 eta[[i]] <- eta[[i]] + attr(theta[[i]][[j]], "fitted.values")
@@ -887,6 +887,10 @@ GMCMC_iwls <- function(family, theta, id, eta, y, data, weights = NULL, offset =
 
   ## Compute old log likelihood and old log coefficients prior.
   pibeta <- family$loglik(y, peta)
+
+  if(inherits(data, "nnet0.smooth")) {
+    data$X <- data$getZ(data$X, theta)
+  }
 
   ## Sample variance parameter.
   if(!data$fixed & !data$fxsp & length(data$S)) {

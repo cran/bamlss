@@ -522,7 +522,7 @@ plot3d <- function(x, residuals = FALSE, col.surface = NULL,
     if(!is.null(c.select) && length(fitted) > 1L) {
       nf <- length(fitted)
       if(is.null(args$border))
-        args$border <- c("green", "black", "red")
+        args$border <- c(3, 1, 2)
       if(is.function(args$col) || is.null(args$col))
         args$col <- NA
       color <- rep(args$col, length.out = nf)

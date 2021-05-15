@@ -58,6 +58,7 @@ More detailed overviews and examples are provided in the articles:
 * [LASSO-Type Penalization in the Framework of Generalized Additive Models for Location, Scale and Shape](`r prefix`lasso.html)
 * [Munich Rent Model](`r prefix`rent.html)
 * [Spatial Location-Scale Model](`r prefix`zn.html)
+* [Fatalities Model for Austria](`r prefix`fatalities.html)
 
 
 ## Installation
