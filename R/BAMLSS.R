@@ -98,7 +98,7 @@ bamlss.frame <- function(formula, data = NULL, family = "gaussian",
     if(is.null(overwrite))
       overwrite <- TRUE
     if(file.exists("ff_data_bamlss") & overwrite) {
-      unlink("ff_data_bamlss")
+      unlink("ff_data_bamlss", recursive = TRUE, force = TRUE)
     }
     if(!file.exists("ff_data_bamlss")) {
       cat("  .. creating directory 'ff_data_bamlss' for storing matrices. Note, the directory is not deleted and matrices can be used for another model.\n")
@@ -147,6 +147,11 @@ bamlss.frame <- function(formula, data = NULL, family = "gaussian",
     scale.x = scale.x, specials = specials, ...)
 
   bf$knots <- knots
+
+  ## Delete ff directory?
+  bf$delete <- list(...)$delete
+  if(is.null(bf$delete))
+    bf$delete <- TRUE
 
   ## Assign class and return.
   class(bf) <- c("bamlss.frame", "list")
@@ -213,7 +218,10 @@ bamlss_chunk <- function(x) {
   }
   if(N > 100000L) {
     n <- max(c(100000, 0.02 * N))
-    xc <- cut(seq_len(N), breaks = floor(N/n), include.lowest = TRUE)
+    bn <- floor(N/n)
+    if(bn < 2)
+      bn <- 10
+    xc <- cut(seq_len(N), breaks = bn, include.lowest = TRUE)
     chunks <- split(seq_len(N), xc)
   } else {
     chunks <- list(seq_len(N))
@@ -769,38 +777,58 @@ smooth.construct_ff.default <- function(object, data, knots, ...)
 {
   object$xt$center <- TRUE
   object$xt$nocenter <- FALSE
+  terms <- object$term
   if(object$by != "NA") {
     object$label <- strsplit(object$label, "")[[1]]
     object$label <- paste0(object$label[-length(object$label)], collapse = "")
     object$label <- paste0(object$label, ",by=", object$by, ")")
     object$xt$center <- FALSE
     object$xt$nocenter <- TRUE
+    terms <- c(terms, object$by)
   }
   nd <- list()
   cat("  .. ff processing term", object$label, "\n")
   xfile <- rmf(object$label)
   xfile <- file.path("ff_data_bamlss", xfile)
-  for(j in object$term) {
-    if(!is.factor(data[[j]][1:2])) {
-      ux <- length(ffbase::unique.ff(data[[j]]))
-      if(ux > 2) {
-        ux <- if(ux < 1000L) ux - 1L else 1000L
-        xq <- ffbase::quantile.ff(data[[j]], probs = seq(0, 1, length = ux), na.rm = TRUE)
-        names(xq) <- NULL
+  is_f <- sapply(data, is.factor)
+  if((length(terms) > 1) & !any(is_f)) {
+    ud <- nrow(unique(data[, terms]))
+    km <- kmeans(data[, terms], min(c(1000, floor(0.9 * ud))))
+    uc <- unique(km$cluster)
+    nd <- matrix(NA, length(uc), length(terms))
+    for(i in seq_along(uc)) {
+      nd[i, ] <- as.numeric(data[sample(which(km$cluster == uc[i]), size = 1), terms])
+    }
+    nd <- as.data.frame(nd)
+    names(nd) <- terms
+    ##nd <- data[sample(1:nrow(data), size = 1000L), ]
+  } else {
+    for(j in terms) {
+      if(!is.factor(data[[j]][1:2])) {
+        ux <- ffbase::unique.ff(data[[j]])
+        uxn <- length(ux)
+        if(uxn > 2) {
+          uxl <- if(uxn < 1000L) uxn - 1L else 1000L
+          xq <- ffbase::quantile.ff(data[[j]], probs = seq(0, 1, length = uxl), na.rm = TRUE)
+          names(xq) <- NULL
+          if(length(unique(xq)) < 100) {
+            xq <- rep(ux[], length.out = 1000L)
+          }
+        } else {
+          xq <- rep(ux[], length.out = 1000L)
+        }
+        if(length(xq) == 1000L) {
+          nd[[j]] <- sample(xq)
+        } else {
+          nd[[j]] <- sample(rep(xq, length.out = 1000L))
+        }
       } else {
-        xq <- rep(ux, length.out = 1000L)
+        nd[[j]] <- sample(rep(unique(data[[j]]), length.out = 1000L))
       }
-      if(length(xq) == 1000L) {
-        nd[[j]] <- sample(xq)
-      } else {
-        nd[[j]] <- sample(rep(xq, length.out = 1000L))
-      }
-    } else {
-      nd[[j]] <- sample(rep(unique(data[[j]]), length.out = 1000L))
     }
   }
   nd <- as.data.frame(nd)
-  object <- smoothCon(object, data = nd, knots = knots)[[1L]]
+  object <- smoothCon(object, data = nd, knots = knots, absorb.cons = FALSE)[[1L]]
   rm(nd)
   nobs <- nrow(data)
   if(file.exists(paste0(xfile, ".rds"))) {
@@ -1984,6 +2012,13 @@ bamlss <- function(formula, family = "gaussian", data = NULL, start = NULL, knot
   if(light)
     bf <- light_bamlss(bf)
 
+  ## Remove ff directory?
+  if(bf$delete) {
+    if(dir.exists("ff_data_bamlss"))
+      unlink("ff_data_bamlss", recursive = TRUE, force = TRUE)
+  }
+
+
   bf$call <- match.call()
   class(bf) <- c("bamlss", "bamlss.frame", "list")
   attr(bf, "functions") <- functions
@@ -2170,8 +2205,12 @@ samplestats <- function(samples, x = NULL, y = NULL, family = NULL, logLik = FAL
         tpar <- mpar
         dev <- ll <- rep(NA, ncol(par[[1]]))
         for(j in 1:ncol(par[[1]])) {
-          for(i in nx)
-            tpar[[i]] <- par[[i]][, j]
+          for(i in nx) {
+            if(!is.null(ncol(par[[i]])))
+              tpar[[i]] <- par[[i]][, j]
+            else
+              tpar[[i]] <- par[[i]]
+          }
           llt <- try(family$loglik(y, tpar), silent = TRUE)
           if(!inherits(llt, "try-error")) {
             ll[j] <- llt
@@ -4193,11 +4232,15 @@ predict.bamlss <- function(object, newdata, model = NULL, term = NULL, match.nam
               any(sapply(x[[jj]]$margin, function(z) { inherits(z, "random.effect") }))
             } else inherits(x[[jj]], "random.effect")
           }
-          if(random) {
-            if(ncol(X) == ncol(samps[, sn, drop = FALSE]))
+          if(any(sn %in% colnames(samps))) {
+            if(random) {
+              if(ncol(X) == ncol(samps[, sn, drop = FALSE]))
+                eta <- eta + fitted_matrix(X, samps[, sn, drop = FALSE])
+            } else {
               eta <- eta + fitted_matrix(X, samps[, sn, drop = FALSE])
+            }
           } else {
-            eta <- eta + fitted_matrix(X, samps[, sn, drop = FALSE])
+            warning(paste("model term", j, "not in samples, prediction is set to 0!"))
           }
         } else {
           if(is.null(x[[jj]]$PredictMat)) {
@@ -4205,6 +4248,7 @@ predict.bamlss <- function(object, newdata, model = NULL, term = NULL, match.nam
           } else {
             if(inherits(x[[jj]], "nnet0.smooth")) {
               X <- Predict.matrix.nnet0.smooth(x[[jj]], data)
+              ## X <- x[[jj]]$getZ(X, samps[1L, sn, drop = FALSE])
             } else {
               X <- x[[jj]]$PredictMat(x[[jj]], data)
             }
@@ -5101,8 +5145,16 @@ smooth.construct.la.smooth.spec <- function(object, data, knots, ...)
     const <- 1e-05
   if(!fuse & !ridge) {
     if(object$type == "single") {
-      object$S[[1]] <- function(parameters) {
+      object$S[[1]] <- function(parameters, fixed.hyper = NULL) {
         b <- get.par(parameters, "b")
+        w <- rep(1, length(b))
+        if(!is.null(fixed.hyper)) {
+          w <- fixed.hyper
+        } else {
+          if(length(i <- grep("lasso", names(parameters)))) {
+            w <- parameters[i]
+          }
+        }
         A <- df / sqrt(b^2 + const)
         for(j in seq_along(group)) {
           if(all(!is.na(group[[j]]))) {
@@ -5110,6 +5162,7 @@ smooth.construct.la.smooth.spec <- function(object, data, knots, ...)
           }
         }
         ## FIXME: adaptive weights: A <- A * MLpen ## 1 / abs(beta)
+        A <- A * 1 / abs(w)
         A <- if(length(A) < 2) matrix(A, 1, 1) else diag(A)
         A
       }
@@ -5728,7 +5781,12 @@ smooth.construct.nnet0.smooth.spec <- function(object, data, knots, ...)
     object$type <- "single"
     object$xt$k <- object$bs.dim
   }
-  object$xt[["standardize"]] <- object[["standardize01"]] <- object$xt[["standardize01"]] <-  TRUE
+
+  oc <- object$xt$oc
+  if(is.null(oc))
+    oc <- FALSE
+
+  object$xt[["standardize"]] <- object[["standardize01"]] <- object$xt[["standardize01"]] <- TRUE
   object <- smooth.construct.la.smooth.spec(object, data, knots)
   object[!(names(object) %in% c("formula", "term", "label", "dim", "X", "xt", "lasso"))] <- NULL
   nodes <- object$xt$k
@@ -5874,6 +5932,11 @@ smooth.construct.nnet0.smooth.spec <- function(object, data, knots, ...)
   )
 
   object$activ_grad <- switch(type[1],
+    "relu" = function(x) {
+      x[x > 0] <- 1
+      x[x <= 0] <- 0
+      return(x)
+    },
     "sigmoid" = function(x) {
       1 / (1 + exp2(-x)) * (1 - 1 / (1 + exp2(-x)))
     },
@@ -5885,6 +5948,9 @@ smooth.construct.nnet0.smooth.spec <- function(object, data, knots, ...)
   )
 
   object$activ_hess <- switch(type[1],
+    "relu" = function(x) {
+      return(rep(0, length(x)))
+    },
     "sigmoid" = function(x) {
       exp2(-x)/(1 + exp2(-x))^2 * (1 - 1/(1 + exp2(-x))) - 1/(1 + exp2(-x)) * (exp2(-x)/(1 + exp2(-x))^2)
     },
@@ -5897,9 +5963,29 @@ smooth.construct.nnet0.smooth.spec <- function(object, data, knots, ...)
 
   nc <- ncol(object$X) - 1L
 
+  if(oc) {
+    ## Null( cbind(m, Null(universe)) )
+    object$oc <- list()
+    for(j in object$term) {
+      if(is.numeric(data[[j]])) {
+        sm <- eval(parse(text = paste0("ti(", j, ",k=20)")))
+        object$oc[[j]] <- smoothCon(sm, data, knots)[[1]]
+      }
+    }
+    OC <- list()
+    for(j in object$term) {
+      if(is.numeric(data[[j]]))
+        OC[[j]] <- PredictMat(object$oc[[j]], data)
+    }
+    OC <- do.call("cbind", OC)
+    OC <- tcrossprod(qr.Q(qr(OC)))
+    attr(object$X, "oc") <- OC
+    ##object$X <- object$X - object$smC %*% object$X
+  }
+
   object$fit.fun <- function(X, b, ...) {
     nb <- names(b)
-    if(is.null(nb)) {
+    if(is.null(nb) | (ncol(X) == nc)) {
       fit <- drop(X %*% b)
     } else {
       nb <- strsplit(nb, ".", fixed = TRUE)
@@ -5920,6 +6006,9 @@ smooth.construct.nnet0.smooth.spec <- function(object, data, knots, ...)
     for(j in 1:nodes) {
       z <- drop(X %*% b[paste0("bw", j, "_w", 0:nc)])
       Z[, j] <- object$activ_fun(z)
+    }
+    if(!is.null(attr(X, "oc"))) {
+      Z <- Z - attr(X, "oc") %*% Z
     }
     return(Z)
   }
@@ -5989,7 +6078,11 @@ nnet0_update <- function(x, family, y, eta, id, weights, criterion, ...)
 
   par <- x$state$parameters
   Z <- x$getZ(x$X, par)
+
   nc <- ncol(x$X)
+
+  lls <- family$loglik(y, family$map2par(eta))
+
   eta[[id]] <- eta[[id]] - fitted(x$state)
   e <- z - eta[[id]]
 
@@ -6086,7 +6179,7 @@ nnet0_update <- function(x, family, y, eta, id, weights, criterion, ...)
 #stop()
 
     if(!inherits(opt, "try-error")) {
-      if((-1 * opt$value) > ll0) {
+      if(((-1 * opt$value) > ll0) & (-1 * opt$value > lls)) {
         par[i] <- opt$par[-1L]
         par[j] <- opt$par[1L]
         Z[, j] <- x$activ_fun(drop(x$X %*% opt$par[-1L]))
@@ -6096,6 +6189,9 @@ nnet0_update <- function(x, family, y, eta, id, weights, criterion, ...)
     fit <- fit + Z[, j] * par[j]
   }
 
+  if(!is.null(attr(x$X, "oc")))
+    Z <- Z - attr(x$X, "oc") %*% Z
+
   ZWZ <- crossprod(Z * hess, Z)
   edf0 <- args$edf - x$state$edf
 
@@ -6103,12 +6199,21 @@ nnet0_update <- function(x, family, y, eta, id, weights, criterion, ...)
     P <- matrix_inv(ZWZ + 1/tau2 * x$S[[1]])
     edf <- sum_diag(ZWZ %*% P) + nc * x$nodes
     g <- P %*% crossprod(Z * hess, e)
+    fit <- drop(Z %*% g)
+    fit <- fit - mean(fit)
     eta[[id]] <- eta[[id]] + drop(Z %*% g)
     ic <- get.ic(family, y, family$map2par(eta), edf0 + edf, nobs, type = "BIC")
     return(ic)
   }
 
-  tau2 <- tau2.optim(objfun2, start = tau2)
+  ic0 <- objfun2(tau2)
+
+  tau22 <- tau2.optim(objfun2, start = tau2)
+
+  ic1 <- objfun2(tau2)
+
+  if(ic1 < ic0)
+    tau2 <- tau22
 
   P <- matrix_inv(ZWZ + 1/tau2 * x$S[[1]])
   par[1:x$nodes] <- drop(P %*% crossprod(Z * hess, e))
@@ -6120,6 +6225,12 @@ nnet0_update <- function(x, family, y, eta, id, weights, criterion, ...)
   x$state$parameters <- par
   x$state$edf <- sum_diag(ZWZ %*% P)
   x$state$log.prior <- x$prior(par)
+
+#  eta[[id]] <- eta[[id]] + fit
+#  lls2 <- family$loglik(y, family$map2par(eta))
+
+#  cat("\n---\n")
+#  print(c(lls, lls2))
 
   return(x$state)
 }
@@ -6881,10 +6992,22 @@ forward_reg2 <- function(x, y, n = 4, nu, maxit = 100, ...)
 
 
 Predict.matrix.nnet0.smooth <- function(object, data)
-{ 
+{
   object[["standardize"]] <- standardize <- if(is.null(object$xt[["standardize"]])) TRUE else object$xt[["standardize"]]
   object[["standardize01"]] <- if(standardize) TRUE else FALSE
   X <- cbind(1, Predict.matrix.lasso.smooth(object, data))
+
+  if(!is.null(object$oc)) {
+    OC <- list()
+    for(j in object$term) {
+      if(is.numeric(data[[j]]))
+        OC[[j]] <- PredictMat(object$oc[[j]], data)
+    }
+    OC <- do.call("cbind", OC)
+    OC <- tcrossprod(qr.Q(qr(OC)))
+    attr(X, "oc") <- OC
+  }
+
   return(X)
 }
 
@@ -10398,7 +10521,8 @@ plot.bamlss.residuals <- function(x, which = c("hist-resid", "qq-resid", "wp"), 
           args$y <- x2[, "97.5%"]
           upper <- do.call(qqnorm, args)
 
-          ylim <- range(c(mean$y, lower$y, upper$y), na.rm = TRUE)
+          ylim <- range(c(as.numeric(mean$y), as.numeric(lower$y), as.numeric(upper$y)),
+            na.rm = TRUE)
           args$plot.it <- TRUE
           if(is.null(args$ylim))
             args$ylim <- ylim
@@ -10416,7 +10540,7 @@ plot.bamlss.residuals <- function(x, which = c("hist-resid", "qq-resid", "wp"), 
           args$y <- x2[, "Mean"]
           qqline(args$y)
         } else {
-          args$y <- x
+          args$y <- as.numeric(x)
 #          if(is.null(args$ylim)) {
 #            args$ylim <- range(x[is.finite(x)], na.rm = TRUE)
 #            args$ylim <- c(-2.5, 2.5) * max(args$ylim)
@@ -10452,7 +10576,14 @@ plot.bamlss.residuals <- function(x, which = c("hist-resid", "qq-resid", "wp"), 
           x2 <- x
         }
         d <- qqnorm(x2, plot = FALSE)
-        d$y <- d$y - d$x
+
+        probs <- c(0.25, 0.75)
+        y3 <- quantile(x2, probs, type = 7, na.rm = TRUE)
+        x3 <- qnorm(probs)
+        slope <- diff(y3)/diff(x3)
+        int <- y3[1L] - slope * x3[1L]
+        d$y <- d$y - (int + slope * d$x)
+        ##d$y <- d$y - d$x
         if(!is.null(xlo)) {
           d2 <- qqnorm(xlo, plot = FALSE)
           d$ylo <- d2$y - d2$x
@@ -10462,9 +10593,9 @@ plot.bamlss.residuals <- function(x, which = c("hist-resid", "qq-resid", "wp"), 
           d$xup <- d2$x
         }
         level <- 0.95
-        xlim <- max(abs(d$x))
+        xlim <- max(abs(d$x), na.rm = TRUE)
         xlim <- c(-xlim, xlim)
-        ylim <- max(abs(c(d$y, d$ylo, d$yup)))
+        ylim <- max(abs(c(as.numeric(d$y), as.numeric(d$ylo), as.numeric(d$yup))), na.rm = TRUE)
         ylim <- c(-ylim, ylim)
         if(!is.null(args$ylim2))
           ylim <- args$ylim2
@@ -10475,7 +10606,7 @@ plot.bamlss.residuals <- function(x, which = c("hist-resid", "qq-resid", "wp"), 
         se <- (1/dnorm(z)) * (sqrt(p * (1 - p)/length(d$y)))
         low <- qnorm((1 - level)/2) * se
         high <- -low
-        args <- list(...)
+        args <- list(...) 
         if(is.null(args$col))
           args$col <- 1
         if(is.null(args$pch))
@@ -11738,7 +11869,7 @@ engines <- function(family, ...)
 }
 
 
-CRPS <- function(object, newdata = NULL, interval = c(-Inf, Inf), FUN = mean, ...) {
+CRPS <- function(object, newdata = NULL, interval = c(-Inf, Inf), FUN = mean, term = NULL, ...) {
   yname <- response_name(object)
   fam <- family(object)
   if(!is.null(fam$type)) {

@@ -37,7 +37,7 @@ The \code{LondonFire} data contains the following variables:
     \url{https://data.london.gov.uk/dataset/statistical-gis-boundary-files-london}
 
   London Fire Stations (2015). \emph{London Fire Brigade},
-    \url{https://www.london-fire.gov.uk/}.
+    \code{https://www.london-fire.gov.uk/}.
     (old url \code{http://www.london-fire.gov.uk/A-ZFireStations.asp})
 
   Taylor BM (2016). Spatial Modelling of Emergency Service Response Times.

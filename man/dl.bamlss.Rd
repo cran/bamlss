@@ -13,41 +13,40 @@
 
 \usage{
 ## Deep learning bamlss.
-dl.bamlss(object, offset = NULL, weights = NULL,
-  eps = .Machine$double.eps^0.25, maxit = 100,
-  force.stop = TRUE, epochs = 30, optimizer = NULL,
-  batch_size = NULL, keras.model = NULL,
-  verbose = TRUE, digits = 4, ...)
+dl.bamlss(object, optimizer = "adam",
+  epochs = 30, batch_size = NULL,
+  nlayers = 2, units = 100, activation = "sigmoid",
+  l1 = NULL, l2 = NULL,
+  verbose = TRUE, ...)
 
 ## Predict method.
-\method{predict}{dl.bamlss}(object, newdata, model = NULL, drop = TRUE, ...)
+\method{predict}{dl.bamlss}(object, newdata,
+  model = NULL, type = c("link", "parameter"),
+  drop = TRUE, ...)
 }
 
 \arguments{
   \item{object}{An object of class \code{"bamlss"} or a \code{\link{bamlss.formula}}.}
-  \item{offset}{A \code{\link[base]{list}} or \code{\link[base]{data.frame}}. Can be used to supply
-    model offsets for use in fitting, e.g., fitted values from an initial model fit.}
-  \item{weights}{Prior weights on the data.}
-  \item{eps}{The relative convergence tolerance of the algorithm.}
-  \item{maxit}{Integer, maximum number of iterations of the algorithm.}
-  \item{force.stop}{Logical. should the algorithm stop if relative change is smaller than
-    \code{eps}.}
-  \item{epochs}{Number of times to iterate over the training data arrays, see
-    \code{\link[keras]{fit}}.}
   \item{optimizer}{Character or call to optimizer functions to be used within \code{\link[keras]{fit}}.
     For character, options are: \code{"adam"} \code{"sgd"}, \code{"rmsprop"}, \code{"adagrad"},
-    \code{"adadelta"}, \code{"adamax"}, \code{"nadam"}. The default is
+    \code{"adadelta"}, \code{"adamax"}, \code{"adam"}. The default is
     \code{\link[keras]{optimizer_rmsprop}} with learning rate set to \code{1e-04}.}
+  \item{epochs}{Number of times to iterate over the training data arrays, see
+    \code{\link[keras]{fit}}.}
   \item{batch_size}{Number of samples per gradient update, see \code{\link[keras]{fit}}.}
-  \item{keras.model}{A compiled model using \pkg{keras}, e.g., using
-    \code{\link[keras]{keras_model_sequential}} and \code{\link[keras]{compile}}. Note
-    that the last layer only has one unit with linear activation function.}
+  \item{nlayers}{Number of hidden layers.}
+  \item{units}{Number of nodes per hidden layer, can be a vector.}
+  \item{activation}{Activation functions used for the hidden layers, can be a vector.}
+  \item{l1}{Shrinkage parameter for L1 penalty.}
+  \item{l2}{Shrinkage parameter for L2 penalty.}
   \item{verbose}{Print information during runtime of the algorithm.}
-  \item{digits}{Set the digits for printing when \code{verbose = TRUE}.}
   \item{newdata}{A \code{\link[base]{list}} or \code{\link[base]{data.frame}} that should
     be used for prediction.}
   \item{model}{Character or integer specifying for which distributional parameter predictions should
     be computed.}
+  \item{type}{If \code{type = "link"} the predictor of the corresponding \code{model}
+    is returned. If \code{type = "parameter"} predictions on the distributional parameter scale
+    are returned.}
   \item{drop}{If predictions for only one \code{model} are returned, the list structure is dropped.}
   \item{\dots}{For function \code{dl.boost()}, arguments passed to \code{\link{bamlss.frame}}.}
 }
@@ -88,7 +87,7 @@ f <- list(
 
 ## Fit neural network.
 library("keras")
-b <- dl.bamlss(f)
+b <- dl.bamlss(f, epochs = 2000)
 
 ## Plot estimated functions.
 par(mfrow = c(1, 2))
@@ -98,15 +97,20 @@ plot2d(fitted(b)$sigma ~ x,
   ylim = range(c(fitted(b)$sigma, fsigma)))
 plot2d(fsigma ~ x, add = TRUE, col.lines = "red")
 
-## Another example identifying structures that are
-## not captured by the initial model.
-set.seed(123)
-d <- GAMart()
-b1 <- bamlss(num ~ s(x1) + s(x2) + s(x3), data = d, sampler = FALSE)
-b2 <- dl.bamlss(num ~ lon + lat, data = d, offset = fitted(b1))
-p <- predict(b2, model = "mu")
-par(mfrow = c(1, 1))
-plot3d(p ~ lon + lat, data = d, symmetric = FALSE)
+## Predict with newdata.
+nd <- data.frame(x = seq(-6, 6, length = 100))
+nd$p <- predict(b, newdata = nd, type = "link")
+
+par(mfrow = c(1, 2))
+plot(x, y, xlim = c(-6, 6), ylim = range(c(nd$p$mu, y)))
+plot2d(p$mu ~ x, data = nd, add = TRUE)
+plot2d(p$sigma ~ x, data = nd,
+  ylim = range(c(nd$p$sigma, fsigma)))
+plot2d(fsigma ~ x, add = TRUE, col.lines = "red")
+
+## Plot quantile residuals.
+e <- residuals(b)
+plot(e)
 }
 }
 

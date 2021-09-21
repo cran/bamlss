@@ -12,7 +12,9 @@
 }
  
 \usage{
-CRPS(object, newdata = NULL, interval = c(-Inf, Inf), FUN = mean, ...)
+CRPS(object, newdata = NULL,
+  interval = c(-Inf, Inf), FUN = mean,
+  term = NULL, ...)
 }
 
 \arguments{
@@ -20,6 +22,8 @@ CRPS(object, newdata = NULL, interval = c(-Inf, Inf), FUN = mean, ...)
   \item{newdata}{Optional new data that should be used for calculation.}
   \item{interval}{The interval that should be used for numerical integration}
   \item{FUN}{Function to be applied on the CRPS scores.}
+  \item{term}{If required, specify the model terms that should be used within the
+    \code{\link{predict.bamlss}} function.}
   \item{\dots}{Arguments passed to function \code{FUN}.}
 }
 

@@ -4232,7 +4232,6 @@ sm_time_transform2 <- function(x, data, grid, yname, timevar, take, derivMat = F
     if(!is.null(x$by.level)) 
       x$by_timegrid <- as.numeric(X[[x$by]] == x$by.level)
   }
-    
   
   dX <- NULL
   if(derivMat) {

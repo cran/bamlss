@@ -1,3 +1,7 @@
+# bamlss 1.1-5
+
+* Bug fixing.
+
 # bamlss 1.1-4
 
 * Improved batchwise backfitting algorithm. Data is not copied anymore.

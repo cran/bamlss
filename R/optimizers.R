@@ -4046,6 +4046,10 @@ opt_lasso <- lasso <- function(x, y, start = NULL, adaptive = TRUE,
       }
     }
     x <- lasso_transform(x, zeromodel, nobs = nrow(y))
+  } else {
+    if(!is.null(zeromodel)) {
+      x <- lasso_transform(x, zeromodel, nobs = nrow(y))
+    }
   }
   
   for(l in 1:nrow(lambdas)) {
@@ -4190,6 +4194,11 @@ lasso_transform <- function(x, zeromodel, nobs = NULL, ...)
               w[ff] <- w[ff] * 1 / abs(t(Af[, ff]) %*% beta)
             }
           }
+          names(w) <- paste("lasso", 1:length(w), sep = "")
+          w[!is.finite(w)] <- 1e10
+          x[[i]]$smooth.construct[[j]]$fixed.hyper <- w
+        } else {
+          w <- get.par(zeromodel$parameters[[i]]$s[[j]], "b")
           names(w) <- paste("lasso", 1:length(w), sep = "")
           w[!is.finite(w)] <- 1e10
           x[[i]]$smooth.construct[[j]]$fixed.hyper <- w
@@ -4469,23 +4478,17 @@ lasso_stop <- function(x)
 
 
 ## Deep learning bamlss.
-dl.bamlss <- function(object, offset = NULL, weights = NULL,
-  eps = .Machine$double.eps^0.25, maxit = 100, force.stop = TRUE,
-  epochs = 30, optimizer = NULL,
-  batch_size = NULL, keras.model = NULL, verbose = TRUE, digits = 4, ...)
+dl.bamlss <- function(object,
+  optimizer = "adam", epochs = 30, batch_size = NULL,
+  nlayers = 2, units = 100, activation = "sigmoid", l1 = NULL, l2 = NULL,
+  verbose = TRUE, ...)
 {
   stopifnot(requireNamespace("keras"))
+  stopifnot(requireNamespace("tensorflow"))
 
   if(!inherits(object, "bamlss")) {
-    object <- bamlss.frame(object, smooth.construct = FALSE, model.matrix = FALSE, ...)
-  } else {
-    if(is.null(offset))
-      offset <- predict(object, drop = FALSE, FUN = mean)
+    object <- bamlss.frame(object, ...)
   }
-  if(is.null(offset))
-    offset <- model.offset(object$model.frame)
-  if(is.null(weights))
-    weights <- model.weights(object$model.frame)
 
   y <- object$y
   nobs <- nrow(y)
@@ -4495,128 +4498,99 @@ dl.bamlss <- function(object, offset = NULL, weights = NULL,
   }
 
   nx <- names(object$formula)
-  X <- eta <- itcpt <- fits <- list()
+  X <- list()
   for(i in nx) {
-    ff <- formula(as.Formula(object$formula[[i]]$fake.formula), lhs = FALSE)
-    X[[i]] <- model.matrix(ff, data = object$model.frame)
-    if(length(j <- grep("(Intercept)", colnames(X[[i]]), fixed = TRUE)))
-      X[[i]] <- X[[i]][, -j, drop = FALSE]
-    eta[[i]] <- fits[[i]] <- rep(0, nobs)
-    if(ncol(X[[i]]) < 1)
-      itcpt[[i]] <- 0
+    X[[i]] <- object$x[[i]]$model.matrix
+    if(!is.null(object$x[[i]]$smooth.construct)) {
+      for(j in seq_along(object$x[[i]]$smooth.construct))
+        X[[i]] <- cbind(X[[i]], object$x[[i]]$smooth.construct[[j]]$X)
+    }
   }
 
   family <- family(object)
-  
-  if(!is.null(weights))
-    weights <- as.data.frame(weights)
-  if(!is.null(offset)) {
-    for(j in nx) {
-      if(!is.null(offset[[j]])) {
-        if(!is.null(dim(offset[[j]]))) {
-          if(length(mj <- grep("mean", tolower(colnames(offset[[j]])), fixed = TRUE))) {
-            offset[[j]] <- offset[[j]][, mj[1]]
-          } else {
-            offset[[j]] <- offset[[j]][, 1]
-          }
-        }
-        eta[[j]] <- eta[[j]] + offset[[j]]
-      }
-    }
+
+  if(is.null(family$keras$nloglik))
+    stop("no keras negative loglik() function is specified!")
+
+  nll <- family$keras$nloglik
+
+  if(is.null(optimizer))
+    optimizer <- keras::optimizer_rmsprop(lr = 0.0001)
+  if(is.character(optimizer)) {
+      optimizer <- match.arg(optimizer, c("adam", "sgd", "rmsprop",
+        "adagrad", "adadelta", "adamax", "nadam"))
   }
 
-  if(is.null(keras.model)) {
-    keras_model <- list()
-    if(is.null(optimizer))
-      optimizer <- keras::optimizer_rmsprop(lr = 0.0001)
-    if(is.character(optimizer)) {
-      optimizer <- match.arg(optimizer, c("adam", "sgd", "rmsprop", "adagrad", "adadelta", "adamax", "nadam"))
+  models <- inputs <- outputs <- list()
+
+  units <- rep(units, length.out = nlayers)
+  activation <- rep(activation, length.out = nlayers)
+
+  if(!is.null(l1))
+    l1 <- rep(l1, length.out = nlayers)
+  if(!is.null(l2))
+    l2 <- rep(l2, length.out = nlayers)
+
+  pen <- NULL
+  if(!is.null(l1) & is.null(l2))
+    pen <- paste0('regularizer_l1(', l1, ')')
+  if(is.null(l1) & !is.null(l2))
+    pen <- paste0('regularizer_l2(', l2, ')')
+  if(!is.null(l1) & !is.null(l2))
+    pen <- paste0('regularizer_l1_l2(', l1,, ', ',  l2, ')')
+
+  for(j in 1:length(X)) {
+    inputs[[j]] <- keras::layer_input(shape = ncol(X[[j]]))
+
+    itcpt <- FALSE
+    if(ncol(X[[j]]) < 2) {
+      if(colnames(X[[i]]) == "(Intercept)")
+        itcpt <- TRUE
     }
-    for(j in nx) {
-      if(ncol(X[[j]]) > 0) {
-        kmt <- keras::keras_model_sequential()
-        kmt <- keras::layer_dense(kmt, units = 100, activation = 'relu', input_shape = c(ncol(X[[j]])))
-        kmt <- keras::layer_dropout(kmt, rate = 0.1)
-        kmt <- keras::layer_dense(kmt, units = 100, activation = 'relu')
-        kmt <- keras::layer_dropout(kmt, rate = 0.1)
-        kmt <- keras::layer_dense(kmt, units = 100, activation = 'relu')
-        kmt <- keras::layer_dropout(kmt, rate = 0.1)
-        kmt <- keras::layer_dense(kmt, units = 1, activation = 'linear')
-        kmt <- keras::compile(kmt,
-            loss = 'mse',
-            optimizer = optimizer,
-            metrics = 'mse'
-        )
-        keras_model[[j]] <- kmt
-      }
+
+    if(itcpt) {
+      opts <- c('outputs[[j]] <- inputs[[j]] %>%',
+        'layer_dense(units = 1, use_bias = FALSE)')
+    } else {
+      opts <- c('outputs[[j]] <- inputs[[j]] %>%',
+        paste0('layer_dense(units = ', units,
+          if(!is.null(pen)) paste0(', kernel_regularizer = ', pen) else NULL,
+          ', activation = "', activation, '") %>%'),
+        'layer_dense(units = 1)')
     }
+
+    opts <- paste(opts, collapse = " ")
+    eval(parse(text = opts))
+  }
+
+  final_output <- keras::layer_concatenate(outputs)
+
+  model <- keras::keras_model(inputs, final_output)
+
+  model <- keras::compile(model,
+    loss = nll, 
+    optimizer = optimizer
+  )
+
+  names(X) <- NULL
+  if(length(X) > 1) {
+    Y <- matrix(y, ncol = 1)
+    for(j in 1:(length(nx) - 1))
+      Y <- cbind(Y, 1)
   } else {
-    keras_model <- rep(list(keras_model), length.out = length(nx))
-    names(keras_model) <- nx
+    Y <- matrix(y, ncol = 1)
   }
+  if(length(X) < 2)
+    X <- X[[1L]]
 
-  ia <- interactive()
-  I <- rep(1, nobs)
-  iter <- 0
-  eps0 <- eps + 1
-  ll <- family$loglik(y, family$map2par(eta))
   ptm <- proc.time()
-  while((eps0 > eps) & (iter < maxit)) {
-    eta0 <- eta
-    for(j in nx) {
-      peta <- family$map2par(eta)
 
-      ## Compute weights.
-      hess <- process.derivs(family$hess[[j]](y, peta, id = j), is.weight = TRUE)
-
-      if(!is.null(weights)) {
-        if(!is.null(weights[[j]]))
-          hess <- hess * weights[[j]]
-      }
-            
-      ## Score.
-      score <- process.derivs(family$score[[j]](y, peta, id = j), is.weight = FALSE)
-
-      ## Working response.
-      z <- eta[[j]] + 1 / hess * score
-
-      ## Fit with keras.
-      if(ncol(X[[j]]) > 0) {
-        keras_model[[j]]$stop_training <- keras::fit(keras_model[[j]], X[[j]],
-          matrix(if(!is.null(offset[[j]])) z - eta[[j]] else z, ncol = 1),
-          epochs = epochs, batch_size = batch_size, verbose = 0, sample_weight = array(1/hess))
-        fit <- as.numeric(predict(keras_model[[j]], X[[j]]))
-        eta2 <- eta
-        eta2[[j]] <- eta2[[j]] - fits[[j]] + fit
-        ll2 <- family$loglik(y, family$map2par(eta2))
-        if(ll2 > ll) {
-          fits[[j]] <- fit
-          eta[[j]] <- eta2[[j]]
-        }
-      } else {
-        itcpt[[j]] <- as.numeric((1 / (t(I / hess) %*% I)) %*% t(I / hess) %*% (z - eta[[j]]))
-        eta[[j]] <- eta[[j]] - fits[[j]] + itcpt[[j]]
-        fits[[j]] <- itcpt[[j]]
-      }
-    }
-    eps0 <- do.call("cbind", eta)
-    eps0 <- mean(abs((eps0 - do.call("cbind", eta0)) / eps0), na.rm = TRUE)
-    iter <- iter + 1
-    ll <- family$loglik(y, family$map2par(eta))
-    if(verbose) {
-      cat(if(ia) "\r" else if(iter > 1) "\n" else NULL)
-      vtxt <- paste(
-        "logLik ", fmt(ll, width = 8, digits = digits),
-        " eps ", fmt(eps0, width = 6, digits = digits + 2),
-        " iteration ", formatC(iter, width = nchar(maxit)), sep = "")
-      cat(vtxt)
-        
-      if(.Platform$OS.type != "unix" & ia) flush.console()
-    }
-
-    if(!force.stop)
-      eps0 <- eps + 1
-  }
+  history <- keras::fit(model,
+    x = X, 
+    y = Y, 
+    epochs = epochs, batch_size = batch_size,
+    verbose = as.integer(verbose)
+  )
 
   elapsed <- c(proc.time() - ptm)[3]
   
@@ -4628,11 +4602,12 @@ dl.bamlss <- function(object, offset = NULL, weights = NULL,
     cat("\n elapsed time: ", et, "\n", sep = "")
   }
 
-  object$deepnet <- list(
-    "fitted.values" = fits,
-    "model" = keras_model,
-    "intercepts" = itcpt
-  )
+  object$dnn <- model
+  object$fitted.values <- as.data.frame(predict(model, X))
+  colnames(object$fitted.values) <- nx
+  object$elapsed <- elapsed
+  object$history <- history
+
   class(object) <- "dl.bamlss"
 
   return(object)
@@ -4640,18 +4615,20 @@ dl.bamlss <- function(object, offset = NULL, weights = NULL,
 
 
 ## Extractor functions.
-fitted.dl.bamlss <- function(object, ...) { object$deepnet$fitted.values }
+fitted.dl.bamlss <- function(object, ...) { object$fitted.values }
 family.dl.bamlss <- function(object) { object$family }
-residuals.dl.bamlss <- residuals.bamlss
+residuals.dl.bamlss <- function(object, ...) { residuals.bamlss(object, ...) }
+plot.dl.bamlss <- function(x, ...) { plot(x$history, ...) }
 
 
 ## Predict function.
-predict.dl.bamlss <- function(object, newdata, model = NULL, drop = TRUE, ...)
+predict.dl.bamlss <- function(object, newdata, model = NULL,
+  type = c("link", "parameter"), drop = TRUE, ...)
 {
   ## If data have been scaled (scale.d = TRUE)
-  if (!missing(newdata) & ! is.null(attr(object$model.frame,'scale')) ) {
+  if(!missing(newdata) & ! is.null(attr(object$model.frame, 'scale')) ) {
     sc <- attr(object$model.frame, 'scale')
-    for ( name in unique(unlist(lapply(sc,names))) ) {
+    for( name in unique(unlist(lapply(sc,names))) ) {
       newdata[,name] <- (newdata[,name] - sc$center[name] ) / sc$scale[name]
     }
   }
@@ -4669,23 +4646,43 @@ predict.dl.bamlss <- function(object, newdata, model = NULL, drop = TRUE, ...)
       newdata <- as.data.frame(newdata)
   }
 
+  type <- match.arg(type)
+
   nx <- names(object$formula)
+  X <- list()
+  for(i in seq_along(nx)) {
+    tfi <- drop.terms.bamlss(object$x[[i]]$terms,
+      sterms = FALSE, keep.response = FALSE, data = newdata, specials = NULL)
+    X[[i]] <- model.matrix(tfi, data = newdata)
+    if(!is.null(object$x[[i]]$smooth.construct)) {
+      for(j in seq_along(object$x[[i]]$smooth.construct)) {
+        X[[i]] <- cbind(X[[i]], PredictMat(object$x[[i]]$smooth.construct[[j]], newdata))
+      }
+    }
+  }
+
+  if(length(X) < 2)
+    X <- X[[1L]]
+
+  pred <- as.data.frame(predict(object$dnn, X))
+  colnames(pred) <- nx
+
   if(!is.null(model)) {
     if(is.character(model))
       nx <- nx[grep(model, nx)[1]]
     else
       nx <- nx[as.integer(model)]
   }
-  pred <- list()
-  for(i in nx) {
-    ff <- formula(as.Formula(object$formula[[i]]$fake.formula), lhs = FALSE)
-    X <- model.matrix(ff, data = newdata)
-    if(length(j <- grep("(Intercept)", colnames(X), fixed = TRUE)))
-      X <- X[, -j, drop = FALSE]
-    if(ncol(X) > 0) {
-      pred[[i]] <- predict(object$deepnet$model[[i]], X)
-    } else {
-      pred[[i]] <- object$deepnet$intercepts[[i]]
+
+  pred <- pred[nx]
+
+  if(type == "parameter") {
+    links <- object$family$links[nx]
+    for(j in seq_along(links)) {
+      if(links[j] != "identity") {
+        linkinv <- make.link2(links[j])$linkinv
+        pred[[j]] <- linkinv(pred[[j]])
+      }
     }
   }
 
@@ -5564,7 +5561,7 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
 
   eps_loglik <- list(...)$eps_loglik
   if(is.null(eps_loglik))
-    eps_loglik <- 0.01
+    eps_loglik <- 0.001
 
   select <- list(...)$select
   if(is.null(select))
@@ -5625,7 +5622,7 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
     if(!is.list(batch_ids)) {
       if(length(batch_ids) == 2L) {
         yind <- 1:N
-        nb <- batch_ids[1]
+        nb <- floor(batch_ids[1])
         ni <- batch_ids[2]
         batch_ids <- vector(mode = "list", length = ni)
         for(i in 1:ni)
@@ -5731,6 +5728,9 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
             yn <- y[shuffle_id[take], , drop = FALSE]
           }
           if(i %in% names(family$initialize)) {
+            if(any(is.na(yn))) {
+              stop("NA values in response, please check!")
+            }
             yinit <- make.link2(family$links[i])$linkfun(family$initialize[[i]](yn))
             beta[[i]][["p"]]["(Intercept)"] <- mean(yinit, na.rm = TRUE)
           }
@@ -5807,18 +5807,15 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
             if(retedf) {
               return(edf)
             } else {
-              tedf <- if(ncX == 9) {
+              tedf <- if(ncX <= 40) {
                 4
               } else {
-                if(ncX < 9)
-                  max(c(ncX - 2, 4))
-                else
-                  min(c(20, floor(ncX * 0.5)))
+                10
               }
               return((tedf - edf)^2)
             }
           }
-          tau2[[i]][[j]] <- rep(0.01, length(x[[i]]$smooth.construct[[j]]$S))
+          tau2[[i]][[j]] <- rep(0.1, length(x[[i]]$smooth.construct[[j]]$S))
           opt <- try(tau2.optim(objfun1, start = tau2[[i]][[j]],
             scale = 10000, optim = TRUE), silent = TRUE)
           if(!inherits(opt, "try-error")) {
@@ -5846,6 +5843,8 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
           } else {
             start2 <- start[paste0(i, ".s.", j, ".b", 1:ncX)]
           }
+          if(any(is.na(start2)))
+            stop("dimensions do not match, check starting values!")
           beta[[i]][[paste0("s.", j)]] <- if(all(is.na(start2))) rep(0, ncX) else start2
           if(inherits(x[[i]]$smooth.construct[[j]], "nnet0.smooth")) {
             npar <- x[[i]]$smooth.construct[[j]]$state$parameters
@@ -5870,7 +5869,8 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
     }
   }
   tbeta <- if(select) beta else NA
-  tau2f <- 100
+  tau2f <- rep(1, length(nx))
+  names(tau2f) <- nx
 
   iter <- 1L
 
@@ -5990,11 +5990,12 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
 
           XWX <- crossprod(Xn * hess, Xn)
           I <- diag(1, ncol(XWX))
+          I[1, 1] <- 1e-10
 
-          ## if(!ionly[[i]]) {
-          ##  if(ncol(I) > 1)
-          ##    I[1, 1] <- 0
-          ## }
+          if(!ionly[[i]]) {
+            if(ncol(I) > 1)
+              I[1, 1] <- 0
+          }
 
           etas[[i]] <- etas[[i]] - drop(Xt %*% b0)
 
@@ -6021,27 +6022,25 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
             }
             return(ll)
           }
-          ## if(ionly[[i]]) {
-          ##   tau2fe <- 1e+350
-          ## } else {
-            tau2fe <- try(tau2.optim(objfun2, tau2f, optim = TRUE), silent = TRUE)
-          ## }
+          if(ionly[[i]]) {
+            tau2fe <- 1e+10
+          } else {
+            tau2fe <- try(tau2.optim(objfun2, tau2f[i], optim = TRUE), silent = TRUE)
+          }
+
           ll_contrib[[i]][["p"]] <- NA
+
           if(!inherits(tau2fe, "try-error")) {
             ll1 <- objfun2(tau2fe, retLL = TRUE, step = TRUE)
-            epsll <- (ll1 - ll0)/abs(ll0)
-
-
             epsll <- (ll1 - ll0)/abs(ll0)
             if(is.na(epsll)) {
               ll1 <- ll0 <- 1
               epsll <- -1
             }
             accept <- epsll >= -0.5
-
             if((((ll1 > ll0) & (epsll > eps_loglik)) | always) & accept) {
-              tau2f <- tau2fe
-              P <- matrix_inv(XWX + 1/tau2f * I)
+              tau2f[i] <- tau2fe
+              P <- matrix_inv(XWX + 1/tau2f[i] * I)
               if(select) {
                 tbeta[[i]][["p"]] <- b0 + nu * (drop(P %*% crossprod(Xn * hess, e)) - b0)
               } else {
@@ -6099,6 +6098,7 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
             } else {
               eta[[i]] <- eta[[i]] - drop(Xn %*% b0)
             }
+
             e <- z - eta[[i]]
 
             if(x[[i]]$smooth.construct[[j]]$xt$center) {
@@ -6164,7 +6164,7 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
             }
 
             if(!slice) {
-              tau2s <- try(tau2.optim(objfun3, tau2[[i]][[j]], maxit = 10), silent = TRUE)
+              tau2s <- try(tau2.optim(objfun3, tau2[[i]][[j]], optim = TRUE), silent = TRUE)
             } else {
               theta <- c(b0, "tau2" = tau2[[i]][[j]])
               ii <- grep("tau2", names(theta))
@@ -6206,7 +6206,6 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
 #              } else {
 #                accept <- TRUE
 #              }
-
               if((((ll1 > ll0) & (epsll > eps_loglik)) | always) & accept) {
                 tau2[[i]][[j]] <- tau2s
                 S <- 0
@@ -6238,6 +6237,8 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
                 ll_contrib[[i]][[paste0("s.", j)]] <- ll1 - ll0
                 medf[[i]][[paste0("s.", j, ".edf")]] <- c(medf[[i]][[paste0("s.", j, ".edf")]], tedf)
               }
+            } else {
+              warning(paste0("check distribution of term ", j, "!"))
             }
             if(!select & accept) {
               if(inherits(x[[i]]$smooth.construct[[j]], "nnet0.smooth")) {

@@ -59,6 +59,7 @@ More detailed overviews and examples are provided in the articles:
 * [Munich Rent Model](`r prefix`rent.html)
 * [Spatial Location-Scale Model](`r prefix`zn.html)
 * [Fatalities Model for Austria](`r prefix`fatalities.html)
+* [Multivariate Normal Model](`r prefix`mvnorm.html)
 
 
 ## Installation

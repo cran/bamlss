@@ -701,6 +701,20 @@ gaussian_bamlss <- function(...)
       "model" = BUGSmodel,
       "reparam" = c(sigma = "1 / sqrt(sigma)")
     ),
+    "keras" = list(
+      "nloglik" = function(y_true, y_pred) {
+        K = keras::backend()
+
+        mu = y_pred[, 1]
+        sigma = K$exp(y_pred[,2])
+        sigma2 = K$pow(sigma, 2)
+
+        ll = -0.5 * K$log(6.28318530717959 * sigma2) - 0.5 * K$pow((y_true[,1] - mu), 2) / sigma2
+        ll = K$sum(ll)
+
+        return(-1 * ll)
+      }
+    ),
     "score" = list(
       "mu" = function(y, par, ...) { drop((y - par$mu) / (par$sigma^2)) },
       "sigma" = function(y, par, ...) { drop(-1 + (y - par$mu)^2 / (par$sigma^2)) }
@@ -2119,7 +2133,21 @@ t_bamlss <- function(...)
     "p" = function(y, par, ...) {
       arg <- (y - par$mu) / sqrt(par$sigma2)
       pt(arg, df = par$df, ...)
-    }
+    },
+    "score" = list(
+      "mu" = function(y, par, ...) {
+        ((par$df + 1) * (y - par$mu)) / (par$sigma2 * par$df + (y - par$mu)^2)
+      },
+      "sigma2" = function(y, par, ...) {
+        -0.5 + ((par$df + 1) * (y - par$mu)^2) / (2 * (par$sigma2 * par$df + (y - par$mu)^2))
+      },
+      "df" = function(y, par, ...) {
+        a <- par$df/2 * (digamma((par$df + 1) / 2) - digamma(par$df / 2) -
+          log(1 + (y - par$mu)^2/(par$sigma2 * par$df)))
+        b <- -0.5 + ((par$df + 1) * (y - par$mu)^2) / (2 * (par$sigma2 * par$df + (y - par$mu)^2))
+        a + b
+      }
+    )
   )
 
   class(rval) <- "family.bamlss"
@@ -2441,6 +2469,16 @@ gamma_bamlss <- function(...)
       "eta" = BUGSeta,
       "model" = BUGSmodel
     ),
+    "keras" = list(
+      "nloglik" = function(y_true, y_pred) {
+        K = keras::backend()
+
+        mu = K$exp(y_pred[, 1])
+        sigma = K$exp(y_pred[,2])
+
+        stop("not working yet!")
+      }
+    ),
     "score" = list(
       "mu" = function(y, par, ...) {
         sigma <- par$sigma
@@ -2629,6 +2667,78 @@ lognormal2_bamlss <- function(...)
     },
     "r" = function(n, par) {
       rlnorm(n, meanlog = par$mu, sdlog = sqrt(par$sigma2))
+    }
+  )
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+
+gumbel_bamlss <- function(...)
+{
+ links <- c(mu = "identity", sigma = "log")
+
+  rval <- list(
+    "family" = "gumbel",
+    "names" = c("mu", "sigma"),
+    "links" = parse.links(links, c(mu = "identity", sigma = "log"), ...),
+    "keras" = list(
+      "nloglik" = function(y_true, y_pred) {
+        K = keras::backend()
+
+        mu = y_pred[, 1]
+        sigma = K$exp(y_pred[,2])
+
+        ll = -1 * y_pred[, 2] + ((y_true[,1] - mu)/sigma) - K$exp((y_true[,1] - mu)/sigma)
+        ll = K$sum(ll)
+
+        return(-1 * ll)
+      }
+    ),
+    "score" = list(
+      "mu" = function(y, par, ...) {
+        s1 <- 1/par$sigma
+        return(-1 * (s1 - exp((y - par$mu)/par$sigma) * s1))
+      },
+      "sigma" = function(y, par, ...) {
+        ymus <- (y - par$mu)/par$sigma
+        return(-1 * (ymus + 1 - exp(ymus) * ymus))
+      }
+    ),
+    "hess" = list(
+      "mu" = function(y, par, ...) { 
+        return(exp((y - par$mu)/par$sigma) * 1/par$sigma^2)
+      },
+      "sigma" = function(y, par, ...) {
+        ymus <- (y - par$mu)/par$sigma
+        h <- ymus - (exp(ymus) * ymus + exp(ymus) * ymus^2)
+        return(-1 * h)
+      }
+    ),
+    "d" = function(y, par, log = FALSE) {
+      d <- -log(par$sigma) + ((y - par$mu)/par$sigma) - exp((y - par$mu)/par$sigma)
+      if(!log)
+        d <- exp(d)
+      return(d)
+    },
+    "p" = function(y, par, ...) {
+      1 - exp(-exp((y - par$mu)/par$sigma))
+    },
+    "r" = function(n, par) {
+      rnorm(n, mean = par$mu, sd = par$sigma)
+    },
+    "q" = function(p, par) {
+      q <- par$mu + par$sigma * log(-log(1 - p))
+    },
+    "initialize" = list(
+      "mu"    = function(y, ...) { (y + mean(y)) / 2 },
+      "sigma" = function(y, ...) { rep((sqrt(6) * sd(y))/pi, length(y)) }
+    ),
+    "valid.response" = function(x) {
+      if(is.factor(x) | is.character(x))
+        stop("the response should be numeric!")
+      return(TRUE)
     }
   )
 
@@ -3060,12 +3170,12 @@ mvnorm_bamlss <- function(k = 2, ...)
 
 
 log_dmvnorm <- function(y, par) {
+  npar <- names(par)
   par <- do.call("cbind", par)
   y <- as.matrix(y)
-  cn <- colnames(par)
-  sj <- grep("sigma", cn)
-  mj <- grep("mu", cn)
-  rj <- as.integer(min(grep("rho", cn)))
+  sj <- grep("sigma", npar)
+  mj <- grep("mu", npar)
+  rj <- as.integer(min(grep("rho", npar)))
   return(.Call("log_dmvnorm", y, par, nrow(y), ncol(y), mj, sj, rj, PACKAGE = "bamlss"))
 }
 
@@ -5347,6 +5457,40 @@ nbinom_bamlss <- function(...) {
     )
   )
 
+#  dnbinom2 <- function(x, mu, size, log = FALSE) {
+#    prob <- size / (size + mu)
+
+#    d <- lgamma(x + size) - lgamma(size) - lfactorial(x) +
+#      size * log(prob) + x * log(1-prob)
+#    if(!log)
+#      d <- exp(d)
+
+#    d
+#  }
+
+#  dnbinom(1:10, mu = 3, size=2)
+#  dnbinom2(1:10, mu = 3, size=2)
+
+
+  rval$keras <- list(
+    "nloglik" = function(y_true, y_pred) {
+      K = keras::backend()
+      tf = tensorflow::tf
+
+      mu = K$exp(y_pred[, 1])
+      size = K$exp(y_pred[, 2])
+      x = y_true[, 1]
+
+      prob = size / (size + mu)
+
+      ll = tf$math$lgamma(x + size) - tf$math$lgamma(size) -
+        tf$math$lgamma(x + 1) + size * K$log(prob) + x * K$log(1 - prob)
+      ll = K$sum(ll)
+
+      return(-1 * ll)
+    }
+  )
+
   class(rval) <- "family.bamlss"
   rval
 }
@@ -5796,13 +5940,14 @@ discretize <- function(family)
 
 
 ## https://www.jstor.org/stable/2288808?seq=1#metadata_info_tab_contents
-dSichel <- function(x, alpha = 1, zeta = 1, gamma = 1, log = FALSE, ...)
+## From gamlss.dist.
+dSichel <- function(x, mu = 1, sigma = 1, nu = 1, log = FALSE, ...)
 {
-  w <- sqrt(zeta^2 + alpha^2) - zeta
+  alpha <- sqrt(1/sigma^2 + 2 * mu/sigma)
 
-  d <- gamma * log(w) - gamma * log(alpha) - log(besselK(w, gamma, expon.scaled = TRUE)) +
-    x * log(zeta * w) - x * log(alpha) -
-    lfactorial(x) + log(besselK(alpha, x + gamma, expon.scaled = TRUE))
+  a <- x * log(mu) + log(besselK(alpha, x + nu))
+  b <- lfactorial(x) + (x + nu) * (log(alpha) + log(sigma)) + log(besselK(1/sigma, nu))
+  d <- a - b
 
   if(!log)
     d <- exp(d)
@@ -5813,6 +5958,7 @@ dSichel <- function(x, alpha = 1, zeta = 1, gamma = 1, log = FALSE, ...)
 if(FALSE) {
   x <- 0:100
   d <- dSichel(x)
+  d2 <- dSICHEL(x, mu = 1, sigma = 1, nu = 1)
   plot(d ~ x, type = "h")
   print(sum(d))
 }
@@ -5821,20 +5967,15 @@ Sichel_bamlss <- function(...)
 {
   rval <- list(
     "family" = "Sichel",
-    "names" = c("alpha", "zeta", "gamma"),
-    "links" = c(alpha = "log", zeta = "log", gamma = "log"),
+    "names" = c("mu", "sigma", "nu"),
+    "links" = c(mu = "log", sigma = "log", nu = "identity"),
     "valid.response" = function(x) {
       if(is.factor(x)) return(FALSE)
-      if(ok <- !all(x > 0)) stop("response values smaller than 0 not allowed!", call. = FALSE)
+      if(ok <- !all(x >= 0)) stop("response values smaller than 0 not allowed!", call. = FALSE)
       ok
     },
     "d" = function(y, par, log = FALSE) {
-      dSichel(y, alpha = par$alpha, zeta = par$zeta, gamma = par$gamma, log = log)
-    },
-    "mean" = function(par, ...) {
-      w <- sqrt(par$zeta^2 + par$alpha^2) - par$zeta
-      R <- besselK(w, par$gamma + 1, expon.scaled = TRUE) / besselK(w, par$gamma, expon.scaled = TRUE)
-      par$zeta * R
+      dSichel(y, mu = par$mu, sigma = par$sigma, nu = par$nu, log = log)
     }
   )
 
@@ -5843,11 +5984,32 @@ Sichel_bamlss <- function(...)
     n <- length(y)
     p <- rep(0, n)
     for(i in 1:n) {
-      dy <- dSichel(0:y[i], alpha = par$alpha[i], zeta = par$zeta[i], gamma = par$gamma[i])
+      dy <- dSichel(0:y[i], mu = par$mu[i], sigma = par$sigma[i], nu = par$nu[i])
       p[i] <- sum(dy)
     }
     return(p)
   }
+
+  rval$rps <- function(y, par, ymin = 1L, ymax = max(max(y), 100L)) {
+    K <- seq(ymin, ymax, by = 1L)
+    rps <- rep(0, length(y))
+    for (k in K) {
+      P <- rval$p(k, par)
+      O <- y <= k
+      rps <- rps + (P - O)^2
+    }
+    return(rps)
+  }
+
+  rval$mean <- function(par, ...) {
+    s1 <- 1/par$sigma
+    k1 <- besselK(s1, par$nu + 1)
+    k2 <- besselK(s1, par$nu)
+    a <- k1/k2
+    return(par$mu * a)
+  }
+
+  rval$type <- "discrete"
 
   class(rval) <- "family.bamlss"
   rval
@@ -6084,5 +6246,76 @@ gamlss_distributions <- function(type = c("continuous", "discrete"))
   unlink(tf2)
   options("warn" = warn)
   return(d)
+}
+
+mix_bamlss <- function(f1, f2, ...)
+{
+  if(is.function(f1))
+    f1 <- f1()
+  if(is.function(f2))
+    f2 <- f2()
+  if(!inherits(f1, "gamlss.family"))
+    stop("all families need to be of class 'gamlss.family'!")
+  if(!inherits(f2, "gamlss.family"))
+    stop("all families need to be of class 'gamlss.family'!")
+
+  npar <- f1$nopar + f2$nopar + 1
+  pn0 <- c("mu", "sigma", "nu", "tau")
+  links <- c(f1[paste0(pn0[1:f1$nopar], ".link")],
+    f2[paste0(pn0[1:f2$nopar], ".link")])
+  links <- unlist(links)
+  links <- c("logit", links)
+  names(links) <- c("alpha", paste0("beta", 1:(npar - 1)))
+
+  fn1 <- f1$family[1]
+  fn2 <- f2$family[1]
+
+  fn1 <- paste0("d", fn1, "(y")
+  fn2 <- paste0("d", fn2, "(y")
+
+  k <- 1
+  for(j in 1:f1$nopar) {
+    fn1 <- paste0(fn1, ",", pn0[j], "=par$beta", k)
+    k <- k + 1
+  }
+  for(j in 1:f2$nopar) {
+    fn2 <- paste0(fn2, ",", pn0[j], "=par$beta", k)
+    k <- k + 1
+  }
+  fn1 <- paste0(fn1, ")")
+  fn2 <- paste0(fn2, ")")
+
+  dfun <- paste0("dy <- par$alpha*", fn1, "+(1-par$alpha)*", fn2)
+  dfun <- c("function(y,par,log=FALSE,...) {", dfun, "if(log)\n  dy <- log(dy)", "return(dy)", "}")
+  dfun <- paste0(dfun, collapse ="\n")
+  dfun <- eval(parse(text = dfun)) 
+
+  rval <- list(
+    "family" = paste("mix", f1$family[1], f2$family[1]),
+    "names" = names(links),
+    "links" = links,
+    "valid.response" = function(x) {
+      if(is.factor(x)) return(FALSE)
+      if(ok <- !all(x >= 0)) stop("response values smaller than 0 not allowed!", call. = FALSE)
+      ok
+    },
+    "d" = dfun,
+    "p" = function(y, par, log = FALSE, ...) {
+      par <- as.data.frame(par)
+      n <- length(y)
+      p <- rep(0, n)
+      for(i in 1:n) {
+        p[i] <- sum(dfun(0:y[i], par[i, ]), na.rm = TRUE)
+      }
+      p[p > 1] <- 1
+      return(p)
+    }
+  )
+  rval$type <- unique(tolower(c(f1$type, f2$type)))
+  if(length(rval$type) > 1)
+    stop("types of mixing distributions must be identical!")
+
+  class(rval) <- "family.bamlss"
+  rval
 }
 

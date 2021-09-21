@@ -41,7 +41,7 @@ importFrom("stats", "acf", "as.formula", "coef", "complete.cases",
   "qgamma", "qlnorm", "qweibull", "prcomp", "deviance", "cor",
   "lm.fit", "nls.control", "qbeta", "qbinom", "qpois", "na.pass", "relevel",
   ".getXlevels", "binomial", "glm", "glm.fit", "lm", "naresid", "residuals",
-  "weights")
+  "weights", "kmeans")
 importFrom("utils", "download.file", "flush.console", "getS3method",
   "head", "read.csv2", "read.table", "tail", "unzip",
   "write.table", "combn", "capture.output")
@@ -123,9 +123,11 @@ export(
   "ztnbinom_bamlss",
   "lognormal_bamlss",
   "weibull_bamlss",
+  "gumbel_bamlss",
   "gF",
   "Sichel_bamlss",
   "GEV_bamlss",
+  "mix_bamlss",
 
   ## extractor functions
   "DIC",

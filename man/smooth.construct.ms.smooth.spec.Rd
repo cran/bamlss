@@ -4,7 +4,7 @@
 \title{Smooth constructor for monotonic P-splines}
 
 \description{The function sets up a smooth term for shape constraint estimation of
-  P-spline model terms. Note that this currently only works using boosting.}
+  P-spline model terms. Note that this currently only works using boosting and backfitting.}
 
 \usage{
 \method{smooth.construct}{ms.smooth.spec}(object, data, knots, ...)
@@ -30,14 +30,21 @@ See function see \code{\link[mgcv]{smooth.construct}}.
 
 \examples{
 \dontrun{## Generate some data.
-d <- GAMart()
+set.seed(123)
+
+n <- 300
+x <- runif(n, -2, 3)
+y <- sin(x) + rnorm(n, sd = 0.1)
 
 ## Increasing: constr = 1.
 ## Decreasing: constr = 2.
-b <- bamlss(num ~ s2(x1,bs="ms",xt=list(constr=2)),
-  data = d, sampler = FALSE, optimizer = opt_boost)
+b <- bamlss(y ~ s2(x,bs="ms",xt=list(constr=1)),
+  data = d, sampler = FALSE, optimizer = opt_bfit)
 
-plot(b)
+## Predict and plot.
+p <- predict(b, model = "mu")
+plot(y ~ x)
+plot2d(p ~ x, add = TRUE, col.lines = 4, lwd = 2)
 }}
 
 \keyword{models}

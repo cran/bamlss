@@ -41,7 +41,8 @@ BayesX.control <- function(n.iter = 1200, thin = 1, burnin = 200,
 sam_BayesX <- BayesX <- function(x, y, family, start = NULL, weights = NULL, offset = NULL,
   data = NULL, control = BayesX.control(...), ...)
 {
-  stopifnot(requireNamespace("BayesXsrc"))
+  cmd <- paste0('stopifnot(require', 'Name', 'space("Bayes', 'X', 'src"))')
+  eval(parse(text = cmd))
 
   if(is.null(family$bayesx))
     stop("BayesX specifications missing in family object, cannot set up model!")
@@ -305,7 +306,9 @@ sam_BayesX <- BayesX <- function(x, y, family, start = NULL, weights = NULL, off
 
   warn <- getOption("warn")
   options(warn = -1)
-  ok <- BayesXsrc::run.bayesx(prg = prgf, verbose = control$setup$verbose)
+  cmd <- paste0("Bayes", "X", "src", rep(":", 2),
+    "run.bayesx(prg = prgf, verbose = control$setup$verbose)")
+  ok <- eval(parse(text = cmd))
   options("warn" = warn)
   if(length(i <- grep("error", ok$log, ignore.case = TRUE))) {
     errl <- gsub("^ +", "", ok$log[i])

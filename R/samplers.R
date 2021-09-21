@@ -508,7 +508,10 @@ barfun <- function(ptm, n.iter, i, step, nstep, start = TRUE)
     cat("|", rep(" ", nstep), "|   0% ", rt, sep = "")
     if(.Platform$OS.type != "unix" & ia) flush.console()
   }
-  if(i %% step == 0) {
+  istep <- i %% step
+  if(is.na(istep))
+    istep <- 0
+  if(istep == 0) {
     cat(if(ia) "\r" else "\n")
     p <- i / n.iter
     p <- paste("|", paste(rep("*", round(nstep * p)), collapse = ""),
