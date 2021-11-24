@@ -1,7 +1,7 @@
-120c564171da4a4855960f701675bc48 *DESCRIPTION
+794ca94afc69e85ec142c87c5c279717 *DESCRIPTION
 a554743312ef55489a9dc75f0d762b2d *NAMESPACE
 fc6c278b50d0fbd02a598be289f4f3bc *NEWS.md
-fdb21f807f5e50d9d689d102218e027e *R/BAMLSS.R
+6c0acadfd5af5c55fcf98306dd110cb0 *R/BAMLSS.R
 c7bfda610131698f1330eab28200bcb1 *R/BayesX.R
 8c1a1dc68bd02d2a85b594b212150d41 *R/GAMart.R
 ff11db642d4b181e6313524292230248 *R/JAGS.R
@@ -18,7 +18,7 @@ eb69fc0b92ad7ed1700855def50cade9 *R/imports.R
 ed5dcca08f88446b55e6e0b639890968 *R/stabsel.R
 ed2b350b03796ac07da1f9d4b70a6afa *R/survival.R
 95838611a241a930463c2181bdfacac9 *R/vis.R
-2a23572cc4e9007e0aba7544a2ee55b6 *build/partial.rdb
+029aa04b7b127fa66580d0aba561268d *build/partial.rdb
 88a2671258c6c3caa4b77701c1d350cf *build/vignette.rds
 a5636ca77b7a7dc76eefb0c55cb50022 *data/Austria.rda
 49b5ac66d8f4f2041b7b85dd57a024e5 *data/GEFCom2014.rda
@@ -26,10 +26,10 @@ a5636ca77b7a7dc76eefb0c55cb50022 *data/Austria.rda
 d36062bfa7e7a99bab14aa9e5befc742 *data/LondonFire.rda
 ac2388a933b5f8e1934ffd95afadf1aa *data/datalist
 f8dbdba0e005f6fb0f67c99eaf4bf1ca *data/fatalities.rda
-a58d8fbe7a0cbb4bcbe8361a5ab1604a *inst/CITATION
+ed2460efb7efb1ebc46ed149951abe5a *inst/CITATION
 46c27239bd44dd1ecfc655d0011b700a *inst/doc/bamlss.R
-52db09824bf42260988cc1c60b3e5ef6 *inst/doc/bamlss.Rmd
-1c1abea2832848249faaf8c9a948ff96 *inst/doc/bamlss.html
+206012144585999d9c10df1676446eba *inst/doc/bamlss.Rmd
+01933a448ce87d47040bcf04a79722a7 *inst/doc/bamlss.html
 bfdbd6a1b8a11881812883676b5547af *man/AR1_transform.Rd
 33b048a544af5b8acff76fa735372be6 *man/Austria.Rd
 9352fdd15c90ab18f25c933f6e72d737 *man/BayesX.Rd
@@ -46,8 +46,8 @@ bcc558969fd4d07b8ef2aeab2d6a6596 *man/MVNORM.Rd
 b879a35c20dc898a1f6e0324f9b2c0fa *man/Surv2.Rd
 97a818eecfb07654b4f952b6403828b2 *man/Volcano.Rd
 49935299f2c3f695c4458f33c6b9cfe6 *man/WAIC.Rd
-1636251fa594e2de2df274742e43c6cb *man/bamlss-package.Rd
-d2784e568cd56a74c0fffa91bf6931fe *man/bamlss.Rd
+dffb2853f9201afa562217f647c44cf0 *man/bamlss-package.Rd
+3eaead09bb89557f1f4c7558b7b9739c *man/bamlss.Rd
 47161700a0f2e579938ac802b0e114e4 *man/bamlss.engine.helpers.Rd
 813aed1a8bb9d236931f50a4ab2b9403 *man/bamlss.engine.setup.Rd
 02c77ce8e79ea0daad22988030b52b11 *man/bamlss.formula.Rd
@@ -70,7 +70,7 @@ f0902a338ac522cec9d8a61c7b1b71d6 *man/family.bamlss.Rd
 d9f6639b83f5a4c19d9743bce39044de *man/fitted.bamlss.Rd
 835da23c83024cf1ae8880cc08fd70fe *man/gF.Rd
 7cc087edc37ac88f0a1204bca031e6bf *man/gamlss_distributions.Rd
-8f160c146aeda93b4c8ba6b0e5d6a6be *man/homstart_data.Rd
+6ef417b6a6282962738c71d6412531a0 *man/homstart_data.Rd
 08eb09ecb11ae6f9711439404261ec80 *man/isgd.Rd
 f99ea40f658f3c85721a3637e6356fb3 *man/jm_bamlss.Rd
 cb6727c32a540c6087170392f19bdb1f *man/kr.Rd
@@ -111,10 +111,10 @@ ea4ebe3175ab14ba5c8adcd94b4558ed *man/sr.Rd
 d4534f0c58533c27888a1d7e53bae825 *man/surv.transform.Rd
 394b10cc530aca785ec8ec9b23d0cc9d *man/terms.bamlss.Rd
 3996e7c16bfb96fad295ee425815cb4d *src/Makevars
-72d0d42d93a7d4b8667908c5e90f8376 *src/bamlss_functions.c
-ae25f4800a488ba2eb35dae6c132fd11 *src/bamlss_init.c
-52db09824bf42260988cc1c60b3e5ef6 *vignettes/bamlss.Rmd
-04656dbf3414329240c8e070402e7f94 *vignettes/bamlss.bib
+a591b91d4b6a2b2f1d4c998609c68ee6 *src/bamlss_functions.c
+ad6541c199d8b06e49beece1b3ac102e *src/bamlss_init.c
+206012144585999d9c10df1676446eba *vignettes/bamlss.Rmd
+ba35c598970873ead7a8d2dbe8343eae *vignettes/bamlss.bib
 05d39e49c6852ddc6feaf20ea7da3792 *vignettes/glm_files/figure-html/unnamed-chunk-10-1.png
 91eb407ddedaae593220476c753c0d4a *vignettes/glm_files/figure-html/unnamed-chunk-13-1.png
 afd272a6b06900cc03ea24b36e448e03 *vignettes/glm_files/figure-html/unnamed-chunk-18-1.png

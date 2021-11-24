@@ -49,7 +49,7 @@ Nemec J, Gruber C, Chimani B, Auer I (2012).
 Nemec J, Chimani B, Gruber C, Auer I (2011).
   Ein neuer {D}atensatz homogenisierter {T}agesdaten.
   \emph{OEGM Bulletin}, \bold{1}, 19--20.
-  \url{http://www.meteorologie.at/docs/OEGM_bulletin_2011_1.pdf}
+  \url{https://www.meteorologie.at/docs/OEGM_bulletin_2011_1.pdf}
 
 Umlauf N, Mayr G, Messner J, Zeileis A (2012).
   Why does it always rain on me? A spatio-temporal analysis of precipitation in Austria.

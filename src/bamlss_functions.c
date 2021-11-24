@@ -10,6 +10,8 @@
 #include <Rdefines.h>
 #include <Rinternals.h>
 
+#define USE_FC_LEN_T
+
 #include <R_ext/Applic.h> /* for dgemm */
 #include <R_ext/Complex.h>
 #include <R_ext/RS.h>

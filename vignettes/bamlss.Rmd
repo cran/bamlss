@@ -7,7 +7,8 @@ output:
     toc_float: true
     theme: flatly
 bibliography: bamlss.bib
-nocite: '@bamlss:Umlauf+bamlss:2018'
+nocite: |
+  @bamlss:Umlauf+bamlss:2018, @bamlss:Umlauf+bamlss:2021  
 vignette: >
   %\VignetteIndexEntry{First Steps}
   %\VignetteEngine{knitr::rmarkdown}

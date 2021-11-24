@@ -95,14 +95,17 @@ bamlss.frame <- function(formula, data = NULL, family = "gaussian",
     }
   } else {
     overwrite <- list(...)$overwrite
+    ff_name <- list(...)$ff_name
+    if(is.null(ff_name))
+      ff_name <- "ff_data_bamlss"
     if(is.null(overwrite))
       overwrite <- TRUE
-    if(file.exists("ff_data_bamlss") & overwrite) {
-      unlink("ff_data_bamlss", recursive = TRUE, force = TRUE)
+    if(file.exists(ff_name) & overwrite) {
+      unlink(ff_name, recursive = TRUE, force = TRUE)
     }
-    if(!file.exists("ff_data_bamlss")) {
-      cat("  .. creating directory 'ff_data_bamlss' for storing matrices. Note, the directory is not deleted and matrices can be used for another model.\n")
-      dir.create("ff_data_bamlss")
+    if(!file.exists(ff_name)) {
+      cat(paste0("  .. creating directory '", ff_name, "' for storing matrices. Note, the directory is may not deleted and matrices can be used for another model. Use delete = TRUE in the bamlss call. Before starting a new model you can set overwrite = TRUE to overwrite existing data.\n"))
+      dir.create(ff_name)
     }
     rn <- response.name(formula, hierarchical = FALSE, keep.functions = FALSE)
     if(!any(rn %in% names(bf$model.frame))) {
@@ -111,6 +114,7 @@ bamlss.frame <- function(formula, data = NULL, family = "gaussian",
       rn <- rn[rn %in% names(bf$model.frame)]
     }
     bf$y <- bf$model.frame[rn]
+    bf$ff_name <- ff_name
   }
 
   bf$formula <- formula
@@ -266,6 +270,14 @@ design.construct <- function(formula, data = NULL, knots = NULL,
     stopifnot(requireNamespace("ff"))
     stopifnot(requireNamespace("ffbase"))
   }
+
+  ff_name <- list(...)$ff_name
+  if(is.null(ff_name))
+    ff_name <- "ff_data_bamlss"
+
+  nthres <- list(...)$nthres
+  if(is.null(nthres))
+    nthres <- 1
 
   if(!is.character(data) & no_ff) {
     if(!inherits(data, "data.frame"))
@@ -434,13 +446,15 @@ design.construct <- function(formula, data = NULL, knots = NULL,
                 smooth <- c(smooth, smt)
               } else {
                 smt <- smooth.construct_ff(tsm, data,
-                  knots, absorb.cons = if(is.null(absorb.cons)) acons else absorb.cons)
+                  knots, absorb.cons = if(is.null(absorb.cons)) acons else absorb.cons,
+                  ff_name = ff_name, nthres = nthres)
                 smooth <- c(smooth, list(smt))
               }
             } else {
               if(inherits(data, "ffdf")) {
                 smt <- smooth.construct_ff(tsm, data,
-                  knots, absorb.cons = if(is.null(absorb.cons)) acons else absorb.cons)
+                  knots, absorb.cons = if(is.null(absorb.cons)) acons else absorb.cons,
+                  ff_name = ff_name, nthres = nthres)
                 smt <- list(smt)
               } else {
                 smt <- smoothCon(tsm, data, knots,
@@ -483,7 +497,7 @@ design.construct <- function(formula, data = NULL, knots = NULL,
                 if(!inherits(data, "ffdf")) {
                   smt2 <- smooth.construct(tsm, data, knots)
                 } else {
-                  smt2 <- smooth.construct_ff(tsm, data, knots)
+                  smt2 <- smooth.construct_ff(tsm, data, knots, ff_name = ff_name, nthres = nthres)
                 }
               } else {
                 smt2 <- list()
@@ -491,7 +505,7 @@ design.construct <- function(formula, data = NULL, knots = NULL,
                   if(!inherits(data, "ffdf")) {
                     smt2[[jnr]] <- smooth.construct(tsm, data, knots)
                   } else {
-                    smt2[[jnr]] <- smooth.construct_ff(tsm, data, knots)
+                    smt2[[jnr]] <- smooth.construct_ff(tsm, data, knots, ff_name = ff_name, nthres = nthres)
                   }
                 }
                 class(smt2) <- c("no.mgcv", "smooth.list")
@@ -773,7 +787,7 @@ ff_ncol <- function(x, value)
 #  result
 #}
 
-smooth.construct_ff.default <- function(object, data, knots, ...)
+smooth.construct_ff.default <- function(object, data, knots, ff_name, nthres = NULL, ...)
 {
   object$xt$center <- TRUE
   object$xt$nocenter <- FALSE
@@ -789,46 +803,51 @@ smooth.construct_ff.default <- function(object, data, knots, ...)
   nd <- list()
   cat("  .. ff processing term", object$label, "\n")
   xfile <- rmf(object$label)
-  xfile <- file.path("ff_data_bamlss", xfile)
+  xfile <- file.path(ff_name, xfile)
   is_f <- sapply(data, is.factor)
-  if((length(terms) > 1) & !any(is_f)) {
-    ud <- nrow(unique(data[, terms]))
-    km <- kmeans(data[, terms], min(c(1000, floor(0.9 * ud))))
-    uc <- unique(km$cluster)
-    nd <- matrix(NA, length(uc), length(terms))
-    for(i in seq_along(uc)) {
-      nd[i, ] <- as.numeric(data[sample(which(km$cluster == uc[i]), size = 1), terms])
-    }
-    nd <- as.data.frame(nd)
-    names(nd) <- terms
+  if(is.null(nthres))
+    nthres <- 1
+  if(nrow(data) > nthres) {
+    if((length(terms) > 1) & !any(is_f) & FALSE) {
+      ud <- nrow(unique(data[, terms]))
+      km <- kmeans(data[, terms], min(c(1000, floor(0.9 * ud))))
+      uc <- unique(km$cluster)
+      nd <- matrix(NA, length(uc), length(terms))
+      for(i in seq_along(uc)) {
+        nd[i, ] <- as.numeric(data[sample(which(km$cluster == uc[i]), size = 1), terms])
+      }
+      nd <- as.data.frame(nd)
+      names(nd) <- terms
     ##nd <- data[sample(1:nrow(data), size = 1000L), ]
-  } else {
-    for(j in terms) {
-      if(!is.factor(data[[j]][1:2])) {
-        ux <- ffbase::unique.ff(data[[j]])
-        uxn <- length(ux)
-        if(uxn > 2) {
-          uxl <- if(uxn < 1000L) uxn - 1L else 1000L
-          xq <- ffbase::quantile.ff(data[[j]], probs = seq(0, 1, length = uxl), na.rm = TRUE)
-          names(xq) <- NULL
-          if(length(unique(xq)) < 100) {
+    } else {
+      for(j in terms) {
+        if(!is.factor(data[[j]][1:2])) {
+          ux <- ffbase::unique.ff(data[[j]])
+          uxn <- length(ux)
+          if(uxn > 2) {
+            uxl <- if(uxn < 1000L) uxn - 1L else 1000L
+            xq <- ffbase::quantile.ff(data[[j]], probs = seq(0, 1, length = uxl), na.rm = TRUE)
+            names(xq) <- NULL
+            if(length(unique(xq)) < 100) {
+              xq <- rep(ux[], length.out = 1000L)
+            }
+          } else {
             xq <- rep(ux[], length.out = 1000L)
           }
+          if(length(xq) == 1000L) {
+            nd[[j]] <- sample(xq)
+          } else {
+            nd[[j]] <- sample(rep(xq, length.out = 1000L))
+          }
         } else {
-          xq <- rep(ux[], length.out = 1000L)
+          nd[[j]] <- sample(rep(unique(data[[j]]), length.out = 1000L))
         }
-        if(length(xq) == 1000L) {
-          nd[[j]] <- sample(xq)
-        } else {
-          nd[[j]] <- sample(rep(xq, length.out = 1000L))
-        }
-      } else {
-        nd[[j]] <- sample(rep(unique(data[[j]]), length.out = 1000L))
       }
     }
+    nd <- as.data.frame(nd)
   }
-  nd <- as.data.frame(nd)
-  object <- smoothCon(object, data = nd, knots = knots, absorb.cons = FALSE)[[1L]]
+  object <- smoothCon(object, data = if(nrow(data) > nthres) nd else as.data.frame(data),
+    knots = knots, absorb.cons = TRUE)[[1L]]
   rm(nd)
   nobs <- nrow(data)
   if(file.exists(paste0(xfile, ".rds"))) {
@@ -6092,6 +6111,7 @@ nnet0_update <- function(x, family, y, eta, id, weights, criterion, ...)
     Xw <- drop(x$X %*% w[-1L])
     Z[, j] <- x$activ_fun(Xw)
     fit <- fit + Z[, j] * w[1L]
+    fit <- fit - mean(fit)
     eta[[id]] <- eta[[id]] + fit
     score <- family$score[[id]](y, family$map2par(eta))
     gr <- score * cbind(Z[, j], w[1L] * x$activ_grad(Xw) * x$X)
@@ -6124,6 +6144,7 @@ nnet0_update <- function(x, family, y, eta, id, weights, criterion, ...)
   objfun <- function(w, i, j, fit) {
     Z[, j] <- x$activ_fun(drop(x$X %*% w[-1L]))
     fit <- fit + Z[, j] * w[1L]
+    fit <- fit - mean(fit)
     eta[[id]] <- eta[[id]] + fit
     ll <- family$loglik(y, family$map2par(eta)) - t(w) %*% I %*% w
 
@@ -6139,6 +6160,7 @@ nnet0_update <- function(x, family, y, eta, id, weights, criterion, ...)
 #  par[1:x$nodes] <- drop(P %*% crossprod(Z * hess, e))
 
   fit <- drop(Z %*% par[1:x$nodes])
+  fit <- fit - mean(fit)
 
   eta2 <- eta
 
@@ -6150,7 +6172,7 @@ nnet0_update <- function(x, family, y, eta, id, weights, criterion, ...)
     fit <- fit - Z[, j] * par[j]
 
     opt <- try(optim(c(par[j], par[i]), fn = objfun, gr = gradfun,
-      method = "L-BFGS-B", i = i, j = j, fit = fit), silent = TRUE)
+      method = "BFGS", i = i, j = j, fit = fit), silent = TRUE)
 
 #    H <- matrix_inv(hessfun(c(par[j], par[i]), i = i, j = j, fit = fit))
 #    S <- gradfun(c(par[j], par[i]), i = i, j = j, fit = fit)
@@ -6187,6 +6209,7 @@ nnet0_update <- function(x, family, y, eta, id, weights, criterion, ...)
     }
 
     fit <- fit + Z[, j] * par[j]
+    fit <- fit - mean(fit)
   }
 
   if(!is.null(attr(x$X, "oc")))
@@ -6212,7 +6235,7 @@ nnet0_update <- function(x, family, y, eta, id, weights, criterion, ...)
 
   ic1 <- objfun2(tau2)
 
-  if(ic1 < ic0)
+  if(ic1 <= ic0)
     tau2 <- tau22
 
   P <- matrix_inv(ZWZ + 1/tau2 * x$S[[1]])
@@ -10401,7 +10424,6 @@ residuals.bamlss <- function(object, type = c("quantile", "response"), nsamps = 
           u <- ifelse(u > 0.999999, u - 1e-16, u)
           u <- ifelse(u < 1e-06, u + 1e-16, u)
           res <- qnorm(u)
-
 #	  a <- family$p(y - 1, par)
 #	  b <- family$p(y, par)
 #	  u <- runif(n = length(y), min = a, max = b)

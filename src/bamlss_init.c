@@ -2,6 +2,8 @@
 #include <Rinternals.h>
 #include <R_ext/Rdynload.h>
 
+#define USE_FC_LEN_T
+
 SEXP bamlss_glogis_score(SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP bamlss_glogis_hesse(SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP bamlss_glogis_density(SEXP, SEXP, SEXP, SEXP, SEXP);
