@@ -135,7 +135,7 @@ StabStep <- function(formula, data, family = "gaussian", q, maxit, seed = NULL,
         pID <- !grepl("^[a-z]*\\(", labels)
         pterms <- labels[pID]
         foo <- function(x) {
-            if(class(b$model.frame[[x]]) == "factor") {
+            if(inherits(b$model.frame[[x]], "factor")) {
                 rval <- rep(x, nlevels(b$model.frame[[x]]))
                 names(rval) <- paste0(x, levels(b$model.frame[[x]]))
             } else {

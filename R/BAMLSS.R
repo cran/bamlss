@@ -268,7 +268,6 @@ design.construct <- function(formula, data = NULL, knots = NULL,
   if(!no_ff) {
     stopifnot(requireNamespace("bit"))
     stopifnot(requireNamespace("ff"))
-    stopifnot(requireNamespace("ffbase"))
   }
 
   ff_name <- list(...)$ff_name
@@ -591,12 +590,15 @@ design.construct <- function(formula, data = NULL, knots = NULL,
         if(!is.null(obj$smooth.construct[[j]]$by)) {
           if(obj$smooth.construct[[j]]$by != "NA") {
             if(grepl(pat <- paste("):", obj$smooth.construct[[j]]$by, sep = ""), slj, fixed = TRUE)) {
-              slj <- gsub(pat, paste(",by=", obj$smooth.construct[[j]]$by, "):", sep = ""), slj, fixed = TRUE)
-              slj <- strsplit(slj, "", fixed = TRUE)[[1]]
-              if(slj[length(slj)] == ":")
-                slj <- slj[-length(slj)]
-              slj <- paste(slj, collapse = "")
-              obj$smooth.construct[[j]]$label <- slj
+              if(!grepl(paste0("by=", obj$smooth.construct[[j]]$by),
+                obj$smooth.construct[[j]]$label, fixed = TRUE)) {
+                slj <- gsub(pat, paste(",by=", obj$smooth.construct[[j]]$by, "):", sep = ""), slj, fixed = TRUE)
+                slj <- strsplit(slj, "", fixed = TRUE)[[1]]
+                if(slj[length(slj)] == ":")
+                  slj <- slj[-length(slj)]
+                slj <- paste(slj, collapse = "")
+                obj$smooth.construct[[j]]$label <- slj
+              }
             }
           }
         } else obj$smooth.construct[[j]]$by <- "NA"
@@ -787,18 +789,143 @@ ff_ncol <- function(x, value)
 #  result
 #}
 
+## From ffbase.
+emptyLogger <- function(...) invisible()
+
+Log <- new.env()
+Log$info <- if (interactive()) cat else emptyLogger
+
+Log$chunk <- function(i){
+  if (is.na(i[3])){
+    Log$info("\r< Processing chunk:",i," >")    
+  } else {
+    if (i[1]==1) Log$info("\n")
+    Log$info("\r< Processing :",round(100*(i[2])/i[3]), "% >" , sep="")
+    if (i[2] == i[3]){
+      Log$info("\r")
+    }
+  } 
+}
+
+unique_ff <- function(x, incomparables = FALSE, fromLast = FALSE, trace=FALSE, ...){
+  #browser()
+  if (!identical(incomparables, FALSE)){
+    .NotYetUsed("incomparables != FALSE")
+  }
+  if(ff::vmode(x) == "integer" & length(res <- levels(x))>0){    
+    ## Something strange is happening for factors with fforder, reported to ff maintainer, doing a workaround
+    if(any(is.na(x))){
+      res <- c(res, NA)
+    }
+    res <- ff::ff(res, levels = res)
+  }else{
+    ## Order the ff    
+    xorder <- ff::fforder(x, decreasing = fromLast, na.last = TRUE)
+    xchunk <- bit::chunk(x, ...)
+    ## Chunkwise adding of unique elements to the unique ff_vector called res
+    res <- NULL
+    lastel <- NULL
+    for (i in xchunk){
+      #if (trace){
+      #  message(sprintf("%s, working on x chunk %s:%s", Sys.time(), min(i), max(i)))
+      #}
+      Log$chunk(i)
+      iorder <- xorder[i]
+      iorder <- as.integer(iorder) # make sure it is not a Date
+      xi <- x[iorder]
+      xi <- unique(xi)
+      ## exclude the first row if it was already in the unique ffdf as this is the last one from the previous unique
+      if(sum(duplicated(c(xi[1], lastel)))>0){
+        xi <- xi[-1]  
+      }   
+      if(length(xi) > 0){   
+        ## Add the result to an ff_vector
+        lastel <- xi[length(xi)]
+        res <- ffappend(x=res, xi)
+      }
+    }
+  }  
+  res
+}
+
+appendLevels <- function(...) 
+{
+  unique(unlist(lapply(list(...), function(x) {
+      if (is.factor(x)) 
+          levels(x)
+      else x
+  })))
+}
+
+coerce_to_highest_vmode <- function(x, y, onlytest = TRUE) 
+{
+  test <- data.frame(x.vmode = ff::vmode(x), y.vmode = ff::vmode(y), 
+      stringsAsFactors = FALSE)
+    test$maxffmode <- apply(test[, , drop = FALSE], MARGIN = 1, 
+        FUN = function(x) names(ff::maxffmode(x)))
+    needtocoerce <- list(coerce = test$x.vmode != test$maxffmode, 
+        coerceto = test$maxffmode)
+    if (onlytest) {
+        return(needtocoerce)
+    }
+    if (sum(needtocoerce$coerce) > 0) {
+        if (inherits(x, "ffdf")) {
+            for (i in which(needtocoerce$coerce == TRUE)) {
+                column <- names(x)[i]
+                x[[column]] <- ff::clone.ff(x[[column]], vmode = needtocoerce$coerceto[i])
+            }
+            x <- x[names(x)]
+        }
+        else {
+            x <- ff::clone.ff(x, vmode = needtocoerce$coerceto)
+        }
+    }
+    x
+}
+
+ffappend <- function(x, y, adjustvmode=TRUE, ...){
+   if (is.null(x)){
+      if (ff::is.ff(y)){
+		    return(ff::clone.ff(y))
+	    } else {
+        return (if (length(y)) ff::as.ff(y))
+	    }
+   }
+   #TODO check if x and y are compatible
+   len <- length(x)
+   to <- length(y)
+   if (!to) return(x)
+   
+   length(x) <- len + to 
+   if (ff::is.factor(x)){
+      levels(x) <- appendLevels(levels(x), levels(y))  
+   }
+   ## Upgrade to a higher vmode if needed
+   if(adjustvmode==TRUE) {
+	   x <- coerce_to_highest_vmode(x=x, y=y, onlytest=FALSE)
+   }
+   for (i in bit::chunk(y)){
+     #Log$chunk(i)
+     if (is.atomic(y)){
+			 i <- bit::as.which(i)
+	   }
+	   x[(i+len)] <- y[i]
+   }
+   x
+}
+
 smooth.construct_ff.default <- function(object, data, knots, ff_name, nthres = NULL, ...)
 {
   object$xt$center <- TRUE
   object$xt$nocenter <- FALSE
   terms <- object$term
   if(object$by != "NA") {
-    object$label <- strsplit(object$label, "")[[1]]
-    object$label <- paste0(object$label[-length(object$label)], collapse = "")
-    object$label <- paste0(object$label, ",by=", object$by, ")")
-    object$xt$center <- FALSE
-    object$xt$nocenter <- TRUE
-    terms <- c(terms, object$by)
+    if(!grepl(paste0("by=", object$by), object$label, fixed = TRUE)) {
+      object$label <- strsplit(object$label, "")[[1]]
+      object$label <- paste0(object$label[-length(object$label)], collapse = "")
+      object$label <- paste0(object$label, ",by=", object$by, ")")
+    }
+    terms <- unique(c(terms, object$by))
   }
   nd <- list()
   cat("  .. ff processing term", object$label, "\n")
@@ -822,23 +949,29 @@ smooth.construct_ff.default <- function(object, data, knots, ff_name, nthres = N
     } else {
       for(j in terms) {
         if(!is.factor(data[[j]][1:2])) {
-          ux <- ffbase::unique.ff(data[[j]])
-          uxn <- length(ux)
-          if(uxn > 2) {
-            uxl <- if(uxn < 1000L) uxn - 1L else 1000L
-            xq <- ffbase::quantile.ff(data[[j]], probs = seq(0, 1, length = uxl), na.rm = TRUE)
-            names(xq) <- NULL
-            if(length(unique(xq)) < 100) {
-              xq <- rep(ux[], length.out = 1000L)
-            }
-          } else {
-            xq <- rep(ux[], length.out = 1000L)
-          }
-          if(length(xq) == 1000L) {
-            nd[[j]] <- sample(xq)
-          } else {
-            nd[[j]] <- sample(rep(xq, length.out = 1000L))
-          }
+#          ux <- ffbase::unique.ff(data[[j]])
+#          uxn <- length(ux)
+#          if(uxn > 2) {
+#            uxl <- if(uxn < 1000L) uxn - 1L else 1000L
+#            xq <- ffbase::quantile.ff(data[[j]], probs = seq(0, 1, length = uxl), na.rm = TRUE)
+#            names(xq) <- NULL
+#            if(length(unique(xq)) < 100) {
+#              xq <- sort(rep(ux[], length.out = 1000L))
+#            }
+#          } else {
+#            xq <- rep(ux[], length.out = 1000L)
+#          }
+#          if(length(xq) == 1000L) {
+#            nd[[j]] <- sample(xq)
+#          } else {
+#            nd[[j]] <- sample(rep(xq, length.out = 1000L))
+#          }
+          #xmin <- ffbase::min.ff(data[[j]])
+          #xmax <- ffbase::max.ff(data[[j]])
+
+          ux <- unique_ff(data[[j]])
+          ux_ind <- floor(seq(1, length(ux), length = 1000L))
+          nd[[j]] <- ux[ux_ind]
         } else {
           nd[[j]] <- sample(rep(unique(data[[j]]), length.out = 1000L))
         }
@@ -847,7 +980,7 @@ smooth.construct_ff.default <- function(object, data, knots, ff_name, nthres = N
     nd <- as.data.frame(nd)
   }
   object <- smoothCon(object, data = if(nrow(data) > nthres) nd else as.data.frame(data),
-    knots = knots, absorb.cons = TRUE)[[1L]]
+    knots = knots, absorb.cons = nrow(data) <= nthres)[[1L]]
   rm(nd)
   nobs <- nrow(data)
   if(file.exists(paste0(xfile, ".rds"))) {
@@ -922,7 +1055,7 @@ ffmatrixmult <- function(x,y=NULL,xt=FALSE,yt=FALSE,ram.output=FALSE, override.b
 	{i1<-NULL; i2<- NULL} #To avoid errors in R CMD check
 
   stopifnot(requireNamespace("ff"))
-  stopifnot(requireNamespace("ffbase"))
+  ##stopifnot(requireNamespace("ffbase"))
 
 	dimx<-dim(x)
 	if(!is.null(y)) dimy<-dim(y)
@@ -3576,7 +3709,7 @@ compute_s.effect <- function(x, get.X, fit.fun, psamples,
       nd <- as.data.frame(nd)
       if(nt == 2L) {
         pid <- chull(as.matrix(data[, tterms]))
-        pol <- data[c(pid, pid[1]), ]
+        pol <- data[c(pid, pid[1]), tterms]
         pip <- point.in.polygon(nd[, 1], nd[, 2], pol[, 1], pol[, 2])
         if(any(pip > 0)) {
           nd[pip < 1, ] <- NA
@@ -4195,6 +4328,12 @@ predict.bamlss <- function(object, newdata, model = NULL, term = NULL, match.nam
           sn2 <- gsub(paste(id, "p.", sep = "."), "", sn, fixed = TRUE)
           if(any(grepl("model.matrix.", sn2))) sn2 <- gsub("model.matrix.", "", sn2, fixed = TRUE)
           X <- X[, sn2, drop = FALSE]
+        }
+        if(ncol(X) < length(sn)) {
+          if(any(grepl("model.matrix", sn)))
+            sn <- paste(id, "p.model.matrix", colnames(X), sep = ".")
+          else
+            sn <- paste(id, "p", colnames(X), sep = ".")
         }
         eta <- eta + fitted_matrix(X, samps[, sn, drop = FALSE])
       } else {
@@ -11902,7 +12041,7 @@ CRPS <- function(object, newdata = NULL, interval = c(-Inf, Inf), FUN = mean, te
     stop("no p() function in family object!")
   if(is.null(newdata))
     newdata <- model.frame(object)
-  par <- as.data.frame(predict(object, newdata = newdata, type = "parameter", drop = FALSE))
+  par <- as.data.frame(predict(object, newdata = newdata, type = "parameter", drop = FALSE, ...))
   if(!is.null(fam$valid.response)) {
     vd <- rep(NA, 2)
     ty <- c(-0.0001, 0.0001)
@@ -11914,12 +12053,13 @@ CRPS <- function(object, newdata = NULL, interval = c(-Inf, Inf), FUN = mean, te
     if(!vd[2L])
       interval[2L] <- -1e-20
   }
+  interval <- sort(interval)
   crps <- if(is.null(fam$crps)) {
     .CRPS(newdata[[yname]], par, fam, interval)
   } else {
     fam$crps(newdata[[yname]], par)
   }
-  return(FUN(crps, ...))
+  return(FUN(crps))
 }
 
 .CRPS <- function(y, par, family, interval = c(-Inf, Inf)) {

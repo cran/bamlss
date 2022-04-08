@@ -113,7 +113,7 @@ write.table(d, file.path(tf, "d.raw"), quote = FALSE, row.names = FALSE, sep = "
 
 ## Model formula.
 f <- list(
-  num ~ s(x1,k=40) + s(x2,k=40) + s(x3,k=40) + te(lon,lat,k=10),
+  y ~ s(x1,k=40) + s(x2,k=40) + s(x3,k=40) + te(lon,lat,k=10),
   sigma ~ s(x1,k=40) + s(x2,k=40) + s(x3,k=40) + te(lon,lat,k=10)
 )
 

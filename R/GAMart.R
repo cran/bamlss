@@ -112,6 +112,9 @@ GAMart <- function(n = 500, sd = 0.1, seed = FALSE, ti = c("none", "vcm", "main"
 {
   if(seed) set.seed(111)
 
+  if(sd < 0)
+    return(dgp_NO(nobs = n))
+
   ti <- match.arg(ti)
 
   n2 <- ceiling(sqrt(n))
@@ -207,6 +210,65 @@ Crazy <- function(n = 1000) {
   d$eta[d$x <= -2] <- - 1.5
   d$eta[d$x >= -2 & d$x <= -1] <- 0
   d$y <- d$eta + rnorm(n, sd = 0.1)
+  return(d)
+}
+
+## Data generating process for NO.
+dgp_NO <- function(nobs = 1000, nnoise = 2, rho = 0) {
+  p <- 4 + nnoise
+  d <- matrix(runif(nobs * p, -2, 2), ncol = p)
+  
+  S <- rho^as.matrix(dist(1:p))
+  d <- matrix(d, ncol = p, nrow = nobs) %*% chol(S)
+  
+  d1 <- matrix(runif(nobs * 2, -2, 2), ncol = 2)
+  d <- cbind(d, d1)
+  rm(d1)
+  colnames(d) <- c(paste("x", 1:p, sep = ""), "lon", "lat")
+  d <- as.data.frame(d)
+  
+  cx <- function(x) {
+    x <- (x - mean(x)) / sd(x)
+    return(x)
+  }
+  
+  f1 <- function(x) {
+    f <- x
+    cx(f)
+  }
+  f2 <- function(x) {
+    f <- x + ((2*x - 2)^2) / 5.5
+    cx(f)
+  }
+  f3 <- function(x) {
+    f <- -x + pi * sin(pi * x)
+    cx(f)
+  }
+  f4 <- function(x) {
+    f <- 0.5 * x + 15 * dnorm(2 * (x - 0.2)) - dnorm(x + 0.4)
+    cx(f)
+  }
+  f2d <- function(lon, lat) {
+    f <- sin(lon) * cos(0.5 * lat)
+    cx(f)
+  }
+  
+  f1 <- f1(d$x1)          
+  f2 <- f2(d$x2)      
+  f3 <- f3(d$x3)          
+  f4 <- f4(d$x4)
+  f2d <- f2d(d$lon, d$lat)
+  
+  eta.mu <- f1 + f3 + f2d
+  eta.sigma <- f2 + f3 + f4
+  
+  scale <- 5 / max(eta.sigma)
+  shift <- -mean(eta.sigma) * scale + log(4)
+  
+  eta.sigma <- eta.sigma * scale + shift
+  
+  d$y <- eta.mu + rnorm(nobs, sd = sqrt(exp(eta.sigma)))
+  
   return(d)
 }
 

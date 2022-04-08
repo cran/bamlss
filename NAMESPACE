@@ -108,6 +108,7 @@ export(
   "cox_bamlss",
   "dirichlet_bamlss",
   "dw_bamlss",
+  "ELF_bamlss",
   "gaussian_bamlss",
   "gaussian2_bamlss",
   "Gaussian_bamlss",

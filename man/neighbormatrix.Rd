@@ -46,7 +46,7 @@ plotneighbors(x, add = FALSE, ...)
 }
 
 \examples{
-data("LondonFire")
+\dontrun{data("LondonFire")
 
 ## Compute polygon boundary based
 ## neighborhood matrix.
@@ -57,7 +57,7 @@ print(nm)
 plotneighbors(LondonBoroughs)
 plotneighbors(LondonBoroughs, type = "delaunay")
 plotneighbors(LondonBoroughs, type = "dist", d1 = 0, d2 = 0.15)
-}
+}}
 
 \keyword{models}
 \keyword{regression}

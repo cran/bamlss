@@ -234,7 +234,7 @@ plot2d.default <- function(x, residuals, range, col.residuals = "black",
     x <- rbind(x, x, x)
   }
   x <- x[order(x[,1L]), , drop = FALSE]
-  if(!is.null(fill.select)) {      
+  if(!is.null(fill.select)) {
     ufs <- unique(fill.select)
     ufs <- ufs[ufs != 0]
     nu <- length(ufs)
@@ -321,8 +321,11 @@ plot2d.default <- function(x, residuals, range, col.residuals = "black",
     do.call(graphics::points, pargs)
   }
   for(k in 2L:ncol(x)) {
+    coll <- specs$col.lines[k - 1L]
+    if(ncol(x) == 2L)
+      coll[is.na(coll)] <- 1
     lines(x[,k] ~ x[,1L], lty = specs$lty[k - 1L], lwd = specs$lwd[k - 1L], 
-      col = specs$col.lines[k - 1L])
+      col = coll)
   }
   if(rug) {
     specs$col <- col.rug

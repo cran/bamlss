@@ -1,3 +1,5 @@
+#define USE_FC_LEN_T
+
 #include <stdio.h>
 #include <math.h>
 #include <assert.h>
@@ -9,8 +11,7 @@
 #include <Rmath.h>
 #include <Rdefines.h>
 #include <Rinternals.h>
-
-#define USE_FC_LEN_T
+#include <Rconfig.h>
 
 #include <R_ext/Applic.h> /* for dgemm */
 #include <R_ext/Complex.h>
@@ -19,6 +20,9 @@
 #include <R_ext/Lapack.h>
 #include <R_ext/Linpack.h>
 
+#ifndef FCONE
+# define FCONE
+#endif
 
 /* (1) Helper functions. */
 SEXP getListElement(SEXP list, const char *str)
@@ -515,8 +519,8 @@ SEXP block_inverse(SEXP X, SEXP IND, SEXP DIAGONAL)
             }
           }
 
-          F77_CALL(dpotrf)("U", &ni, Xiptr, &ni, &info);
-          F77_CALL(dpotri)("U", &ni, Xiptr, &ni, &info);
+          F77_CALL(dpotrf)("U", &ni, Xiptr, &ni, &info FCONE);
+          F77_CALL(dpotri)("U", &ni, Xiptr, &ni, &info FCONE);
 
           for(j = 0; j < ni; j++) {
             for(jj = j; jj < ni; jj++) {
@@ -684,7 +688,7 @@ SEXP gmcmc_iwls(SEXP family, SEXP theta, SEXP id,
   char *transa = "N", *transb = "N";
   double one = 1.0, zero = 0.0;
   F77_CALL(dgemm)(transa, transb, &nc, &nc, &nr, &one,
-    XWptr, &nc, Xptr, &nr, &zero, XWXptr, &nc);
+    XWptr, &nc, Xptr, &nr, &zero, XWXptr, &nc FCONE FCONE);
 
   SEXP XWX0;
   PROTECT(XWX0 = duplicate(getListElement(x, "XWX")));
@@ -717,7 +721,7 @@ SEXP gmcmc_iwls(SEXP family, SEXP theta, SEXP id,
   }
 
   int info;
-  F77_CALL(dpotrf)("Upper", &nc, Lptr, &nc, &info);
+  F77_CALL(dpotrf)("Upper", &nc, Lptr, &nc, &info FCONE);
 
   /* Compute the inverse precision matrix. */
   SEXP PINV;
@@ -725,13 +729,13 @@ SEXP gmcmc_iwls(SEXP family, SEXP theta, SEXP id,
   double *PINVptr = REAL(PINV);
   ++nProtected;
 
-  F77_CALL(dpotri)("Upper", &nc, PINVptr, &nc, &info);
+  F77_CALL(dpotri)("Upper", &nc, PINVptr, &nc, &info FCONE);
 
   SEXP PINVL;
   PROTECT(PINVL = duplicate(PINV));
   double *PINVLptr = REAL(PINVL);
   ++nProtected;
-  F77_CALL(dpotrf)("Upper", &nc, PINVLptr, &nc, &info);
+  F77_CALL(dpotrf)("Upper", &nc, PINVLptr, &nc, &info FCONE);
 
   for(j = 0; j < nc; j++) {
     for(i = j + 1; i < nc; i++) {
@@ -753,9 +757,9 @@ SEXP gmcmc_iwls(SEXP family, SEXP theta, SEXP id,
   int k1 = 1;
   char *transa2 = "T";
   F77_CALL(dgemm)(transa2, transb, &nc, &k1, &nr, &one,
-    Xptr, &nr, xrresptr, &nr, &zero, mu0ptr, &nc);
+    Xptr, &nr, xrresptr, &nr, &zero, mu0ptr, &nc FCONE FCONE);
   F77_CALL(dgemm)(transa, transb, &nc, &k1, &nc, &one,
-    PINVptr, &nc, mu0ptr, &nc, &zero, mu1ptr, &nc);
+    PINVptr, &nc, mu0ptr, &nc, &zero, mu1ptr, &nc FCONE FCONE);
 
   /* Sample. */
   double edf1 = 0.0;
@@ -780,7 +784,7 @@ SEXP gmcmc_iwls(SEXP family, SEXP theta, SEXP id,
   REAL(edf)[0] = edf2;
   
   F77_CALL(dgemm)(transa2, transb, &nc, &k1, &nc, &one,
-    PINVLptr, &nc, gamma0ptr, &nc, &zero, gamma1ptr, &nc);
+    PINVLptr, &nc, gamma0ptr, &nc, &zero, gamma1ptr, &nc FCONE FCONE);
 
   double sdiag0 = 0.0;
   for(j = 0; j < nc; j++) {
@@ -846,7 +850,7 @@ SEXP gmcmc_iwls(SEXP family, SEXP theta, SEXP id,
   /* Part 2. */
   /* Obtain new fitted values and update predictor. */
   F77_CALL(dgemm)(transa, transb, &nr, &k1, &nc, &one,
-    Xptr, &nr, gamma1ptr, &nr, &zero, fitrptr, &nr);
+    Xptr, &nr, gamma1ptr, &nr, &zero, fitrptr, &nr FCONE FCONE);
 
   for(i = 0; i < n; i++) {
     k = idptr[i] - 1;
@@ -920,7 +924,7 @@ SEXP gmcmc_iwls(SEXP family, SEXP theta, SEXP id,
 
   /* Compute X'WX. */
   F77_CALL(dgemm)(transa, transb, &nc, &nc, &nr, &one,
-    XWptr, &nc, Xptr, &nr, &zero, XWXptr, &nc);
+    XWptr, &nc, Xptr, &nr, &zero, XWXptr, &nc FCONE FCONE);
 
   /* Add penalty matrix and variance parameter. */
   if(fixed < 1) {
@@ -946,7 +950,7 @@ SEXP gmcmc_iwls(SEXP family, SEXP theta, SEXP id,
     }
   }
 
-  F77_CALL(dpotrf)("Upper", &nc, Lptr, &nc, &info);
+  F77_CALL(dpotrf)("Upper", &nc, Lptr, &nc, &info FCONE);
 
   /* Compute the inverse precision matrix. */
   SEXP PINV2;
@@ -954,7 +958,7 @@ SEXP gmcmc_iwls(SEXP family, SEXP theta, SEXP id,
   PINVptr = REAL(PINV2);
   ++nProtected;
 
-  F77_CALL(dpotri)("Upper", &nc, PINVptr, &nc, &info);
+  F77_CALL(dpotri)("Upper", &nc, PINVptr, &nc, &info FCONE);
 
   sdiag0 = 0.0;
   for(j = 0; j < nc; j++) {
@@ -966,10 +970,10 @@ SEXP gmcmc_iwls(SEXP family, SEXP theta, SEXP id,
 
   /* Compute mu. */
   F77_CALL(dgemm)(transa2, transb, &nc, &k1, &nr, &one,
-    Xptr, &nr, xrresptr, &nr, &zero, mu0ptr, &nc);
+    Xptr, &nr, xrresptr, &nr, &zero, mu0ptr, &nc FCONE FCONE);
 
   F77_CALL(dgemm)(transa, transb, &nc, &k1, &nc, &one,
-    PINVptr, &nc, mu0ptr, &nc, &zero, mu1ptr, &nc);
+    PINVptr, &nc, mu0ptr, &nc, &zero, mu1ptr, &nc FCONE FCONE);
 
   /* Log priors. */
   double qbeta = 0.0;
@@ -1231,7 +1235,7 @@ SEXP gmcmc_iwls_gp(SEXP family, SEXP theta, SEXP id,
   char *transa = "N", *transb = "N";
   double one = 1.0, zero = 0.0;
   F77_CALL(dgemm)(transa, transb, &nc, &nc, &nr, &one,
-    XWptr, &nc, Xptr, &nr, &zero, XWXptr, &nc);
+    XWptr, &nc, Xptr, &nr, &zero, XWXptr, &nc FCONE FCONE);
 
   SEXP XWX0;
   PROTECT(XWX0 = duplicate(getListElement(x, "XWX")));
@@ -1289,14 +1293,14 @@ SEXP gmcmc_iwls_gp(SEXP family, SEXP theta, SEXP id,
       }
     }
 
-    F77_CALL(dpotrf)("Upper", &nc, Lptr, &nc, &info);
+    F77_CALL(dpotrf)("Upper", &nc, Lptr, &nc, &info FCONE);
 
     /* Compute the inverse precision matrix. */
     PROTECT(PINV = duplicate(L));
     PINVptr = REAL(PINV);
     ++nProtected;
 
-    F77_CALL(dpotri)("Upper", &nc, PINVptr, &nc, &info);
+    F77_CALL(dpotri)("Upper", &nc, PINVptr, &nc, &info FCONE);
 
     PROTECT(PINVL = duplicate(PINV));
     PINVLptr = REAL(PINVL);
@@ -1309,7 +1313,7 @@ SEXP gmcmc_iwls_gp(SEXP family, SEXP theta, SEXP id,
     }
   }
 
-  F77_CALL(dpotrf)("Upper", &nc, PINVLptr, &nc, &info);
+  F77_CALL(dpotrf)("Upper", &nc, PINVLptr, &nc, &info FCONE);
 
   /* Compute mu. */
   SEXP mu0;
@@ -1325,9 +1329,9 @@ SEXP gmcmc_iwls_gp(SEXP family, SEXP theta, SEXP id,
   int k1 = 1;
   char *transa2 = "T";
   F77_CALL(dgemm)(transa2, transb, &nc, &k1, &nr, &one,
-    Xptr, &nr, xrresptr, &nr, &zero, mu0ptr, &nc);
+    Xptr, &nr, xrresptr, &nr, &zero, mu0ptr, &nc FCONE FCONE);
   F77_CALL(dgemm)(transa, transb, &nc, &k1, &nc, &one,
-    PINVptr, &nc, mu0ptr, &nc, &zero, mu1ptr, &nc);
+    PINVptr, &nc, mu0ptr, &nc, &zero, mu1ptr, &nc FCONE FCONE);
 
   /* Sample. */
   double edf1 = 0.0;
@@ -1352,7 +1356,7 @@ SEXP gmcmc_iwls_gp(SEXP family, SEXP theta, SEXP id,
   REAL(edf)[0] = edf2;
   
   F77_CALL(dgemm)(transa2, transb, &nc, &k1, &nc, &one,
-    PINVLptr, &nc, gamma0ptr, &nc, &zero, gamma1ptr, &nc);
+    PINVLptr, &nc, gamma0ptr, &nc, &zero, gamma1ptr, &nc FCONE FCONE);
 
   for(j = 0; j < nc; j++) {
     gamma1ptr[j] += mu1ptr[j];
@@ -1372,7 +1376,7 @@ SEXP gmcmc_iwls_gp(SEXP family, SEXP theta, SEXP id,
   /* Part 2. */
   /* Obtain new fitted values and update predictor. */
   F77_CALL(dgemm)(transa, transb, &nr, &k1, &nc, &one,
-    Xptr, &nr, gamma1ptr, &nr, &zero, fitrptr, &nr);
+    Xptr, &nr, gamma1ptr, &nr, &zero, fitrptr, &nr FCONE FCONE);
 
   for(i = 0; i < n; i++) {
     k = idptr[i] - 1;
@@ -1444,7 +1448,7 @@ SEXP gmcmc_iwls_gp(SEXP family, SEXP theta, SEXP id,
 
   /* Compute X'WX. */
   F77_CALL(dgemm)(transa, transb, &nc, &nc, &nr, &one,
-    XWptr, &nc, Xptr, &nr, &zero, XWXptr, &nc);
+    XWptr, &nc, Xptr, &nr, &zero, XWXptr, &nc FCONE FCONE);
 
   /* Add penalty matrix and variance parameter. */
   if(fixed < 1) {
@@ -1479,14 +1483,14 @@ SEXP gmcmc_iwls_gp(SEXP family, SEXP theta, SEXP id,
       }
     }
 
-    F77_CALL(dpotrf)("Upper", &nc, Lptr, &nc, &info);
+    F77_CALL(dpotrf)("Upper", &nc, Lptr, &nc, &info FCONE);
 
     /* Compute the inverse precision matrix. */
     PROTECT(PINV2 = duplicate(L2));
     PINVptr = REAL(PINV2);
     ++nProtected;
 
-    F77_CALL(dpotri)("Upper", &nc, PINVptr, &nc, &info);
+    F77_CALL(dpotri)("Upper", &nc, PINVptr, &nc, &info FCONE);
 
     for(j = 0; j < nc; j++) {
       for(i = j + 1; i < nc; i++) {
@@ -1497,10 +1501,10 @@ SEXP gmcmc_iwls_gp(SEXP family, SEXP theta, SEXP id,
 
   /* Compute mu. */
   F77_CALL(dgemm)(transa2, transb, &nc, &k1, &nr, &one,
-    Xptr, &nr, xrresptr, &nr, &zero, mu0ptr, &nc);
+    Xptr, &nr, xrresptr, &nr, &zero, mu0ptr, &nc FCONE FCONE);
 
   F77_CALL(dgemm)(transa, transb, &nc, &k1, &nc, &one,
-    PINVptr, &nc, mu0ptr, &nc, &zero, mu1ptr, &nc);
+    PINVptr, &nc, mu0ptr, &nc, &zero, mu1ptr, &nc FCONE FCONE);
 
   /* Log priors. */
   double cval = 0.0;
@@ -3023,14 +3027,14 @@ SEXP log_dmvnorm(SEXP Y, SEXP PAR, SEXP N, SEXP K, SEXP MJ, SEXP SJ, SEXP RJ)
       ymuptr[j] = Yptr[i + n * j] - Pptr[i + n * (MJptr[j] - 1)];
     }
 
-    F77_CALL(dpotrf)("Upper", &k, Sigmaptr, &k, &info);
+    F77_CALL(dpotrf)("Upper", &k, Sigmaptr, &k, &info FCONE);
 
     det = 0.0;
     for(j = 0; j < k; j++)
       det += log(Sigmaptr[j + k * j]);
     det = det * 2.0;
 
-    F77_CALL(dpotri)("Upper", &k, Sigmaptr, &k, &info);
+    F77_CALL(dpotri)("Upper", &k, Sigmaptr, &k, &info FCONE);
 
     sum = 0.0;
     for(j = 0; j < k; j++) {
@@ -3094,8 +3098,8 @@ SEXP mu_score_mvnorm(SEXP Y, SEXP PAR, SEXP N, SEXP K, SEXP MJ, SEXP SJ, SEXP RJ
       ymuptr[j] = Yptr[i + n * j] - Pptr[i + n * (MJptr[j] - 1)];
     }
 
-    F77_CALL(dpotrf)("Upper", &k, Sigmaptr, &k, &info);
-    F77_CALL(dpotri)("Upper", &k, Sigmaptr, &k, &info);
+    F77_CALL(dpotrf)("Upper", &k, Sigmaptr, &k, &info FCONE);
+    F77_CALL(dpotri)("Upper", &k, Sigmaptr, &k, &info FCONE);
 
     sum = 0.0;
     /* Fill lower part of row kj */
@@ -3159,8 +3163,8 @@ SEXP sigma_score_mvnorm(SEXP Y, SEXP PAR, SEXP N, SEXP K, SEXP MJ, SEXP SJ, SEXP
       ymuptr[j] = (Yptr[i + n * j] - Pptr[i + n * (MJptr[j] - 1)]) / Pptr[i + n * (SJptr[j] - 1)];
     }
 
-    F77_CALL(dpotrf)("Upper", &k, Sigmaptr, &k, &info);
-    F77_CALL(dpotri)("Upper", &k, Sigmaptr, &k, &info);
+    F77_CALL(dpotrf)("Upper", &k, Sigmaptr, &k, &info FCONE);
+    F77_CALL(dpotri)("Upper", &k, Sigmaptr, &k, &info FCONE);
 
 
     sum = 0.0;
@@ -3242,8 +3246,8 @@ SEXP rho_score_mvnorm(SEXP Y, SEXP PAR, SEXP N, SEXP K, SEXP MJ, SEXP SJ, SEXP R
     deriv = 1.0 / pow(base, 1.5);
 
     /* Inversion */
-    F77_CALL(dpotrf)("Upper", &k, Sigmaptr, &k, &info);
-    F77_CALL(dpotri)("Upper", &k, Sigmaptr, &k, &info);
+    F77_CALL(dpotrf)("Upper", &k, Sigmaptr, &k, &info FCONE);
+    F77_CALL(dpotri)("Upper", &k, Sigmaptr, &k, &info FCONE);
 
 /*
     Fill lower part of rows kj and lj
@@ -3370,7 +3374,7 @@ SEXP boost_fit(SEXP x, SEXP y, SEXP nu, SEXP W, SEXP rho)
   char *transa = "N", *transb = "N";
   double one = 1.0, zero = 0.0;
   F77_CALL(dgemm)(transa, transb, &nc, &nc, &nr, &one,
-    XWptr, &nc, Xptr, &nr, &zero, XWXptr, &nc);
+    XWptr, &nc, Xptr, &nr, &zero, XWXptr, &nc FCONE FCONE);
 
   /* Add penalty matrix and variance parameter. */
   if(!fixed) {
@@ -3402,17 +3406,17 @@ SEXP boost_fit(SEXP x, SEXP y, SEXP nu, SEXP W, SEXP rho)
   }
 
   int info;
-  F77_CALL(dpotrf)("Upper", &nc, Lptr, &nc, &info);
+  F77_CALL(dpotrf)("Upper", &nc, Lptr, &nc, &info FCONE);
 
   /* Compute the inverse precision matrix. */
   SEXP PINV = PROTECT(duplicate(L));  ++nProtected;
   double *PINVptr = REAL(PINV);
 
-  F77_CALL(dpotri)("Upper", &nc, PINVptr, &nc, &info);
+  F77_CALL(dpotri)("Upper", &nc, PINVptr, &nc, &info FCONE);
 
   SEXP PINVL = PROTECT(duplicate(PINV)); ++nProtected;
   double *PINVLptr = REAL(PINVL);
-  F77_CALL(dpotrf)("Upper", &nc, PINVLptr, &nc, &info);
+  F77_CALL(dpotrf)("Upper", &nc, PINVLptr, &nc, &info FCONE);
 
   for(j = 0; j < nc; j++) {
     for(i = j + 1; i < nc; i++) {
@@ -3430,9 +3434,9 @@ SEXP boost_fit(SEXP x, SEXP y, SEXP nu, SEXP W, SEXP rho)
   int k1 = 1;
   char *transa2 = "T";
   F77_CALL(dgemm)(transa2, transb, &nc, &k1, &nr, &one,
-    Xptr, &nr, xrresptr, &nr, &zero, mu0ptr, &nc);
+    Xptr, &nr, xrresptr, &nr, &zero, mu0ptr, &nc FCONE FCONE);
   F77_CALL(dgemm)(transa, transb, &nc, &k1, &nc, &one,
-    PINVptr, &nc, mu0ptr, &nc, &zero, mu1ptr, &nc);
+    PINVptr, &nc, mu0ptr, &nc, &zero, mu1ptr, &nc FCONE FCONE);
 
   for(j = 0; j < nc; j++) {
     thetaptr[j] = REAL(nu)[0] * mu1ptr[j];

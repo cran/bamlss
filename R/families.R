@@ -1235,6 +1235,43 @@ beta1_bamlss <- function(ar.start, ...)
 }
 
 
+GP_bamlss <- function(...)
+{
+  rval <- list(
+    "family" = "GP",
+    "names" = c("xi", "sigma", "mu"),
+    "links" = c(xi = "log", sigma = "log", mu = "identity"),
+    "valid.response" = function(x) {
+      if(is.factor(x) | is.character(x))
+        stop("the response should be numeric!")
+      return(TRUE)
+    },
+    "d" = function(y, par, log = FALSE) {
+      d <- -log(par$sigma) - (1 / par$xi + 1) * log(1 + par$xi * (y - par$mu) / par$sigma)
+      if(any(i <- (par$xi >= 0) & (y < par$mu))) {
+        d[i] <- -1e+05
+      }
+      if(any(i <- (par$xi < 0) & (y < par$mu))) {
+        d[i] <- -1e+05
+      }
+      if(any(i <- (par$xi < 0) & (y > (par$mu - par$sigma/par$xi)))) {
+        d[i] <- -1e+05
+      }
+      if(!log)
+        d <- exp(d)
+      d
+    }
+  )
+  rval$initialize <- list(
+    "xi" = function(y, ...) { rep(mean(y) + 0.5, length(y)) },
+    "sigma" = function(y, ...) { rep(sd(y), length(y)) },
+    "mu" = function(y, ...) { rep(0, length(y)) }
+  )
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+
 gpareto_bamlss <- function(...)
 {
   rval <- list(
@@ -4144,14 +4181,21 @@ tF <- function(x, ...)
   bd <- if(is.null(args$bd)) 1 else args$bd
   args$bd <- NULL
   pr <- args$range
-  check_range <- function(par) {
-    for(j in names(par)) {
-      if(!is.null(pr[[j]])) {
-        par[[j]][par[[j]] < min(pr[[j]])] <- min(pr[[j]])
-        par[[j]][par[[j]] > max(pr[[j]])] <- max(pr[[j]])
+  check_range <- function(par) { return(par) }
+  if(!is.null(pr)) {
+    if(is.list(pr) | is.data.frame(pr)) {
+      check_range <- function(par) {
+        for(j in names(par)) {
+          if(!is.null(pr[[j]])) {
+            if(is.numeric(pr[[j]])) {
+              par[[j]][par[[j]] < min(pr[[j]])] <- min(pr[[j]])
+              par[[j]][par[[j]] > max(pr[[j]])] <- max(pr[[j]])
+            }
+          }
+        }
+        par
       }
     }
-    par
   }
   nx <- names(x$parameters)
   score <- hess <- initialize <- list()
@@ -5308,100 +5352,74 @@ log1pexp <- function(x)
   return(x)
 }
 
+
 ELF_bamlss <- function(..., tau = 0.5)
 {
   if(tau < 0.001 | tau > (1 - 0.001))
     stop("tau must be between 0 and 1!")
-
+  
+  lambda <- 0.0001
+  
   rval <- list(
     "family" = "Elf density",
-    "names" = c("mu", "sigma", "lambda"),
-    "links" = c(mu = "identity", sigma = "log", lambda = "log"),
-    "d" = function(y, par, log = FALSE) {
-      r <- y - par$mu
-#      d <- (1 - tau) * r/par$sigma - par$lambda * log(1 + exp(r/(par$lambda * par$sigma))) -
-#        log(par$lambda * par$sigma * beta(par$lambda *(1 - tau), par$lambda*tau))
-
-## library("Deriv")
-## e <- expression((1 - tau) * (y-mu)/s - lam * log(1 + exp((y-mu)/(lam*s))) - log(lam * s * beta(lam*(1 - tau), lam*tau)))
-## Deriv(e, cache.exp = FALSE, "mu")
-
-      d <- (1 - tau) * r/par$sigma - par$lambda * log1pexp(r/(par$lambda * par$sigma)) -
-        log(par$lambda * par$sigma * beta(par$lambda *(1 - tau), par$lambda*tau))
-
+    "names" = c("mu", "sigma"),
+    "links" = c(mu = "identity", sigma = "log"),
+    "d" = function(y, par, log = F) {
+      r <- y - par$mu # 2*par$mu vergleiche https://www.tandfonline.com/doi/suppl/10.1080/01621459.2020.1725521/suppl_file/uasa_a_1725521_sm0369.pdf Seite 8 ll(.) 
+      #      d <- (1 - tau) * r/par$sigma - par$lambda * log(1 + exp(r/(par$lambda * par$sigma))) -
+      #        log(par$lambda * par$sigma * beta(par$lambda *(1 - tau), par$lambda*tau))
+      
+      ## library("Deriv")
+      ## e <- expression((1 - tau) * (y-mu)/s - lam * log(1 + exp((y-mu)/(lam*s))) - log(lam * s * beta(lam*(1 - tau), lam*tau)))
+      ## Deriv(e, cache.exp = FALSE, "mu")
+      
+      d <- (1 - tau) * r/par$sigma - lambda * log1pexp(r/(lambda * par$sigma)) -
+        log(lambda * par$sigma * beta(lambda *(1 - tau), lambda*tau))
+      
       if(!log)
         d <- exp(d)
-
+      
       return(d)
     },
+    
     "score" = list(
       "mu" = function(y, par, ...) {
-        .e2 <- exp((y - par$mu)/(par$lambda * par$sigma))
-        score <- (.e2/(1 + .e2) + tau - 1)/par$sigma
+        .e2 <- 0.5 + 0.5*tanh((y - par$mu)/(2*lambda * par$sigma))
+        score <- (.e2 + tau - 1)/par$sigma
         return(score)
       },
       "sigma" = function(y, par, ...) {
-        .e1 <- par$lambda * par$sigma
-        .e2 <- y - par$mu
-        .e4 <- exp(.e2/.e1)
-        score <- (par$lambda^2 * .e4/((1 + .e4) * .e1^2) - (1 - tau)/par$sigma^2) * .e2 - 1/par$sigma
-        return(score)
-      },
-      "lambda" = function(y, par, ...) {
-        .e1 <- par$lambda * par$sigma
-        .e2 <- y - par$mu
-        .e4 <- exp(.e2/.e1)
-        .e5 <- 1 - tau
-        .e6 <- digamma(par$lambda)
-        score <- -((1 + par$lambda * (.e5 * (digamma(par$lambda * .e5) - .e6) + tau * (digamma(par$lambda * tau) - .e6)))/par$lambda + log1p(.e4) - .e1 * .e4 * .e2/((1 + .e4) * .e1^2))
+        .e1 <- 0.5 + 0.5*tanh((y - par$mu)/(2*lambda * par$sigma))
+        score <- (.e1 + tau -1) * (y - par$mu)/par$sigma^2 - 1/par$sigma
         return(score)
       }
     ),
     "hess" = list(
       "mu" = function(y, par, ...) {
-        .e2 <- exp((y - par$mu)/(par$lambda * par$sigma))
-        .e3 <- 1 + .e2
-        hess <- .e2 * (.e2/.e3 - 1)/(par$lambda * par$sigma^2 * .e3)
-        return(-hess)
+        .e2 <- 1/cosh((y - par$mu)/(2*lambda * par$sigma))^2
+        hess <- .e2 / (-4*lambda * par$sigma^2)
+        return(hess)
       },
       "sigma" = function(y, par, ...) {
-        .e1 <- par$lambda * par$sigma
-        .e2 <- y - par$mu
-        .e4 <- exp(.e2/.e1)
-        .e5 <- 1 + .e4
-        hess <- (2 * ((1 - tau)/par$sigma^3) - par$lambda^3 * ((2 * (.e1 * .e5) - .e4 * .e2)/(.e5 * .e1^2)^2 + .e2/(.e5 * .e1^4)) * .e4) * .e2 + 1/par$sigma^2
-        return(-hess)
-      },
-      "lambda" = function(y, par, ...) {
-        .e1 <- par$lambda * par$sigma
-        .e2 <- y - par$mu
-        .e3 <- 1 - tau
-        .e5 <- exp(.e2/.e1)
-        .e6 <- digamma(par$lambda)
-        .e7 <- .e1^2
-        .e8 <- 1 + .e5
-        .e9 <- par$lambda * .e3
-        .e10 <- par$lambda * tau
-        .e11 <- .e3 * (digamma(.e9) - .e6)
-        .e12 <- .e8 * .e7
-        .e15 <- tau * (digamma(.e10) - .e6)
-        .e16 <- trigamma(par$lambda)
-        hess <- -((.e11 + par$lambda * ((.e3 * trigamma(.e9) - .e16) * .e3 + tau * 
-          (tau * trigamma(.e10) - .e16)) + .e15 - (1 + par$lambda * (.e11 + .e15))/par$lambda)/par$lambda -
-          par$sigma * ((2 - .e1 * .e2/.e7)/.e12 - .e1 * (2 * (.e1 * .e8) - .e5 * .e2)/.e12^2) * .e5 * .e2)
-        return(-hess)
+        .e1 <- 0.5 + 0.5*tanh((y - par$mu)/(2*lambda * par$sigma))
+        .e2 <- 1/cosh((y - par$mu)/(2*lambda * par$sigma))^2
+        hess <- (1-tau - .e1 - 0.5*(y-par$mu)* .e2 / (4*lambda * par$sigma ) )  + 1/par$sigma^2
+        hess <- (2 * (y - par$mu)/par$sigma^3) * hess
+        return(hess)
       }
     ),
     "initialize" = list(
       "mu"    = function(y, ...) { (y + quantile(y, prob = tau)) / 2 },
-      "sigma"    = function(y, ...) { sd((y - quantile(y, prob = tau)) / 2) },
-      "lambda"    = function(y, ...) { rep(4, length(y)) }
+      "sigma"    = function(y, ...) { sd((y - quantile(y, prob = tau)) / 2) }
     )
   )
 
+  rval$score <- rval$hess <- NULL
+  
   class(rval) <- "family.bamlss"
   rval
 }
+
 
 nbinom_bamlss <- function(...) {
 ### neg bin

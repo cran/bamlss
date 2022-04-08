@@ -320,6 +320,8 @@ bamlss.engine.setup.smooth.default <- function(x, Matrix = FALSE, ...)
             }, length.out = ntau2)
           }
         } else rep(x$sp, length.out = ntau2)
+        if(all(is.logical(tau2)))
+          tau2 <- rep(0.0001, length(tau2))
         names(tau2) <- paste("tau2", 1:ntau2, sep = "")
         state$parameters <- c(state$parameters, tau2)
       }
@@ -1464,6 +1466,9 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
 
   no_ff <- !inherits(y, "ff")
   peta <- family$map2par(eta)
+  enet2 <- x$xt$enet2
+  if(is.null(enet2))
+    enet2 <- FALSE
 
   nobs <- length(eta[[1L]])
   
@@ -1525,6 +1530,8 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
       tau2 <- get.state(x, "tau2")
       for(j in seq_along(x$S))
         S <- S + 1 / tau2[j] * if(is.function(x$S[[j]])) x$S[[j]](c(g0, x$fixed.hyper)) else x$S[[j]]
+      if(enet2)
+        S <- S + diag(1, ncol(S)) * (1 - 1 / tau2[1L]) / 2
       P <- matrix_inv(XWX + S + if(!is.null(x$xt[["pS"]])) x$xt[["pS"]] else 0, index = x$sparse.setup)
     }
     if(is.null(x$xt[["pm"]])) {
@@ -1550,6 +1557,8 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
       S <- 0
       for(j in seq_along(x$S))
         S <- S + 1 / tau2[j] * if(is.function(x$S[[j]])) x$S[[j]](c(g0, x$fixed.hyper)) else x$S[[j]]
+      if(enet2)
+        S <- S + diag(1, ncol(S)) * (1 - 1 / tau2[1L]) / 2
       P <- matrix_inv(XWX + S + if(!is.null(x$xt[["pS"]])) x$xt[["pS"]] else 0, index = x$sparse.setup)
       if(inherits(P, "try-error")) return(NA)
       if(is.null(x$xt[["pm"]])) {
@@ -1580,7 +1589,8 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
       edf <- sum_diag(XWX %*% P)
       eta2[[id]] <- eta2[[id]] + fit
       ic <- get.ic(family, y, family$map2par(eta2), edf0 + edf, length(z), criterion, ...)
-      if(!is.null(env$ic_val)) {
+
+      if(!is.null(env$ic_val) & FALSE) {
         if((ic < env$ic_val) & (ic < env$ic00_val)) {
           par <- c(g, tau2)
           names(par) <- names(x$state$parameters)
@@ -1601,7 +1611,7 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
     assign("ic00_val", objfun(tau2 <- get.state(x, "tau2")), envir = env)
 
     tau2 <- tau2.optim(objfun, start = tau2)
-    
+
     if(!is.null(env$state))
       return(env$state)
     
@@ -3759,7 +3769,12 @@ print.boost_summary <- function(x, summary = TRUE, plot = TRUE,
         }
         matplot(x$loglik, type = "l", lty = 1,
           xlab = "Iteration", ylab = "LogLik contribution", col = cols[as.factor(xn)],
-          lwd = args$lwd)
+          lwd = args$lwd, axes = FALSE)
+        box()
+        axis(2)
+        at <- pretty(1:nrow(x$loglik))
+        at[1L] <- 1
+        axis(1, at = at)
         abline(v = x$mstop, lwd = 3, col = "lightgray")
         cn <- colnames(x$loglik)
         if(!is.null(args$drop)) {
@@ -5702,19 +5717,24 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
       }
       beta[[i]][["p"]] <- rep(0, ncol(x[[i]]$model.matrix))
       names(beta[[i]][["p"]]) <- colnames(x[[i]]$model.matrix)
+      start_ok <- FALSE
       if(!is.null(start)) {
         start2 <- start[paste0(i, ".p.", colnames(x[[i]]$model.matrix))]
         start2 <- start2[!is.na(start2)]
-        names(start2) <- gsub(paste0(i, ".p."), "", names(start2))
-        beta[[i]][["p"]][names(start2)] <- start2
-      } else {
+        if(length(start2)) {
+          start_ok <- TRUE
+          names(start2) <- gsub(paste0(i, ".p."), "", names(start2))
+          beta[[i]][["p"]][names(start2)] <- start2
+        }
+      }
+      if(!start_ok) {
         if(!is.null(family$initialize) & is.null(offset) & initialize) {
           if(noff) {
             shuffle_id <- sample(seq_len(N))
           } else {
             shuffle_id <- NULL
             for(ii in bamlss_chunk(y)) {
-              shuffle_id <- ffbase::ffappend(shuffle_id, if(shuffle) sample(ii) else ii)
+              shuffle_id <- ffappend(shuffle_id, if(shuffle) sample(ii) else ii)
             }
           }
           if(!srandom) {
@@ -5781,7 +5801,7 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
           } else {
             shuffle_id <- NULL
             for(ii in bamlss_chunk(y)) {
-              shuffle_id <- ffbase::ffappend(shuffle_id, if(shuffle) sample(ii) else ii)
+              shuffle_id <- ffappend(shuffle_id, if(shuffle) sample(ii) else ii)
             }
           }
           if(!srandom) {
@@ -5829,27 +5849,33 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
         } else {
           tau2[[i]][[j]] <- rep(100, length(x[[i]]$smooth.construct[[j]]$S))
         }
-        if(is.null(start)) {
-          beta[[i]][[paste0("s.", j)]] <- rep(0, ncX)
-          if(inherits(x[[i]]$smooth.construct[[j]], "nnet0.smooth")) {
-            npar <- x[[i]]$smooth.construct[[j]]$state$parameters
-            npar <- npar[!grepl("tau2", names(npar))]
-            beta[[i]][[paste0("s.", j)]] <- npar
-          }
-        } else {
+
+        start_ok <- FALSE
+        if(!is.null(start)) {
           if(inherits(x[[i]]$smooth.construct[[j]], "nnet0.smooth")) {
             start2 <- start[grep(paste0(i, ".s.", j, "."), names(start), fixed = TRUE)]
             start2 <- start2[!grepl("tau2", names(start2))]
           } else {
             start2 <- start[paste0(i, ".s.", j, ".b", 1:ncX)]
           }
-          if(any(is.na(start2)))
-            stop("dimensions do not match, check starting values!")
-          beta[[i]][[paste0("s.", j)]] <- if(all(is.na(start2))) rep(0, ncX) else start2
+          if(!all(is.na(start2))) {
+            if(any(is.na(start2)))
+              stop("dimensions do not match, check starting values!")
+            start_ok <- TRUE
+            beta[[i]][[paste0("s.", j)]] <- if(all(is.na(start2))) rep(0, ncX) else start2
+            if(inherits(x[[i]]$smooth.construct[[j]], "nnet0.smooth")) {
+              npar <- x[[i]]$smooth.construct[[j]]$state$parameters
+              npar <- npar[!grepl("tau2", names(npar))]
+              names(beta[[i]][[paste0("s.", j)]]) <- names(npar)
+            }
+          }
+        }
+        if(!start_ok) {
+          beta[[i]][[paste0("s.", j)]] <- rep(0, ncX)
           if(inherits(x[[i]]$smooth.construct[[j]], "nnet0.smooth")) {
             npar <- x[[i]]$smooth.construct[[j]]$state$parameters
             npar <- npar[!grepl("tau2", names(npar))]
-            names(beta[[i]][[paste0("s.", j)]]) <- names(npar)
+            beta[[i]][[paste0("s.", j)]] <- npar
           }
         }
 
@@ -5886,7 +5912,7 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
       } else {
         shuffle_id <- NULL
         for(ii in bamlss_chunk(y)) {
-          shuffle_id <- ffbase::ffappend(shuffle_id, if(shuffle) sample(ii) else ii)
+          shuffle_id <- ffappend(shuffle_id, if(shuffle) sample(ii) else ii)
         }
       }
     } else {
@@ -6500,3 +6526,21 @@ bbfit_plot <- function(x, name = NULL, ...)
   return(invisible(x))
 }
 
+new_formula <- function(object, thres = 0) {
+  sel <- contribplot(object, plot = FALSE)
+  yname <- response.name(object)
+  formula <- list()
+  for(i in names(sel$selfreqs)) {
+    eff <- sel$selfreqs[[i]][sel$selfreqs[[i]] > thres, , drop = FALSE]
+    eff <- rownames(eff)
+    eff <- gsub("s.", "", eff, fixed = TRUE)
+    eff <- eff[eff != "p"]
+    if(length(eff)) {
+      eff <- paste(sort(eff), collapse = "+")
+      formula[[i]] <- as.formula(paste("~", eff))
+    }
+  }
+  fc <- paste0("update(formula[[1L]],", yname, " ~ .)")
+  formula[[1L]] <- eval(parse(text = fc))
+  return(formula)
+}
