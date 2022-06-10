@@ -3178,7 +3178,16 @@ all.labels.formula <- function(formula, specials = NULL, full.names = FALSE)
         tl[j] <- paste0(c("af",  "lf.vd", "re", "peer", "fpc")[i], "(",
           all.vars(as.formula(paste("~", tl[j])))[1], ")")
       } else {
-        tcall <- parse(text = tl[j])[[1]]
+        tcall <- parse(text = drop_by_fac(tl[j]))[[1]]
+        by_fac <- NULL
+        if(grepl("):", tl[j], fixed = TRUE)) {
+          if(grepl("by=", tl[j], fixed = TRUE)) {
+            tlj <- strsplit(tl[j], "):", fixed = TRUE)[[1]]
+            if(tcall$by != tlj[2]) {
+              by_fac <- tlj[2]
+            }
+          }
+        }
         id <- tcall$id
         tcall[c("k","fx","bs","m","xt","sp","pc","d","mp","np")] <- NULL
         tcall <- eval(tcall)
@@ -3202,6 +3211,9 @@ all.labels.formula <- function(formula, specials = NULL, full.names = FALSE)
             tlt <- paste0(",id='", id, "')")
             tl[j] <- gsub(")", tlt, tl[j], fixed = TRUE)
           }
+        }
+        if(!is.null(by_fac)) {
+          tl[j] <- paste0(tl[j], ":", by_fac)
         }
       }
     }
@@ -3628,6 +3640,7 @@ fitted_matrix <- function(X, samples)
   if(ncol(X) != ncol(samples))
     stop("dimensions of design matrix and samples do not match!")
   fit <- .Call("fitted_matrix", X, as.matrix(samples), PACKAGE = "bamlss")
+  fit
 }
 
 
@@ -3910,6 +3923,20 @@ c95 <- function(x)
   return(c(qx[1], "Mean" = mean(x, na.rm = TRUE), qx[2]))
 }
 
+## Drop by= factor :
+drop_by_fac <- function(x)
+{
+  if(any(i <- grepl("):", x, fixed = TRUE))) {
+    if(any(j <- grepl("by=", x[i], fixed = TRUE))) {
+      nne <- strsplit(x[i][j], "):", fixed = TRUE)
+      nne <- paste0(sapply(nne, function(x) x[1]), ")")
+      for(jj in seq_along(nne)) {
+        x[x == x[i][j][jj]] <- nne[jj]
+      }
+    }
+  }
+  return(x)
+}
 
 ## A prediction method for "bamlss" objects.
 ## Prediction can also be based on multiple chains.
@@ -3979,26 +4006,29 @@ predict.bamlss <- function(object, newdata, model = NULL, term = NULL, match.nam
   nn <- all.vars(as.formula(paste("~", paste(nn, collapse = "+")), env = NULL))
   rn <- response.name(object, keep.functions = TRUE)
   nn <- nn[!(nn %in% rn)]
-  tl <- term.labels2(object, model = model, intercept = intercept, type = 2)
+  tl <- term.labels2(object, model = model, intercept = intercept, type = 2, rm.by = FALSE)
   nx <- names(tl)
   if(!is.null(term)) {
     enames <- vector(mode = "list", length = length(nx))
     for(j in term) {
       for(i in seq_along(tl)) {
-        if(!is.character(j)) {
-          if(j > 0 | j < length(tl[[i]]))
-            enames[[i]] <- c(enames[[i]], tl[[i]][j])
-        } else {
-          if(grepl("intercept", tolower(j), fixed = TRUE)) {
-            if("(Intercept)" %in% tl[[i]])
-              enames[[i]] <- c(enames[[i]], "(Intercept)")
+        tli <- tl[[i]][tl[[i]] != ""]
+        if(length(tli)) {
+          if(!is.character(j)) {
+            if(j > 0 | j < length(tli))
+              enames[[i]] <- c(enames[[i]], tli[j])
           } else {
-            k <- if(match.names) grep(j, tl[[i]], fixed = TRUE) else which(tl[[i]] == j)
-            if(length(k)) {
-              if(length(k) > 1) {
-                enames[[i]] <- c(enames[[i]], tl[[i]][k])
-              } else {
-                enames[[i]] <- c(enames[[i]], tl[[i]][k])
+            if(grepl("intercept", tolower(j), fixed = TRUE)) {
+              if("(Intercept)" %in% tli)
+                enames[[i]] <- c(enames[[i]], "(Intercept)")
+            } else {
+              k <- if(match.names) grep(j, tli, fixed = TRUE) else which(tli == j)
+              if(length(k)) {
+                if(length(k) > 1) {
+                  enames[[i]] <- c(enames[[i]], tli[k])
+                } else {
+                  enames[[i]] <- c(enames[[i]], tli[k])
+                }
               }
             }
           }
@@ -4018,12 +4048,15 @@ predict.bamlss <- function(object, newdata, model = NULL, term = NULL, match.nam
   }
   enames <- lapply(lapply(enames, unique), function(x) {
     x <- x[!is.na(x)]
+    x <- x[x != ""]
     return(if(length(x) < 1) NULL else x)
   })
   if(all(is.null(unlist(enames))))
     stop("argument term is specified wrong!")
   uenames <- unique(unlist(enames))
   uenames <- gsub("splines::", "", uenames, fixed = TRUE)
+  ## Remove by s(): variables.
+  uenames <- drop_by_fac(uenames)
   ff <- as.formula(paste("~", paste(uenames, collapse = "+")), env = NULL)
   vars <- all.vars.formula(ff)
   if(!all(vars[vars != "Intercept"] %in% nn))
@@ -7904,6 +7937,19 @@ Predict.matrix.harmon.smooth <- function(object, data, knots)
   X
 }
 
+## From geoR.
+matern <- function (u, phi, kappa) 
+{
+  if(is.vector(u)) names(u) <- NULL
+  if(is.matrix(u)) dimnames(u) <- list(NULL, NULL)
+  uphi <- u/phi
+  uphi <- ifelse(u > 0,
+                 (((2^(-(kappa-1)))/ifelse(0, Inf,gamma(kappa))) *
+                  (uphi^kappa) *
+                  besselK(x=uphi, nu=kappa)), 1)    
+  uphi[u > 600*phi] <- 0 
+  return(uphi)
+}
 
 ## Kriging smooth constructor.
 ## Evaluate a kriging
@@ -7912,12 +7958,12 @@ krDesign1D <- function(z, knots = NULL, rho = NULL,
   phi = NULL, v = NULL, c = NULL, ...)
 {
   rho <- if(is.null(rho)) {
-    geoR::matern
+    matern
   } else rho
   knots <- if(is.null(knots)) sort(unique(z)) else knots
   v <- if(is.null(v)) 2.5 else v
   c <- if(is.null(c)) {
-    optim(1, geoR::matern, phi = 1, kappa = v, method = "L-BFGS-B", lower = 1e-10)$par
+    optim(1, matern, phi = 1, kappa = v, method = "L-BFGS-B", lower = 1e-10)$par
   } else c
   phi <- if(is.null(phi)) max(abs(diff(range(knots)))) / c else phi
   B <- NULL
@@ -7935,7 +7981,7 @@ krDesign2D <- function(z1, z2, knots = 10, rho = NULL,
   isotropic = TRUE, ...)
 {
   rho <- if(is.null(rho)) {
-    geoR::matern
+    matern
   } else rho
   if(is.null(psi)) psi <- 1
   if(is.null(delta)) delta <- 1

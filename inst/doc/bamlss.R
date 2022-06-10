@@ -45,7 +45,11 @@ f <- log(price) ~ age + kilometer + tia + abs + sunroof
 b2 <- bamlss(f, family = "gaussian", data = Golf)
 
 ## -----------------------------------------------------------------------------
-DIC(b1, b2)
+p1 <- predict(b1, model = "mu")
+p2 <- predict(b2, model = "mu")
+
+mean((Golf$price - p1)^2)
+mean((Golf$price - exp(p2))^2)
 
 ## ---- message=FALSE, results="hide"-------------------------------------------
 set.seed(222)
@@ -55,7 +59,7 @@ f <- log(price) ~ poly(age, 3) + poly(kilometer, 3) + poly(tia, 3) + abs + sunro
 b3 <- bamlss(f, family = "gaussian", data = Golf)
 
 ## -----------------------------------------------------------------------------
-DIC(b1, b2, b3)
+DIC(b2, b3)
 
 ## -----------------------------------------------------------------------------
 nd <- data.frame("age" = seq(min(Golf$age), max(Golf$age), length = 100))

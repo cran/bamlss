@@ -1,3 +1,9 @@
+# bamlss 1.1-8
+
+* Removing akima and geoR dependencies.
+
+* Fixed predict problems when using by variables.
+
 # bamlss 1.1-7
 
 * Full support for scaleable distributional regression models.

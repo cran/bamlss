@@ -120,7 +120,7 @@ lasso_coef(x, ...)
 \references{
   Andreas Groll, Julien Hambuckers, Thomas Kneib, and Nikolaus Umlauf (2019). Lasso-type penalization in
   the framework of generalized additive models for location, scale and shape.
-  \emph{Computational Statistics \& Data Analysis}.
+  \emph{Computational Statistics & Data Analysis}.
   \doi{10.1016/j.csda.2019.06.005}
 
   Oelker Margreth-Ruth and Tutz Gerhard (2015). A uniform framework for combination of

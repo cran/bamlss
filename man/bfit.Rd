@@ -210,7 +210,7 @@ bfit_glmnet(x, family, y, eta, id, weights, criterion, ...)
 
 \references{
   Belitz C, Lang S (2008). Simultaneous Selection of Variables and Smoothing Parameters in
-  Structured Additive Regression Models. \emph{Computational Statistics \& Data Analysis},
+  Structured Additive Regression Models. \emph{Computational Statistics & Data Analysis},
   \bold{53}, pp 61-81.
 
   Umlauf N, Klein N, Zeileis A (2016). Bayesian Additive Models for Location

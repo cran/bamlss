@@ -1590,7 +1590,7 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
       eta2[[id]] <- eta2[[id]] + fit
       ic <- get.ic(family, y, family$map2par(eta2), edf0 + edf, length(z), criterion, ...)
 
-      if(!is.null(env$ic_val) & FALSE) {
+      if(!is.null(env$ic_val)) {
         if((ic < env$ic_val) & (ic < env$ic00_val)) {
           par <- c(g, tau2)
           names(par) <- names(x$state$parameters)
@@ -1639,6 +1639,7 @@ bfit_iwls <- function(x, family, y, eta, id, weights, criterion, ...)
       U <- chol2inv(chol(W)) %*% t(V)
       g <- drop(g - t(U) %*% x$C %*% g)
     }
+    x$state$parameters <- set.par(x$state$parameters, g, "b")
   }
   
   ## Compute fitted values.
@@ -2581,7 +2582,7 @@ opt_boost <- boost <- function(x, y, family, weights = NULL, offset = NULL,
               nthreads = nthreads)
           } else {
             try(.Call("boost_fit", x[[i]]$smooth.construct[[j]], grad, nu2,
-              if(!is.null(weights)) as.numeric(weights[, i]) else numeric(0), rho, PACKAGE = "bamlss"), silent = TRUE)
+              if(!is.null(weights)) as.numeric(weights[, i]) else numeric(0), rho), silent = TRUE)
           }
         } else {
           x[[i]]$smooth.construct[[j]][["boost.fit"]](x = x[[i]]$smooth.construct[[j]],
@@ -3229,6 +3230,7 @@ boost_transform <- function(x, y, df = NULL, family,
   }
   
   if(initialize) {
+    nobs <- if(is.null(dim(y))) length(y) else nrow(y)
     eta <- get.eta(x)
     eta <- init.eta(eta, y, family, nobs)
     if(!is.null(offset)) {
@@ -3238,7 +3240,6 @@ boost_transform <- function(x, y, df = NULL, family,
           eta[[j]] <- eta[[j]] + offset[[j]]
       }
     }
-    nobs <- length(eta[[1]])
     start <- unlist(lapply(eta, mean, na.rm = TRUE))
 
     par <- rep(0, length(nx))
@@ -5278,7 +5279,7 @@ opt_isgd <- function(x, y, family, weights = NULL, offset = NULL,
     for(nxi in nx) zetaVec[[nxi]] <- numeric(N)
     ptm <- proc.time()
     for(i in seq.int(N)) {
-        cat(sprintf("   * no. obs %i\r", i))
+        cat(sprintf("   * nobs %i\r", i))
 
         ## evaluate gammaFun for current iteration
         gamma <- gammaFun(i + i.state) 
@@ -5469,7 +5470,7 @@ sgd_grep_X <- function(x) {
 
 #  ptm <- proc.time()
 #  while(k <= N) {
-#    cat(sprintf("   * no. obs %i\r", k))
+#    cat(sprintf("   * nobs %i\r", k))
 
 #    take <- (k - batch + 1L):k
 
@@ -6374,9 +6375,9 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
           }
         }
         if(iter < 2) {
-          cat(sprintf("   * iter %i, no. obs %i, edf %f\r", iter, btxt, round(edf, 4)))
+          cat(sprintf("   * iter %i, nobs %i, edf %f\r", iter, btxt, round(edf, 4)))
         } else {
-          cat(sprintf("   * iter %i, no. obs %i, eps %f, edf %f\r", iter, btxt, round(eps, 4), round(edf, 2)))
+          cat(sprintf("   * iter %i, nobs %i, eps %f, edf %f\r", iter, btxt, round(eps, 4), round(edf, 2)))
         }
       }
 

@@ -2307,7 +2307,7 @@ SEXP fitted_matrix(SEXP X, SEXP samples)
   for(i = 0; i < nr; i++) {
     for(ii = 0; ii < iter; ii++) {
       tmp = 0.0;
-      for(j = 0; j < nc; ++j) {
+      for(j = 0; j < nc; j++) {
         tmp += Xptr[i + j * nr] * sptr[ii + j * iter];
       }
       outptr[i + ii * nr] = tmp;
@@ -3313,7 +3313,7 @@ SEXP boost_fit(SEXP x, SEXP y, SEXP nu, SEXP W, SEXP rho)
     ntau2 = length(PROTECT(VECTOR_ELT(x, S_ind))); ++nProtected;
     nc   -= ntau2;
   }
-  SEXP tau2       = PROTECT(allocVector(REALSXP,ntau2));
+  SEXP tau2 = PROTECT(allocVector(REALSXP,ntau2));
   ++nProtected;
   double *tau2ptr = REAL(tau2);
 

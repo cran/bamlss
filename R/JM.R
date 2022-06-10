@@ -2739,6 +2739,10 @@ propose_jm_mu_Matrix <- function(x, y,
   xhess <- xhess0 - x$hess(score = NULL, x$state$parameters, full = FALSE)
   
   Sigma2 <- matrix_inv(-1 * xhess, index = NULL)
+  if(is.character(Sigma2)) {
+    x$state$alpha <- -Inf
+    return(x$state)
+  }
   mu2 <- drop(g + nu * Sigma2 %*% xgrad)
   Sigma2 <- as.matrix(Sigma2) 
   

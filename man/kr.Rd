@@ -20,7 +20,7 @@
 
 \details{
   This smooth constructor implements univariate and bivariate Kriging terms. The
-  basis functions are based on the \code{\link[geoR]{matern}} function. For finding
+  basis functions are based on the Matern covariance function. For finding
   knots, a space filling algorithm is used, see \code{\link[fields]{cover.design}}.
 }
 

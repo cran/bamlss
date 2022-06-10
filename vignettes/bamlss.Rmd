@@ -149,9 +149,13 @@ f <- log(price) ~ age + kilometer + tia + abs + sunroof
 
 b2 <- bamlss(f, family = "gaussian", data = Golf)
 ```
-and compare the models using the <code>[DIC()](`r prefix2`DIC.html)</code>
+and compare the models using the <code>[predict()](`r prefix2`predict.bamlss.html)</code> method
 ```{r}
-DIC(b1, b2)
+p1 <- predict(b1, model = "mu")
+p2 <- predict(b2, model = "mu")
+
+mean((Golf$price - p1)^2)
+mean((Golf$price - exp(p2))^2)
 ```
 indicating that the transformation seems to improve the model fit.
 
@@ -167,12 +171,11 @@ b3 <- bamlss(f, family = "gaussian", data = Golf)
 ```
 Comparing the models using the <code>[DIC()](`r prefix2`DIC.html)</code> function
 ```{r}
-DIC(b1, b2, b3)
+DIC(b2, b3)
 ```
-suggests that the polynomial model is not really an improvement, however, this is probably caused
-by an insignificant `tia` effect. The effects can be inspected graphically, to better understand
-their influence on `price`. Using the polynomial model, graphical inspections can be done using
-the `predict()` method.
+suggests that the polynomial model is slightly better. The effects can be inspected graphically,
+to better understand their influence on `price`. Using the polynomial model, graphical
+inspections can be done using the <code>[predict()](`r prefix2`predict.bamlss.html)</code> method.
 
 One major difference compared to other regression model implementations is that predictions can be
 made for single variables, only, where the user does not have to create a new data frame containing

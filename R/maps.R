@@ -291,7 +291,7 @@ neighbormatrix <- function(x, type = c("boundary", "dist", "delaunay", "knear"),
         try(as.character(slot(x, "data")[[names]]), silent = TRUE)
       }
     }
-    if(!is.null(names) & class(names) != "try-error") {
+    if(!is.null(names) & !inherits(names, "try-error")) {
       if(length(names) == nrow(adjmat)) {
         rownames(adjmat) <- names
         colnames(adjmat) <- names

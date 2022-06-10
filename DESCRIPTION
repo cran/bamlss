@@ -1,6 +1,6 @@
 Package: bamlss
-Version: 1.1-7
-Date: 2022-04-07
+Version: 1.1-8
+Date: 2022-06-09
 Title: Bayesian Additive Models for Location, Scale, and Shape (and
         Beyond)
 Authors@R: c(person(given = "Nikolaus", family = "Umlauf", role = c("aut", "cre"), email = "Nikolaus.Umlauf@uibk.ac.at",
@@ -21,17 +21,17 @@ Description: Infrastructure for estimating probabilistic distributional regressi
   <doi:10.18637/jss.v100.i04>.
 Depends: R (>= 3.5.0), coda, colorspace, mgcv
 Imports: Formula, MBA, mvtnorm, sp, Matrix, survival, methods, parallel
-Suggests: akima, bit, ff, fields, gamlss, gamlss.dist, geoR, rjags,
-        BayesX, mapdata, maps, maptools, nnet, spatstat, spdep, zoo,
-        keras, splines2, sdPrior, statmod, glogis, glmnet,
-        scoringRules, knitr, rmarkdown, MASS, tensorflow
+Suggests: bit, ff, fields, gamlss, gamlss.dist, interp, rjags, BayesX,
+        mapdata, maps, maptools, nnet, spatstat, spdep, zoo, keras,
+        splines2, sdPrior, statmod, glogis, glmnet, scoringRules,
+        knitr, rmarkdown, MASS, tensorflow
 License: GPL-2 | GPL-3
 LazyLoad: yes
 RoxygenNote: 7.1.1
 URL: http://www.bamlss.org/
 VignetteBuilder: knitr
 NeedsCompilation: yes
-Packaged: 2022-04-07 14:57:11 UTC; nik
+Packaged: 2022-06-10 04:04:14 UTC; nik
 Author: Nikolaus Umlauf [aut, cre] (<https://orcid.org/0000-0003-2160-9803>),
   Nadja Klein [aut] (<https://orcid.org/0000-0002-5072-5347>),
   Achim Zeileis [aut] (<https://orcid.org/0000-0003-0918-3766>),
@@ -40,4 +40,4 @@ Author: Nikolaus Umlauf [aut, cre] (<https://orcid.org/0000-0003-2160-9803>),
   Stanislaus Stadlmann [ctb]
 Maintainer: Nikolaus Umlauf <Nikolaus.Umlauf@uibk.ac.at>
 Repository: CRAN
-Date/Publication: 2022-04-08 07:02:28 UTC
+Date/Publication: 2022-06-10 06:50:02 UTC

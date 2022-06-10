@@ -123,9 +123,9 @@ get_BayesXsrc(dir = NULL, install = TRUE)
 \details{
   Function \code{sam_BayesX()} writes a \pkg{BayesX} \code{.prg} file and processes the data.
   Then, the function call the \pkg{BayesX} binary via function
-  \code{\link[BayesXsrc]{run.bayesx}}. After the \pkg{BayesX} sampler has finished, the function
-  reads back in all the parameter samples that can then be used for further processing within
-  \code{\link{bamlss}}, i.a.
+  \code{run.bayesx()} of the \pkg{BayesXsrc} package. After the \pkg{BayesX} sampler has
+  finished, the function reads back in all the parameter samples that can then be used
+  for further processing within \code{\link{bamlss}}, i.a.
 
   The smooth term constructor functions \code{\link[mgcv]{s}} and \code{\link[mgcv]{te}} can
   be used with the \code{sam_BayesX()} sampler. When using \code{\link[mgcv]{te}} note that only

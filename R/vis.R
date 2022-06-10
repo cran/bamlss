@@ -1403,7 +1403,7 @@ plotmap <- function(map, x = NA, id = NULL, select = NULL,
   missing = TRUE, swap = FALSE, range = NULL, names = FALSE, values = FALSE, col = NULL,
   ncol = 100, breaks = NULL, cex.legend = 1, cex.names = 1, cex.values = cex.names,
   digits = 2L, mar.min = 2, add = FALSE, interp = FALSE, grid = 200, land.only = FALSE,
-  extrap = FALSE, outside = FALSE, type = "akima", linear = FALSE, k = 40,
+  extrap = FALSE, outside = FALSE, type = "interp", linear = FALSE, k = 40,
   p.pch = 15, p.cex = 1, shift = NULL, trans = NULL, scheme = 1, ...)
 {
   if(missing(map))
@@ -1874,7 +1874,7 @@ set.plot2d.specs <- function(nc, args, col.lines, is.bayesx)
 
 
 interp2 <- function(x, y, z, xo = NULL, yo = NULL, grid = 30,
-  type = c("mba", "akima", "mgcv", "gam", "raw"), linear = FALSE, extrap = FALSE, k = 40)
+  type = c("mba", "interp", "mgcv", "gam", "raw"), linear = FALSE, extrap = FALSE, k = 40)
 {
   type <- tolower(type)
   type <- match.arg(type)
@@ -1915,24 +1915,12 @@ interp2 <- function(x, y, z, xo = NULL, yo = NULL, grid = 30,
   if(type == "mba") {
     fit <- MBA::mba.surf(data.frame("x" = x, "y" = y, "z" = z), xgrid, ygrid)$xyz.est$z
   }
-  if(type == "akima") {
-    if(isTRUE(getOption("use.akima"))) {
-      stopifnot(requireNamespace("akima"))
-    } else {
-      if(requireNamespace("akima")) {
-        cat("NOTE: Package 'akima' has an ACM license that restricts applications to non-commercial usage.\n")
-      } else {
-        stop(paste("plot3d() can only be used if the 'akima' package is installed. ",
-          "Note that 'akima' has an ACM license that restricts applications to ",
-          "non-commercial usage.", sep = ""))
-      }
-    }
-
-    fit <- try(akima::interp(x, y, z, xo = xo, yo = yo, 
+  if(type == "interp") {
+    fit <- try(interp::interp(x, y, z, xo = xo, yo = yo, 
       duplicate = "mean", linear = linear, extrap = extrap)$z, silent = TRUE)
     if(inherits(fit, "try-error") | all(is.na(fit))) {
-      cat("NOTE: akima::interp() is designed for irregular data points, the coordinates will be slightly jittered to obtain irregular spaced points.\n")
-      fit <- try(akima::interp(jitter(x, amount = .Machine$double.eps),
+      cat("NOTE: interp::interp() is designed for irregular data points, the coordinates will be slightly jittered to obtain irregular spaced points.\n")
+      fit <- try(interp::interp(jitter(x, amount = .Machine$double.eps),
         jitter(y, amount = .Machine$double.eps), z, xo = xo, yo = yo, 
         duplicate = "mean", linear = linear, extrap = extrap)$z, silent = TRUE)
     }
