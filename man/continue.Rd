@@ -48,7 +48,7 @@ b <- bamlss(num ~ s(x1) + s(x2) + s(x3) + te(lon,lat), data = d)
 a <- continue(b)
 
 ## Plot all samples.
-plot(a, which = "samples")
+## plot(a, which = "samples")
 }
 }
 

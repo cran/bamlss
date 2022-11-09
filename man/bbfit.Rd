@@ -138,10 +138,10 @@ b1 <- bamlss(f, data = file.path(tf, "d.raw"),
   always = FALSE)
 
 ## Plot estimated effects.
-plot(b1)
+## plot(b1)
 
 ## Plot coefficient paths for x3 in mu.
-pathplot(b1, name = "mu.s.s(x3).b")
+## pathplot(b1, name = "mu.s.s(x3).b")
 
 ## (2) Same but always update, this mimics the classic SGD.
 ##     Note, for prediction only the last iteration is
@@ -156,7 +156,7 @@ b2 <- bamlss(f, data = file.path(tf, "d.raw"),
   always = TRUE)
 
 ## Plot coefficient paths for x3 in mu.
-pathplot(b2, name = "mu.s.s(x3).b")
+## pathplot(b2, name = "mu.s.s(x3).b")
 
 ## (3) Boosting type flavor, only update model term with
 ##     the largest contribution in the "out-of-sample"
@@ -186,7 +186,7 @@ b3 <- bamlss(f, data = d, sampler = FALSE, optimizer = opt_bbfit,
     select = TRUE, always = FALSE, start = start)
 
 ## Plot log-likelihood contributions.
-contribplot(b3)
+## contribplot(b3)
 ## In this case, the algorithm did not converge,
 ## we need more iterations/batches.
 
@@ -205,10 +205,10 @@ set.seed(4)
 b4 <- bamlss(f, data = d, sampler = FALSE, optimizer = opt_bbfitp,
   batch_ids = batch_ids, aic = TRUE, slice = TRUE)
 
-plot(b4)
+## plot(b4)
 
 ## Plot parameter updates/samples.
-plot(b4, which = "samples")
+## plot(b4, which = "samples")
 
 ## Predict with burnin and compute mean
 ## prediction of the last 20 iterates.

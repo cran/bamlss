@@ -179,13 +179,13 @@ b <- bamlss(f, data = d, optimizer = opt_boost,
   maxit = 1000, plot = FALSE)
 
 ## Plot estimated effects.
-plot(b)
+## plot(b)
 
 ## Print and plot the boosting summary.
 boost_summary(b, plot = FALSE)
-boost_plot(b, which = 1)
-boost_plot(b, which = 2)
-boost_plot(b, which = 3, name = "mu.s.te(lon,lat).")
+## boost_plot(b, which = 1)
+## boost_plot(b, which = 2)
+## boost_plot(b, which = 3, name = "mu.s.te(lon,lat).")
 
 ## Extract estimated parameters for certain
 ## boosting iterations.
@@ -210,11 +210,11 @@ b <- bamlss(f, data = d, optimizer = opt_boostm,
   maxit = 400, stop.criterion = "AIC", force.stop = FALSE)
 
 ## Plot estimated effects.
-plot(b)
+## plot(b)
 
 ## Plot AIC and log-lik contributions.
-boost_plot(b, "AIC")
-boost_plot(b, "loglik.contrib")
+## boost_plot(b, "AIC")
+## boost_plot(b, "loglik.contrib")
 
 ## Out-of-sample selection of model terms.
 set.seed(123)
@@ -247,7 +247,7 @@ b <- bamlss(f, data = dtrain, sampler = FALSE, optimizer = opt_boost,
   selectfun = sfun, always = "best")
 
 ## Plot curve of negative out-of-sample log-likelihood.
-boost_plot(b, which = "user")
+## boost_plot(b, which = "user")
 }
 }
 

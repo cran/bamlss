@@ -31,6 +31,7 @@
 \alias{gumbel_bamlss}
 \alias{mix_bamlss}
 \alias{ELF_bamlss}
+\alias{DGP_bamlss}
 
 \title{
   Distribution Families in \pkg{bamlss}
@@ -54,6 +55,7 @@ binomial_bamlss(link = "logit", ...)
 cnorm_bamlss(...)
 cox_bamlss(...)
 dw_bamlss(...)
+DGP_bamlss(...)
 dirichlet_bamlss(...)
 ELF_bamlss(..., tau = 0.5)
 gaussian_bamlss(...)

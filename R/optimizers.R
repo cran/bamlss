@@ -3770,20 +3770,58 @@ print.boost_summary <- function(x, summary = TRUE, plot = TRUE,
         }
         matplot(x$loglik, type = "l", lty = 1,
           xlab = "Iteration", ylab = "LogLik contribution", col = cols[as.factor(xn)],
-          lwd = args$lwd, axes = FALSE)
+          lwd = args$lwd, axes = FALSE, main = args$main)
         box()
         axis(2)
         at <- pretty(1:nrow(x$loglik))
         at[1L] <- 1
         axis(1, at = at)
-        abline(v = x$mstop, lwd = 3, col = "lightgray")
+
         cn <- colnames(x$loglik)
         if(!is.null(args$drop)) {
           for(dn in args$drop)
             cn <- gsub(dn, "", cn, fixed = TRUE)
         }
-        axis(4, at = x$loglik[nrow(x$loglik), ], labels = cn, las = 1)
-        axis(3, at = x$mstop, labels = paste("mstop =", x$mstop))
+        if(!is.null(args$name)) {
+          for(n in args$name)
+            cn <- gsub(n, "", cn, fixed = TRUE)
+        }
+
+        at <- x$loglik[nrow(x$loglik), ]
+
+        if(!is.null(args$showzero)) {
+          if(!args$showzero) {
+            cn <- cn[at != 0]
+            at <- at[at != 0]
+          }
+        }
+
+        labs <- labs0 <- cn
+        plab <- at
+        o <- order(plab, decreasing = TRUE)
+        labs <- labs[o]
+        plab <- plab[o]
+        rplab <- diff(range(plab))
+        dthres <- args$dthres
+        if(is.null(dthres))
+          dthres <- 0.02
+        for(i in 1:(length(plab) - 1)) {
+          dp <- abs(plab[i] - plab[i + 1]) / rplab
+          if(dp <= dthres) {
+            labs[i + 1] <- paste(c(labs[i], labs[i + 1]), collapse = ",")
+            labs[i] <- ""
+          }
+        }
+        labs <- labs[order(o)]
+        at <- at[labs != ""]
+        labs <- labs[labs != ""]
+
+        axis(4, at = at, labels = labs, las = 1)
+
+        if(!isFALSE(args$mstop)) {
+          abline(v = x$mstop, lwd = 3, col = "lightgray")
+          axis(3, at = x$mstop, labels = paste("mstop =", x$mstop))
+        }
       }
       if(w %in% c("aic", "bic", "user")) {
         if(!is.null(x$criterion)) {
@@ -4525,6 +4563,9 @@ dl.bamlss <- function(object,
 
   family <- family(object)
 
+  if(is.null(family$keras))
+    family$keras <- keras_loss(family$family)
+
   if(is.null(family$keras$nloglik))
     stop("no keras negative loglik() function is specified!")
 
@@ -4553,7 +4594,7 @@ dl.bamlss <- function(object,
   if(is.null(l1) & !is.null(l2))
     pen <- paste0('regularizer_l2(', l2, ')')
   if(!is.null(l1) & !is.null(l2))
-    pen <- paste0('regularizer_l1_l2(', l1,, ', ',  l2, ')')
+    pen <- paste0('regularizer_l1_l2(', l1, ', ',  l2, ')')
 
   for(j in 1:length(X)) {
     inputs[[j]] <- keras::layer_input(shape = ncol(X[[j]]))
@@ -4624,7 +4665,7 @@ dl.bamlss <- function(object,
   object$elapsed <- elapsed
   object$history <- history
 
-  class(object) <- "dl.bamlss"
+  class(object) <- c("dl.bamlss", "bamlss.frame")
 
   return(object)
 }
@@ -5859,6 +5900,7 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
           } else {
             start2 <- start[paste0(i, ".s.", j, ".b", 1:ncX)]
           }
+
           if(!all(is.na(start2))) {
             if(any(is.na(start2)))
               stop("dimensions do not match, check starting values!")
@@ -6235,6 +6277,7 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
 #              }
               if((((ll1 > ll0) & (epsll > eps_loglik)) | always) & accept) {
                 tau2[[i]][[j]] <- tau2s
+
                 S <- 0
                 for(l in 1:length(tau2[[i]][[j]])) {
                   S <- S + 1/tau2[[i]][[j]][l] * if(is.function(x[[i]]$smooth.construct[[j]]$S[[l]])) {

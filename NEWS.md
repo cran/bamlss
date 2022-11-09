@@ -1,5 +1,9 @@
 # bamlss 1.1-8
 
+* Small fix in C code.
+
+# bamlss 1.1-8
+
 * Removing akima and geoR dependencies.
 
 * Fixed predict problems when using by variables.

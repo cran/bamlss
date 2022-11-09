@@ -11,6 +11,7 @@ bamlss.frame <- function(formula, data = NULL, family = "gaussian",
   ## Parse formula.
   if(!inherits(formula, "bamlss.formula"))
     formula <- bamlss.formula(formula, family, specials, env = parent.frame())
+  envir_formula <- environment(formula)
   if(!is.null(attr(formula, "orig.formula")))
     formula <- attr(formula, "orig.formula")
 
@@ -148,7 +149,7 @@ bamlss.frame <- function(formula, data = NULL, family = "gaussian",
   ## Assign the 'x' master object.
   bf$x <- design.construct(bf$terms, data = bf$model.frame, knots = knots,
     model.matrix = model.matrix, smooth.construct = smooth.construct, model = NULL,
-    scale.x = scale.x, specials = specials, ...)
+    scale.x = scale.x, specials = specials, envir_formula = envir_formula, ...)
 
   bf$knots <- knots
 
@@ -246,6 +247,10 @@ design.construct <- function(formula, data = NULL, knots = NULL,
   doCmat <- list(...)$Cmat
   if(is.null(doCmat))
     doCmat <- FALSE
+
+  envir_formula <- list(...)$envir_formula
+  if(is.null(envir_formula))
+    envir_formula <- parent.frame()
 
   if(is.null(gam.side))
     gam.side <- FALSE
@@ -346,6 +351,7 @@ design.construct <- function(formula, data = NULL, knots = NULL,
             dim = c(nobs, ncol(mm_test)))
           k <- 1
           np <- 0
+          cat("  .. ff processing model.matrix\n")
           for(ic in bamlss_chunk(data)) {
             obj$model.matrix[ic, ] <- model.matrix(mm_terms, data = data[ic, ])
             np <- np + length(ic)
@@ -354,6 +360,7 @@ design.construct <- function(formula, data = NULL, knots = NULL,
             cat("  .. ..", paste0(formatC(np / nobs * 100, width = 7), "%"))
             k <- k + 1
           }
+          cat("\n")
           colnames(obj$model.matrix) <- colnames(mm_test)
         }
       }
@@ -372,7 +379,7 @@ design.construct <- function(formula, data = NULL, knots = NULL,
         sid <- NULL
       if(!is.null(sid) | !is.null(fterms)) {
         sterms <- sterm_labels <- attr(tx, "term.labels")[sid]
-        sterms <- lapply(sterms, function(x) { eval(parse(text = x)) })
+        sterms <- lapply(sterms, function(x) { eval(parse(text = x), envir = envir_formula) })
         nst <- NULL
         for(j in seq_along(sterms)) {
           sl <- sterms[[j]]$label
@@ -914,11 +921,41 @@ ffappend <- function(x, y, adjustvmode=TRUE, ...){
    x
 }
 
+
+ffbase_checkRange <- function(range, x)
+{
+  if(is.null(range)) {
+    return(bit::ri(1, length(x)))
+  }
+  range
+}
+
+ffbase_min.ff <- function(x, ..., na.rm = FALSE, range = NULL)
+{
+  r <- ffbase_checkRange(range, x)
+  min(..., sapply(bit::chunk(x, from = min(r), to = max(r)), function(i) {
+    min(x[i], na.rm = na.rm)
+  }))
+}
+
+ffbase_max.ff <- function(x, ..., na.rm = FALSE, range = NULL) 
+{
+  r <- ffbase_checkRange(range, x)
+  max(..., sapply(bit::chunk(x, from = min(r), to = max(r)), function(i) {
+    max(x[i], na.rm = na.rm)
+  }))
+}
+
 smooth.construct_ff.default <- function(object, data, knots, ff_name, nthres = NULL, ...)
 {
   object$xt$center <- TRUE
   object$xt$nocenter <- FALSE
   terms <- object$term
+  if(length(object$term) < 2) {
+    if(inherits(object, "tp.smooth.spec")) {
+      class(object) <- "ps.smooth.spec"
+    }
+  }
   if(object$by != "NA") {
     if(!grepl(paste0("by=", object$by), object$label, fixed = TRUE)) {
       object$label <- strsplit(object$label, "")[[1]]
@@ -966,12 +1003,13 @@ smooth.construct_ff.default <- function(object, data, knots, ff_name, nthres = N
 #          } else {
 #            nd[[j]] <- sample(rep(xq, length.out = 1000L))
 #          }
-          #xmin <- ffbase::min.ff(data[[j]])
-          #xmax <- ffbase::max.ff(data[[j]])
+          xmin <- ffbase_min.ff(data[[j]])
+          xmax <- ffbase_max.ff(data[[j]])
+          nd[[j]] <- seq(xmin, xmax, length = 1000L)
 
-          ux <- unique_ff(data[[j]])
-          ux_ind <- floor(seq(1, length(ux), length = 1000L))
-          nd[[j]] <- ux[ux_ind]
+#          ux <- unique_ff(data[[j]])
+#          ux_ind <- floor(seq(1, length(ux), length = 1000L))
+#          nd[[j]] <- ux[ux_ind]
         } else {
           nd[[j]] <- sample(rep(unique(data[[j]]), length.out = 1000L))
         }
@@ -980,12 +1018,15 @@ smooth.construct_ff.default <- function(object, data, knots, ff_name, nthres = N
     nd <- as.data.frame(nd)
   }
   object <- smoothCon(object, data = if(nrow(data) > nthres) nd else as.data.frame(data),
-    knots = knots, absorb.cons = nrow(data) <= nthres)[[1L]]
+    knots = knots, absorb.cons = FALSE)[[1L]] ##nrow(data) <= nthres)[[1L]]
   rm(nd)
   nobs <- nrow(data)
   if(file.exists(paste0(xfile, ".rds"))) {
     object[["X"]] <- readRDS(paste0(xfile, ".rds"))
     bit::physical(object[["X"]])$filename <- paste0(xfile, ".ff")
+    if(file.exists(paste0(xfile, "_cmean.rds"))) {
+      object$ff_mean <- readRDS(paste0(xfile, "_cmean.rds"))
+    }
   } else {
     object[["X"]] <- ff::ff(0.0,
       length = nrow(data) * ncol(object[["X"]]),
@@ -1010,9 +1051,38 @@ smooth.construct_ff.default <- function(object, data, knots, ff_name, nthres = N
       cat("  .. ..", paste0(formatC(np / nobs * 100, width = 7), "%"))
       k <- k + 1
     }
-    saveRDS(object[["X"]], file = paste0(xfile, ".rds"))
     cat("\n")
+#    object$cdrop <- NULL
+#    for(j in 1:ncol(object[["X"]])) {
+#      vj <- var(object[["X"]][, j], na.rm = TRUE)
+#      if(vj < 1e-15) {
+#        object$cdrop <- c(object$cdrop, j)
+#      }
+#    }
+#    if(!is.null(object$cdrop)) {
+#      object[["X"]] <- object[["X"]][, -object$cdrop]
+#    }
+#    if(!inherits(object, "random.effect"))
+#      object$ff_mean <- rep(0, ncol(object[["X"]]))
+#    for(j in 1:ncol(object[["X"]])) {
+#      if(!inherits(object, "random.effect")) {
+#        object$ff_mean[j] <- mean(object[["X"]][, j], na.rm = TRUE)
+#        object[["X"]][, j] <- object[["X"]][, j] - object$ff_mean[j]
+#      }
+#    }
+    saveRDS(object[["X"]], file = paste0(xfile, ".rds"))
+#    if(!is.null(object$ff_mean)) {
+#      saveRDS(object$ff_mean, file = paste0(xfile, "_cmean.rds"))
+#    }
   }
+#  if(!is.null(object$cdrop)) {
+#    for(j in 1:length(object$S))
+#      object$S[[j]] <- object$S[[j]][-object$cdrop, -object$cdrop]
+#  }
+
+## f <- num ~ s(x1,k=40) + s(x2,k=40) + s(x3,k=40)
+## b <- bamlss(f, data = as.ffdf(d), optimizer = opt_bbfitp, slice = TRUE, batch_ids = lapply(1:500, function(i) sample(nrow(d), size = 500)), sampler = FALSE, aic = TRUE)
+
   if(!inherits(object, "nnet0.smooth") & FALSE) {
     csum <- 0
     for(ic in bamlss_chunk(object[["X"]])) {
@@ -1047,6 +1117,14 @@ Predict.matrix.ff_smooth.smooth.spec <- function(object, data)
   } else {
     X <- object$PredictMat(object, data)
   }
+#  if(!is.null(object$cdrop))
+#    X <- X[, -object$cdrop]
+#  if(!inherits(object, "random.effect")) {
+#    if(!is.null(object$ff_mean)) {
+#      for(j in 1:ncol(X))
+#        X[, j] <- X[, j] - object$ff_mean[j]
+#    }
+#  }
   return(X)
 }
 
@@ -2873,7 +2951,10 @@ bamlss.formula <- function(formula, family = NULL, specials = NULL, env = NULL, 
       }
     }
     if(any(j <- is.na(names(formula)))) {
-      formula <- formula[!j]
+      if(isFALSE(formula$cat))
+        formula <- formula[!j]
+      else
+        names(formula) <- paste0(names(formula)[1], 1:length(formula))
     }
     formula
   }
@@ -2916,7 +2997,6 @@ get_formula_envir <- function(formula)
 bamlss.formula.cat <- function(formula, family, data, reference)
 {
   env <- environment(formula)
-
   rn <- y <- NULL
   for(j in seq_along(formula)) {
     ft <- if(!inherits(formula[[j]]$formula, "formula")) {
@@ -8204,7 +8284,7 @@ traceplot2 <- function(theta, n.plot=100, ylab = "", ...) {
     as.numeric(quantile(x[1:n], c(.025, .5, .975), na.rm = TRUE))
   }, vectorize.args = "n")
   n.rep <- length(theta)
-  plot(1:n.rep, theta, col = "lightgrey", xlab = "Iterations",
+  plot(1:n.rep, theta, col = "lightgrey", xlab = "Iteration",
     ylab = ylab, type = "l", ...)
   iter <- round(seq(1, n.rep, length = n.plot + 1)[-1])
   tq <- cuq(iter, theta)
@@ -8423,7 +8503,7 @@ plot.bamlss.results <- function(x, model = NULL, term = NULL,
             } else "Ordinary", "residuals")
           if(is.null(args$ylab)) args2$ylab <- "Density"
           if(is.null(args$main)) {
-            args2$main <- "Histogramm and density"
+            args2$main <- "Histogram and density"
             if(ny > 1)
               args2$main <- paste(names(res0)[j], args2$main, sep = ": ")
           }
@@ -10705,7 +10785,7 @@ plot.bamlss.residuals <- function(x, which = c("hist-resid", "qq-resid", "wp"), 
         if(is.null(args$ylab))
           args$ylab <- "Density"
         if(is.null(args$main)) 
-          args$main <- paste("Histogramm and density", if(!is.null(cn[j])) paste(":", cn[j]) else NULL)
+          args$main <- paste("Histogram and density", if(!is.null(cn[j])) paste(":", cn[j]) else NULL)
         ok <- try(do.call("hist", args))
         if(!inherits(ok, "try-error"))
           lines(rdens)
