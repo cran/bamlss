@@ -34,15 +34,15 @@ jm_transform(x, y, data, terms, knots, formula, family, subdivisions = 25,
 ## Posterior mode optimizing engine.     
 opt_JM(x, y, start = NULL, weights = NULL, offset = NULL, 
   criterion = c("AICc", "BIC", "AIC"), maxit = c(100, 1), 
-  nu = c("lambda" = 0.1, "gamma" = 0.1, "mu" = 0.1, "sigma" = 0.1, 
-  "alpha" = 0.1, "dalpha" = 0.1),
+  nu = c("lambda" = 0.1, "gamma" = 0.1, "mu" = 1, "sigma" = 1,
+    "alpha" = 1, "dalpha" = 1),
   update.nu = FALSE, eps = 0.0001, alpha.eps = 0.001, ic.eps = 1e-08, 
   nback = 40, verbose = TRUE, digits = 4, ...)
 
 jm_mode(x, y, start = NULL, weights = NULL, offset = NULL, 
   criterion = c("AICc", "BIC", "AIC"), maxit = c(100, 1), 
-  nu = c("lambda" = 0.1, "gamma" = 0.1, "mu" = 0.1, "sigma" = 0.1, 
-  "alpha" = 0.1, "dalpha" = 0.1),
+  nu = c("lambda" = 0.1, "gamma" = 0.1, "mu" = 1, "sigma" = 1,
+    "alpha" = 1, "dalpha" = 1),
   update.nu = FALSE, eps = 0.0001, alpha.eps = 0.001, ic.eps = 1e-08, 
   nback = 40, verbose = TRUE, digits = 4, ...)
 

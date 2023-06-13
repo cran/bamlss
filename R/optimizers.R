@@ -2438,6 +2438,11 @@ opt_boost <- boost <- function(x, y, family, weights = NULL, offset = NULL,
   
   if(is.null(attr(x, "bamlss.engine.setup")))
     x <- bamlss.engine.setup(x, df = NULL, nodf = TRUE, ...)
+
+  start <- list(...)$start
+
+  if(!is.null(start))
+    x <- set.starting.values(x, start)
   
   np <- length(nx)
   nobs <- nrow(y)
@@ -2615,7 +2620,7 @@ opt_boost <- boost <- function(x, y, family, weights = NULL, offset = NULL,
                     if(inherits(x[[i]]$smooth.construct[[j]], "lasso.smooth") | inherits(x[[i]]$smooth.construct[[j]], "nnet.smooth")) {
                       if(iter < 2) {
                         aset <- if(x[[i]]$smooth.construct[[j]]$fuse) {
-                          sum(abs(unique.fuse(get.par(states[[i]][[j]]$parameters, "b"))) > 1e-10)
+                          sum(abs(unique_fuse(get.par(states[[i]][[j]]$parameters, "b"))) > 1e-10)
                         } else {
                           sum(abs(get.par(states[[i]][[j]]$parameters, "b")) > 1e-10)
                         }
@@ -2625,8 +2630,8 @@ opt_boost <- boost <- function(x, y, family, weights = NULL, offset = NULL,
                         aset1 <- apply(rbind(parm[[i]][[j]][1:(iter - 1L), , drop = FALSE],
                           get.par(states[[i]][[j]]$parameters, "b")), 2, sum)
                         if(x[[i]]$smooth.construct[[j]]$fuse) {
-                          aset0 <- sum(abs(unique.fuse(aset0)) > 1e-10)
-                          aset1 <- sum(abs(unique.fuse(aset1)) > 1e-10)
+                          aset0 <- sum(abs(unique_fuse(aset0)) > 1e-10)
+                          aset1 <- sum(abs(unique_fuse(aset1)) > 1e-10)
                         } else {
                           aset0 <- sum(abs(aset0) > 1e-10)
                           aset1 <- sum(abs(aset1) > 1e-10)
@@ -2837,7 +2842,7 @@ opt_boost <- boost <- function(x, y, family, weights = NULL, offset = NULL,
           if(inherits(x[[take[1]]]$smooth.construct[[take[2]]], "lasso.smooth") | inherits(x[[take[1]]]$smooth.construct[[take[2]]], "nnet.smooth")) {
             if(iter < 2) {
               aset <- if(x[[take[1]]]$smooth.construct[[take[2]]]$fuse) {
-                  sum(abs(unique.fuse(parm[[take[1]]][[take[2]]][if(light) 1L else iter, ])) > 1e-10)
+                  sum(abs(unique_fuse(parm[[take[1]]][[take[2]]][if(light) 1L else iter, ])) > 1e-10)
                 } else {
                   sum(abs(parm[[take[1]]][[take[2]]][if(light) 1L else iter, ]) > 1e-10)
                 }
@@ -2846,8 +2851,8 @@ opt_boost <- boost <- function(x, y, family, weights = NULL, offset = NULL,
               aset0 <- apply(parm[[take[1]]][[take[2]]][if(light) 1L else 1:(iter - 1L), , drop = FALSE], 2, sum)
               aset1 <- apply(parm[[take[1]]][[take[2]]][if(light) 1L else 1:iter, , drop = FALSE], 2, sum)
               if(x[[take[1]]]$smooth.construct[[take[2]]]$fuse) {
-                aset0 <- sum(abs(unique.fuse(aset0)) > 1e-10)
-                aset1 <- sum(abs(unique.fuse(aset1)) > 1e-10)
+                aset0 <- sum(abs(unique_fuse(aset0)) > 1e-10)
+                aset1 <- sum(abs(unique_fuse(aset1)) > 1e-10)
               } else {
                 aset0 <- sum(abs(aset0) > 1e-10)
                 aset1 <- sum(abs(aset1) > 1e-10)
@@ -2995,7 +3000,7 @@ reverse_edf <- function(x, bn, bmat, nobs, y, eta, approx = TRUE)
 }
 
 
-unique.fuse <- function(x, digits = 4) {
+unique_fuse <- function(x, digits = 4) {
   unique(round(x, digits = digits))
 }
 
@@ -4617,8 +4622,13 @@ dl.bamlss <- function(object,
     }
 
     opts <- paste(opts, collapse = " ")
+
+print(opts)
+
     eval(parse(text = opts))
   }
+
+stop()
 
   final_output <- keras::layer_concatenate(outputs)
 
@@ -4630,15 +4640,22 @@ dl.bamlss <- function(object,
   )
 
   names(X) <- NULL
-  if(length(X) > 1) {
-    Y <- matrix(y, ncol = 1)
-    for(j in 1:(length(nx) - 1))
-      Y <- cbind(Y, 1)
+  if(is.null(dim(y))) {
+    if(length(X) > 1) {
+      Y <- matrix(y, ncol = 1)
+      for(j in 1:(length(nx) - 1))
+        Y <- cbind(Y, 1)
+    } else {
+      Y <- matrix(y, ncol = 1)
+    }
+    if(length(X) < 2)
+      X <- X[[1L]]
   } else {
-    Y <- matrix(y, ncol = 1)
+    nc <- ncol(y)
+    Y <- y
+    for(j in 1:(length(nx) - nc))
+      Y <- cbind(Y, 1)
   }
-  if(length(X) < 2)
-    X <- X[[1L]]
 
   ptm <- proc.time()
 
@@ -4673,9 +4690,26 @@ dl.bamlss <- function(object,
 
 ## Extractor functions.
 fitted.dl.bamlss <- function(object, ...) { object$fitted.values }
-family.dl.bamlss <- function(object) { object$family }
+family.dl.bamlss <- function(object, ...) { object$family }
 residuals.dl.bamlss <- function(object, ...) { residuals.bamlss(object, ...) }
 plot.dl.bamlss <- function(x, ...) { plot(x$history, ...) }
+
+logLik.dl.bamlss <- function(object, ...)
+{
+  nd <- list(...)$newdata
+  rn <- response_name(object)
+  if(!is.null(nd)) {
+    y <- eval(parse(text = rn), envir = nd)
+  } else {
+    nd <- model.frame(object)
+    y <- nd[[rn]]
+  }
+  par <- predict(object, newdata = nd, type = "parameter")
+  ll <- sum(family(object)$d(y, par, log = TRUE), na.rm = TRUE)
+  attr(ll, "df") <- NA
+  class(ll) <- "logLik"
+  return(ll)
+}
 
 
 ## Predict function.
@@ -4722,6 +4756,7 @@ predict.dl.bamlss <- function(object, newdata, model = NULL,
     X <- X[[1L]]
 
   pred <- as.data.frame(predict(object$dnn, X))
+
   colnames(pred) <- nx
 
   if(!is.null(model)) {

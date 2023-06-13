@@ -948,10 +948,17 @@ surv_transform <- function(x, y, data, family,
 
 param_time_transform <- function(x, formula, data, grid, yname, timevar, take, derivMat = FALSE, eps = 1e-7)
 {
+  if(timevar != yname) {
+    if(!is.null(data[[timevar]])) {
+      data[[timevar]] <- data[[timevar]] - mean(data[[timevar]], na.rm = TRUE)
+    }
+  }
+
   if(derivMat)
     ddata <- data
   if(!is.null(take))
     data <- data[take, , drop = FALSE]
+
   X <- Xn <- NULL
   for(j in names(data)) {
     if((!grepl("Surv(", j, fixed = TRUE) & !grepl("Surv2(", j, fixed = TRUE)) & (j != yname) & (j != timevar)) {
@@ -1045,6 +1052,7 @@ sm_time_transform <- function(x, data, grid, yname, timevar, take, derivMat = FA
   }
 
   X <- PredictMat(x, X)
+
   gdim <- c(length(grid), length(grid[[1]]))
 
   x$XT <- extract_XT(X, gdim[1], gdim[2])

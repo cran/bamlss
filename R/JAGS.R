@@ -293,21 +293,21 @@ buildBUGS.smooth <- function(smooth, setup, i)
 
 ## For special terms, e.g. growth curves, this function
 ## builds the model code.
-buildBUGS.smooth.special <- function(smooth, setup, i)
+buildBUGS.smooth.special <- function(smooth, setup, i, ...)
 {
   UseMethod("buildBUGS.smooth.special")
 }
 
 
 ## Default special model term builder.
-buildBUGS.smooth.special.default <- function(smooth, setup, i)
+buildBUGS.smooth.special.default <- function(smooth, setup, i, ...)
 {
   buildBUGS.smooth(smooth, setup, i)
 }
 
 
 ## Special code builder for growth curve terms.
-buildBUGS.smooth.special.gc.smooth <- function(smooth, setup, i, zero)
+buildBUGS.smooth.special.gc.smooth <- function(smooth, setup, i, zero, ...)
 {
   center <- if(is.null(smooth$xt$center)) TRUE else smooth$xt$center
   pn <- paste("g", i, sep = "")

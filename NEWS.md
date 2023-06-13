@@ -1,4 +1,12 @@
-# bamlss 1.1-8
+# bamlss 1.2-0
+
+* Removing maptools dependencies.
+
+* Fixes in JM code.
+
+* Improvements on estimating deep distributional neural networks using TensorFlow.
+
+# bamlss 1.1-9
 
 * Small fix in C code.
 

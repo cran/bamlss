@@ -1933,7 +1933,7 @@ SEXP cnorm_loglik(SEXP y, SEXP mu, SEXP sigma, SEXP check)
   int n = length(y);
   double *yptr = REAL(y);
   double *muptr = REAL(mu);
-  double * sigmaptr = REAL(sigma);
+  double *sigmaptr = REAL(sigma);
   int *checkptr = INTEGER(check);
 
   double ll = 0.0;

@@ -56,7 +56,7 @@ sigmoid.fit.w <- function(X, y, weights = NULL, j = 2, ...) {
   rval
 }
 
-sigmoid.fit <- function(X, y, weights = NULL) {
+sigmoid.fit <- function(X, y, weights = NULL, ...) {
   if(any(is.na(y)) | any(is.na(X)))
     stop("NA values in data!")
   nr <- nrow(X)
@@ -106,45 +106,45 @@ logLik.sigmoid <- function(object, ...) {
   val
 }
 
-sigmoid <- function(x, ...) {
+sigmoid <- function(X, y, ...) {
   UseMethod("sigmoid")
 }
 
-sigmoid.formula <- function(formula, data, weights, ..., subset, na.action, contrasts = NULL) 
-{
-  class.ind <- function(cl) {
-    n <- length(cl)
-    x <- matrix(0, n, length(levels(cl)))
-    x[(1L:n) + n * (as.vector(unclass(cl)) - 1L)] <- 1
-    dimnames(x) <- list(names(cl), levels(cl))
-    x
-  }
-  m <- match.call(expand.dots = FALSE)
-  if(is.matrix(eval.parent(m$data))) 
-    m$data <- as.data.frame(data)
-  m$... <- m$contrasts <- NULL
-  m[[1L]] <- quote(stats::model.frame)
-  m <- eval.parent(m)
-  Terms <- attr(m, "terms")
-  x <- model.matrix(Terms, m, contrasts)
-  cons <- attr(x, "contrast")
-  w <- model.weights(m)
-  if(length(w) == 0L) 
-    w <- rep(1, nrow(x))
-  y <- model.response(m)
-  res <- sigmoid.default(x, y, w, ...)
-  res$terms <- Terms
-  res$coefnames <- colnames(x)
-  res$call <- match.call()
-  res$na.action <- attr(m, "na.action")
-  res$contrasts <- cons
-  res$xlevels <- .getXlevels(Terms, m)
-  class(res) <- c("sigmoid.formula", "sigmoid")
-  res
-}
+#sigmoid.formula <- function(formula, data, weights, ..., subset, na.action, contrasts = NULL) 
+#{
+#  class.ind <- function(cl) {
+#    n <- length(cl)
+#    x <- matrix(0, n, length(levels(cl)))
+#    x[(1L:n) + n * (as.vector(unclass(cl)) - 1L)] <- 1
+#    dimnames(x) <- list(names(cl), levels(cl))
+#    x
+#  }
+#  m <- match.call(expand.dots = FALSE)
+#  if(is.matrix(eval.parent(m$data))) 
+#    m$data <- as.data.frame(data)
+#  m$... <- m$contrasts <- NULL
+#  m[[1L]] <- quote(stats::model.frame)
+#  m <- eval.parent(m)
+#  Terms <- attr(m, "terms")
+#  x <- model.matrix(Terms, m, contrasts)
+#  cons <- attr(x, "contrast")
+#  w <- model.weights(m)
+#  if(length(w) == 0L) 
+#    w <- rep(1, nrow(x))
+#  y <- model.response(m)
+#  res <- sigmoid.default(x, y, w, ...)
+#  res$terms <- Terms
+#  res$coefnames <- colnames(x)
+#  res$call <- match.call()
+#  res$na.action <- attr(m, "na.action")
+#  res$contrasts <- cons
+#  res$xlevels <- .getXlevels(Terms, m)
+#  class(res) <- c("sigmoid.formula", "sigmoid")
+#  res
+#}
 
-sigmoid.default <- function(x, y, weights, ...) {
-  sigmoid.fit(x, y, weights)
+sigmoid.default <- function(X, y, weights, ...) {
+  sigmoid.fit(X, y, weights, ...)
 }
 
 estfun.sigmoid <- function(x, ...) {

@@ -131,7 +131,6 @@ xymap <- function(x, y, z, color = sequential_hcl(99, h = 100), raw.color = FALS
     fit <- interp2(x, y, z, xo = xo, yo = yo, grid = cgrid)
 
     if(!is.null(addmap)) {
-      maptools::gpclibPermit()
       eg <- expand.grid("x" = xo, "y" = yo)
       nob <- length(slot(slot(addmap, "polygons")[[1]], "Polygons"))
       pip <- NULL
@@ -518,8 +517,10 @@ drop2poly <- function(x, y, map, union = FALSE)
   if(inherits(map, "bnd") | inherits(map, "list")) {
     map <- list2sp(map)
   }
-  if(union)
-    map <- maptools::unionSpatialPolygons(map, rep(1L, length = length(map)), avoidGEOS  = TRUE)
+  if(union) {
+    map <- sf::st_union(sf::st_as_sf(map))
+    map <- sf::as_Spatial(map)
+  }
 
   np <- length(map@polygons)
   pip <- NULL

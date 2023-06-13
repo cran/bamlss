@@ -2357,10 +2357,65 @@ weibull_bamlss <- function(...)
       "nloglik" = function(y_true, y_pred) {
         K = keras::backend()
 
-        a = K$exp(y_pred[, 1])
-        sigma = K$exp(y_pred[,2])
+        alpha = K$exp(y_pred[,1])
+        lambda = K$exp(y_pred[,2])
 
-        ll = y_pred[, 1] - y_pred[, 2] + (a-1) * (K$log(y_true[,1]) - y_pred[, 2]) - (y_true[,1]/sigma)^a
+        ll = K$log(alpha) + (alpha - 1) * K$log(y_true[,1]) + alpha * K$log(lambda) - (K$pow(lambda * y_true[,1], alpha))
+
+        ll = K$sum(ll)
+
+        return(-1 * ll)
+      }
+    )
+  )
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+cweibull_bamlss <- function(...)
+{
+  links <- c(mu = "log", sigma = "log")
+
+  rval <- list(
+    "family" = "weibull",
+    "names" = c("mu", "sigma"),
+    "links" = parse.links(links, c(mu = "log", sigma = "log"), ...),
+    "d" = function(y, par, log = FALSE) {
+      mu2 <- par$mu/gamma((1/par$sigma) + 1)
+      i <- y[, "status"] == 1
+      d <- rep(0, length(i))
+      d[i] <- dweibull(y[i, 1], scale = mu2[i], shape = par$sigma[i], log = TRUE)
+      d[!i] <- log(1 - pweibull(y[!i, 1], scale = mu2[!i], shape = par$sigma[!i]))
+      if(!log)
+       d <- exp(d)
+      return(d)
+    },
+    "p" = function(y, par, ...) {
+      mu2 <- par$mu/gamma((1/par$sigma) + 1)
+      i <- y[, "status"] == 1
+      p <- rep(0, length(i))
+      p <- pweibull(y[, 1], scale = mu2, shape = par$sigma)
+      p[!i] <- runif(sum(!i), p[!i], 1)
+      return(p)
+    },
+    "keras" = list(
+      "nloglik" = function(y_true, y_pred) {
+        K = keras::backend()
+        tfm = tensorflow::tf$math
+
+        delta = y_true[,2]
+        y <- y_true[,1]
+
+        mu = K$exp(y_pred[,1])
+        sigma = K$exp(y_pred[,2])
+        mu2 = mu / (K$exp(tfm$lgamma((1 / sigma) + 1)) + 1e-08)
+
+        lld = K$log(mu2) + (mu2 - 1) * K$log(y) + mu2 * K$log(sigma) - ((sigma * y)^(mu2))
+        llp = K$log(1 - K$exp(-1 * ((y / (sigma + 1e-08))^(mu2))))
+
+        ll = delta * lld + (1 - delta) * llp
+
         ll = K$sum(ll)
 
         return(-1 * ll)
@@ -3919,7 +3974,7 @@ hurdleNB_bamlss <- function(...)
 }
 
 ztnbinom_bamlss <- function(...) {
-### Zero-truncated neg bin
+### Zero-truncated negative binomial
 ### Author: Thorsten Simon
 ### Date:   2018 Nov
   rval <- list(
@@ -3937,6 +3992,9 @@ ztnbinom_bamlss <- function(...) {
     "d" = function(y, par, log = FALSE) {
         rval <- stats::dnbinom(y, mu = par$mu, size = par$theta, log = TRUE) -
                 stats::pnbinom(0, mu = par$mu, size = par$theta, lower.tail = FALSE, log.p = TRUE)
+        rval[y < 1] <- -Inf
+        rval[par$mu <= 0] <- -Inf
+        rval[(par$mu <= 0) & (y == 1)] <- 0
         if(log) rval else exp(rval)
     },
     "p" = function(y, par, ...) {
@@ -4422,11 +4480,15 @@ tF <- function(x, ...)
          d <- rep(NA, length(par[[1L]]))
        return(d)
     },
-    "p" = if(!inherits(pfun, "try-error")) function(q, par, log = FALSE, ...) {
+    "p" = if(!inherits(pfun, "try-error")) function(q, par, log = FALSE, y = NULL, ...) {
+      if(!is.null(y))
+        q <- y
       par <- check_range(par)
       eval(pc)
     } else NULL,
-    "q" = if(!inherits(qfun, "try-error")) function(p, par, log = FALSE, ...) {
+    "q" = if(!inherits(qfun, "try-error")) function(p, par, log = FALSE, y = NULL, ...) {
+      if(!is.null(y))
+        p <- y
       par <- check_range(par)
       eval(qc)
     } else NULL,

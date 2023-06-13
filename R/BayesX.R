@@ -929,7 +929,7 @@ function(object, data, mcmcreg = FALSE, ...)
 }
 
 sx.construct.tensor.smooth <- sx.construct.tensor.smooth.spec <- sx.construct.t2.smooth.spec <-
-function(object, dir, prg, data, mcmcreg = FALSE, ...)
+function(object, data, dir, prg, mcmcreg = FALSE, ...)
 {
   by <- object$term[1L]
   term <- object$term[2L]
@@ -937,7 +937,7 @@ function(object, dir, prg, data, mcmcreg = FALSE, ...)
   object$bs.dim <- as.integer(object$bs.dim^2)
   object$term <- term
   object$by <- by
-  term <- sx.construct(object, dir, prg, data, mcmcreg = mcmcreg, ...)
+  term <- sx.construct(object, data, dir, prg, mcmcreg = mcmcreg, ...)
   term <- gsub("(pspline", "(tensor", term, fixed = TRUE)
   if(!mcmcreg) {
     term <- gsub("psplinerw2", "pspline2dimrw2", term)

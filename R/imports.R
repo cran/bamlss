@@ -13,7 +13,7 @@ expand.t2.smooths <- function(sm)
   k <- 0
   for(i in 1:m) {
     if(inherits(sm[[i]], "t2.smooth")) {
-      smi <- split.t2.smooth(sm[[i]])
+      smi <- split_t2_smooth(sm[[i]])
       comp.ind <- (k + 1):(k + length(smi))
       for(j in 1:length(smi)) {
         k <- k + 1
@@ -28,7 +28,7 @@ expand.t2.smooths <- function(sm)
   smr
 }
 
-split.t2.smooth <- function (object) 
+split_t2_smooth <- function (object) 
 {
   if(!inherits(object, "t2.smooth")) 
     return(object)
