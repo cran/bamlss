@@ -741,7 +741,7 @@ opt_JM <- jm_mode <- function(x, y, start = NULL, weights = NULL, offset = NULL,
           if (LogPostUP > LogPostOld || iter == 0) {
             LogPrioOld <- LogPrioUP
             LogPostOld <- LogPostUP
-            eta_timegrid_alphaUP <- eta_timegrid_alphaUP
+            eta_timegrid_alpha <- eta_timegrid_alphaUP
             eta_timegrid <- eta_timegridUP
             eta$alpha <- etaUP$alpha
             edf <- edf - x$alpha$smooth.construct[[sj]]$state$edf + state$edf

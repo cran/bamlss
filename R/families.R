@@ -2369,6 +2369,8 @@ weibull_bamlss <- function(...)
     )
   )
 
+  rval$type <- "continuous"
+
   class(rval) <- "family.bamlss"
   rval
 }

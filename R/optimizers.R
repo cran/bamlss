@@ -4623,12 +4623,8 @@ dl.bamlss <- function(object,
 
     opts <- paste(opts, collapse = " ")
 
-print(opts)
-
     eval(parse(text = opts))
   }
-
-stop()
 
   final_output <- keras::layer_concatenate(outputs)
 
@@ -6272,7 +6268,7 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
             } else {
               theta <- c(b0, "tau2" = tau2[[i]][[j]])
               ii <- grep("tau2", names(theta))
-              logP <- function(g, x, ll, ...) {
+              logP <- function(g, ...) {
                 -1 * objfun3(get.par(g, "tau2"))
               }
               sok <- TRUE

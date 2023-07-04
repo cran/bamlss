@@ -41,7 +41,7 @@ importFrom("stats", "acf", "as.formula", "coef", "complete.cases",
   "qgamma", "qlnorm", "qweibull", "prcomp", "deviance", "cor",
   "lm.fit", "nls.control", "qbeta", "qbinom", "qpois", "na.pass", "relevel",
   ".getXlevels", "binomial", "glm", "glm.fit", "lm", "naresid", "residuals",
-  "weights", "kmeans")
+  "weights", "kmeans", "setNames")
 importFrom("utils", "download.file", "flush.console", "getS3method",
   "head", "read.csv2", "read.table", "tail", "unzip",
   "write.table", "combn", "capture.output")
@@ -334,6 +334,26 @@ S3method("smooth.construct", "re2.smooth.spec")
 S3method("smooth.construct", "rs.smooth.spec")
 S3method("smooth.construct", "rsc.smooth.spec")
 S3method("smooth.construct", "str.smooth.spec")
+
+## For topmodels.
+import("distributions3")
+export(BAMLSS)
+S3method(cdf,BAMLSS)
+S3method(family,BAMLSS)
+S3method(format,BAMLSS)
+S3method(is_continuous,BAMLSS)
+S3method(is_discrete,BAMLSS)
+S3method(kurtosis,BAMLSS)
+S3method(log_pdf,BAMLSS)
+S3method(mean,BAMLSS)
+S3method(pdf,BAMLSS)
+S3method(print,BAMLSS)
+S3method(quantile,BAMLSS)
+S3method(random,BAMLSS)
+S3method(scoringRules::crps,BAMLSS)
+S3method(skewness,BAMLSS)
+S3method(support,BAMLSS)
+S3method(variance,BAMLSS)
 
 useDynLib(bamlss, .registration = TRUE)
 

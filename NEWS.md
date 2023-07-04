@@ -1,3 +1,7 @@
+# bamlss 1.2-1
+
+* Support for distributions3/topmodels infrastructure.
+
 # bamlss 1.2-0
 
 * Removing maptools dependencies.
