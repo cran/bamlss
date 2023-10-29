@@ -4524,3 +4524,78 @@ SEXP logNN_score_lambda(SEXP NODES, SEXP WEIGHTS, SEXP Y, SEXP MU, SEXP SIGMA, S
   return(rval);
 }
 
+
+// ZANBI
+SEXP dZANBI(SEXP y, SEXP mu, SEXP sigma, SEXP nu)
+{
+  int i;
+  int n = length(y);
+
+  SEXP dens;
+  PROTECT(dens = allocVector(REALSXP, n));
+
+  double *yptr = REAL(y);
+  double *muptr = REAL(mu);
+  double *sigmaptr = REAL(sigma);
+  double *nuptr = REAL(nu);
+  double *densptr = REAL(dens);
+
+  double fy0 = 0.0;
+  double fy = 0.0;
+
+  for(i = 0; i < n; i++) {
+    if(sigmaptr[i] > 1.0e-04) {
+      fy0 = dnbinom_mu(0.0, 1/sigmaptr[i], muptr[i], 1);
+      fy = dnbinom_mu(yptr[i], 1/sigmaptr[i], muptr[i], 1);
+    } else {
+      fy0 = dpois(0.0, muptr[i], 1);
+      fy = dpois(yptr[i], muptr[i], 1);
+    }
+    if(yptr[i] < 1) {
+      densptr[i] = log(nuptr[i]);
+    } else {
+      densptr[i] = log(1 - nuptr[i]) + fy - log(1 - exp(fy0));
+    }
+  }
+
+  UNPROTECT(1);
+  return dens;
+}
+
+SEXP llZANBI(SEXP y, SEXP mu, SEXP sigma, SEXP nu)
+{
+  int i;
+  int n = length(y);
+
+  SEXP ll;
+  PROTECT(ll = allocVector(REALSXP, 1));
+
+  double *yptr = REAL(y);
+  double *muptr = REAL(mu);
+  double *sigmaptr = REAL(sigma);
+  double *nuptr = REAL(nu);
+
+  double fy0 = 0.0;
+  double fy = 0.0;
+  double lls = 0.0;
+
+  for(i = 0; i < n; i++) {
+    if(sigmaptr[i] > 1.0e-04) {
+      fy0 = dnbinom_mu(0.0, 1/sigmaptr[i], muptr[i], 1);
+      fy = dnbinom_mu(yptr[i], 1/sigmaptr[i], muptr[i], 1);
+    } else {
+      fy0 = dpois(0.0, muptr[i], 1);
+      fy = dpois(yptr[i], muptr[i], 1);
+    }
+    if(yptr[i] < 1) {
+      lls += log(nuptr[i]);
+    } else {
+      lls += log(1 - nuptr[i]) + fy - log(1 - exp(fy0));
+    }
+  }
+
+  REAL(ll)[0] = lls;
+  UNPROTECT(1);
+  return ll;
+}
+

@@ -54,7 +54,7 @@ bamlss.frame(formula, data = NULL, family = "gaussian",
     \code{\link[mgcv]{smooth.construct}} and \code{\link[mgcv]{smoothCon}} be part
     of returned \code{bamlss.frame}?.}
   \item{ytype}{For categorical responses, should the response be a vector or matrix. If
-    \code{ytype == "matrix"} code{bamlss.frame()} uses function \code{\link{model.matrix}}
+    \code{ytype == "matrix"} \code{bamlss.frame()} uses function \code{\link{model.matrix}}
     to construct the response matrix from levels. If the response is a factor
     \code{ytype == "integer"} will create an integer response.}
   \item{scale.x}{Logical, should the model matrices of the linear parts be scaled?}

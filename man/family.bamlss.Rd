@@ -32,6 +32,7 @@
 \alias{mix_bamlss}
 \alias{ELF_bamlss}
 \alias{DGP_bamlss}
+\alias{ZANBI_bamlss}
 
 \title{
   Distribution Families in \pkg{bamlss}
@@ -79,6 +80,7 @@ Sichel_bamlss(...)
 GEV_bamlss(...)
 gumbel_bamlss(...)
 mix_bamlss(f1, f2, ...)
+ZANBI_bamlss(...)
 
 ## Extractor functions:
 \method{family}{bamlss}(object, ...)

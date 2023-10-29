@@ -1,8 +1,9 @@
-\name{dl.bamlss}
-\alias{dl.bamlss}
-\alias{predict.dl.bamlss}
+\name{ddnn}
+\alias{ddnn}
+\alias{predict.ddnn}
+\alias{cv_ddnn}
 
-\title{Deep Learning BAMLSS}
+\title{Deep Distributional Neural Network}
 
 \description{
   This function interfaces \pkg{keras} infrastructures for high-level neural networks. The function
@@ -12,17 +13,26 @@
 }
 
 \usage{
-## Deep learning bamlss.
-dl.bamlss(object, optimizer = "adam",
-  epochs = 30, batch_size = NULL,
-  nlayers = 2, units = 100, activation = "sigmoid",
+## Deep distributional neural net.
+ddnn(object, optimizer = "adam",
+  learning_rate = 0.01,
+  epochs = 100, batch_size = NULL,
+  nlayers = 2, units = 100, activation = "relu",
   l1 = NULL, l2 = NULL,
+  validation_split = 0.2, early_stopping = TRUE, patience = 50,
   verbose = TRUE, ...)
 
 ## Predict method.
-\method{predict}{dl.bamlss}(object, newdata,
+\method{predict}{ddnn}(object, newdata,
   model = NULL, type = c("link", "parameter"),
   drop = TRUE, ...)
+
+## CV method for optimizing
+## the number of epochs using
+## the CRPS.
+cv_ddnn(formula, data, folds = 10,
+  min_epochs = 300, max_epochs = 400,
+  interval = c(-Inf, Inf), ...)
 }
 
 \arguments{
@@ -31,6 +41,7 @@ dl.bamlss(object, optimizer = "adam",
     For character, options are: \code{"adam"} \code{"sgd"}, \code{"rmsprop"}, \code{"adagrad"},
     \code{"adadelta"}, \code{"adamax"}, \code{"adam"}. The default is
     \code{\link[keras]{optimizer_rmsprop}} with learning rate set to \code{1e-04}.}
+  \item{learning_rate}{The learning rate of the optimizer.}
   \item{epochs}{Number of times to iterate over the training data arrays, see
     \code{\link[keras]{fit}}.}
   \item{batch_size}{Number of samples per gradient update, see \code{\link[keras]{fit}}.}
@@ -39,6 +50,10 @@ dl.bamlss(object, optimizer = "adam",
   \item{activation}{Activation functions used for the hidden layers, can be a vector.}
   \item{l1}{Shrinkage parameter for L1 penalty.}
   \item{l2}{Shrinkage parameter for L2 penalty.}
+  \item{validation_split}{Proportion of data that should be used for validation.}
+  \item{early_stopping}{Logical, should early stopping of the optimizer be applied?}
+  \item{patience}{Integer, number of iterations the optimizer waits until early stopping is applied
+    after changes get small in validation data set.}
   \item{verbose}{Print information during runtime of the algorithm.}
   \item{newdata}{A \code{\link[base]{list}} or \code{\link[base]{data.frame}} that should
     be used for prediction.}
@@ -48,7 +63,12 @@ dl.bamlss(object, optimizer = "adam",
     is returned. If \code{type = "parameter"} predictions on the distributional parameter scale
     are returned.}
   \item{drop}{If predictions for only one \code{model} are returned, the list structure is dropped.}
-  \item{\dots}{For function \code{dl.boost()}, arguments passed to \code{\link{bamlss.frame}}.}
+  \item{formula}{The model formula.}
+  \item{data}{The data used for estimation.}
+  \item{folds}{The number of folds that should be generated.}
+  \item{min_epochs, max_epochs}{Defines the minimum and maximum epochs thet should be used.}
+  \item{interval}{Response interval, see function \code{\link{CRPS}}.}
+  \item{\dots}{Arguments passed to \code{\link{bamlss.frame}}.}
 }
 
 \details{
@@ -58,13 +78,13 @@ dl.bamlss(object, optimizer = "adam",
 }
 
 \value{
-  For function \code{dl.bamlss()} an object of class \code{"dl.bamlss"}. Note that extractor
+  For function \code{ddnn()} an object of class \code{"ddnn"}. Note that extractor
   functions \code{\link[stats]{fitted}} and \code{\link{residuals.bamlss}} can be applied.
-  For function \code{predict.dl.bamlss()} a list or vector of predicted values.
+  For function \code{predict.ddnn()} a list or vector of predicted values.
 }
 
 \section{WARNINGS}{
-  The BAMLSS deep learning infrastructure is still experimental!
+  The deep learning infrastructure is experimental!
 }
 
 \seealso{
@@ -87,7 +107,7 @@ f <- list(
 
 ## Fit neural network.
 library("keras")
-b <- dl.bamlss(f, epochs = 2000)
+b <- ddnn(f, epochs = 2000)
 
 ## Plot estimated functions.
 par(mfrow = c(1, 2))

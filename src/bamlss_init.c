@@ -4,6 +4,8 @@
 
 #define USE_FC_LEN_T
 
+SEXP dZANBI(SEXP, SEXP, SEXP, SEXP);
+SEXP llZANBI(SEXP, SEXP, SEXP, SEXP);
 SEXP bamlss_glogis_score(SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP bamlss_glogis_hesse(SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP bamlss_glogis_density(SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -65,6 +67,8 @@ SEXP logNN_score_sigma(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP logNN_score_lambda(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 
 static R_CallMethodDef callMethods[] = {
+  {"dZANBI", (DL_FUNC) &dZANBI, 4},
+  {"llZANBI", (DL_FUNC) &dZANBI, 4},
   {"logNN_dens", (DL_FUNC) &logNN_dens, 6},
   {"logNN_score_mu", (DL_FUNC) &logNN_score_mu, 6},
   {"logNN_score_sigma", (DL_FUNC) &logNN_score_sigma, 6},

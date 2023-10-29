@@ -1791,10 +1791,14 @@ cnorm_bamlss <- function(...)
       as.integer(attr(y, "check")), PACKAGE = "bamlss")
   }
   f$d <- function(y, par, log = FALSE) {
+    if(length(y) == 1)
+      y <- rep(y, length(par[[1L]]))
     ifelse(y <= 0, pnorm(-par$mu / par$sigma, log.p = log),
       dnorm((y - par$mu) / par$sigma, log = log) / par$sigma^(1 - log) - log(par$sigma) * log)
   }
   f$p <- function(y, par, log = FALSE) {
+    if(length(y) == 1)
+      y <- rep(y, length(par[[1L]]))
     return(ifelse(y == 0, runif(length(y), 0, pnorm(0, par$mu, par$sigma)), pnorm(y - par$mu, 0, par$sigma)))
   }
   f$q <- function(p, par, ...) {
@@ -4043,6 +4047,18 @@ ztnbinom_bamlss <- function(...) {
 
   class(rval) <- "family.bamlss"
   rval
+}
+
+
+RPS <- function(y, par, pfun, ymin = 1L, ymax = max(max(y), 100L)) {
+  K <- seq(ymin, ymax, by = 1L)
+  rps <- rep(0, length(y))
+  for (k in K) {
+    P <- pfun(k, par)
+    O <- y <= k
+    rps <- rps + (P - O)^2
+  }
+  return(rps)
 }
 
 ztnbinomVAR_bamlss <- function(...) {
@@ -6471,6 +6487,82 @@ mix_bamlss <- function(f1, f2, ...)
   rval$type <- unique(tolower(c(f1$type, f2$type)))
   if(length(rval$type) > 1)
     stop("types of mixing distributions must be identical!")
+
+  class(rval) <- "family.bamlss"
+  rval
+}
+
+
+## ZANBI.
+ldZANBI <- function(y, mu = 1, sigma = 1, nu = 0.3)
+{
+  n <- length(y)
+  if(length(mu) != n)
+    mu <- rep(mu, length.out = n)
+  if(length(sigma) != n)
+    sigma <- rep(sigma, length.out = n)
+  if(length(nu) != n)
+    nu <- rep(nu, length.out = n)
+  .Call("dZANBI", as.numeric(y), as.numeric(mu),
+    as.numeric(sigma), as.numeric(nu), package = "bamlss")
+}
+
+llZANBI <- function(y, mu = 1, sigma = 1, nu = 0.3)
+{
+  n <- length(y)
+  if(length(mu) != n)
+    mu <- rep(mu, length.out = n)
+  if(length(sigma) != n)
+    sigma <- rep(sigma, length.out = n)
+  if(length(nu) != n)
+    nu <- rep(nu, length.out = n)
+  .Call("llZANBI", as.numeric(y), as.numeric(mu),
+    as.numeric(sigma), as.numeric(nu), package = "bamlss")
+}
+
+ZANBI_bamlss <- function(...)
+{
+  stopifnot(requireNamespace("gamlss.dist"))
+
+  rval <- list(
+    "family" = "ZANBI",
+    "names"  = c("mu", "sigma", "nu"),
+    "links"  = c(mu = "log", sigma = "log", nu = "logit"),
+    "loglik" = function(y, par, ...) {
+      llZANBI(y, par$mu, par$sigma, par$nu)
+    },
+    "d" = function(y, par, log = FALSE) {
+      d <- ldZANBI(y, par$mu, par$sigma, par$nu)
+      if(!log)
+        d <- exp(d)
+      return(d)
+    }
+  )
+
+  rval$p <- function(y, par, ...) {
+    gamlss.dist::pZANBI(y, mu = par$mu, sigma = par$sigma, nu = par$nu)
+  }
+
+  rval$q <- function(p, par, ...) {
+    gamlss.dist::qZANBI(q, mu = par$mu, sigma = par$sigma, nu = par$nu)
+  }
+
+  rval$r <- function(n, par, ...) {
+    gamlss.dist::rZANBI(n, mu = par$mu, sigma = par$sigma, nu = par$nu)
+  }
+
+  rval$rps <- function(y, par, ymin = 0L, ymax = max(max(y), 100L)) {
+    K <- seq(ymin, ymax, by = 1L)
+    rps <- rep(0, length(y))
+    for (k in K) {
+      P <- rval$p(k, par)
+      O <- y <= k
+      rps <- rps + (P - O)^2
+    }
+    return(rps)
+  }
+
+  rval$type <- "discrete"
 
   class(rval) <- "family.bamlss"
   rval

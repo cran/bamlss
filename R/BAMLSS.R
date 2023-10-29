@@ -21,7 +21,7 @@ bamlss.frame <- function(formula, data = NULL, family = "gaussian",
 
   ## Create the model frame.
   bf$model.frame <- bamlss.model.frame(formula, data, family, weights,
-    subset, offset, na.action, specials, contrasts)
+    subset, offset, na.action, specials, contrasts, nthres = list(...)$nthres)
 
   if(!inherits(bf$model.frame, "ffdf")) {
     ## Type of y.
@@ -281,7 +281,7 @@ design.construct <- function(formula, data = NULL, knots = NULL,
 
   nthres <- list(...)$nthres
   if(is.null(nthres))
-    nthres <- 1
+    nthres <- 30000
 
   if(!is.character(data) & no_ff) {
     if(!inherits(data, "data.frame"))
@@ -290,6 +290,12 @@ design.construct <- function(formula, data = NULL, knots = NULL,
   if(is.character(data)) {
     data <- ff::read.table.ffdf(file = data,
       na.strings = "", header = TRUE, sep = ",")
+  }
+  if(inherits(data, "ffdf")) {
+    if(nrow(data) <= nthres) {
+      data <- as.data.frame(data)
+      no_ff <- TRUE
+    }
   }
   if(inherits(data, "ffdf")) {
     before <- TRUE
@@ -951,6 +957,27 @@ ffbase_max.ff <- function(x, ..., na.rm = FALSE, range = NULL)
   }))
 }
 
+## From ffbase.
+ffordered <- function (x) 
+{
+  ordered <- attr(x, "ffordered")
+  if(is.null(ordered)) {
+    ordered <- ff::fforder(x)
+  }
+  ordered
+}
+
+quantile_ff <- function (x, probs = seq(0, 1, 0.25), na.rm = FALSE, names = TRUE, ...) 
+{
+  N <- length(x)
+  nms <- if(names) paste(100 * probs, "%", sep = "") else NULL
+  qnt <- 1L + as.integer(probs * (N - 1))
+  idx <- ffordered(x)
+  ql <- x[idx[qnt]]
+  names(ql) <- nms
+  ql
+}
+
 smooth.construct_ff.default <- function(object, data, knots, ff_name, nthres = NULL, ...)
 {
   object$xt$center <- TRUE
@@ -970,12 +997,14 @@ smooth.construct_ff.default <- function(object, data, knots, ff_name, nthres = N
     terms <- unique(c(terms, object$by))
   }
   nd <- list()
-  cat("  .. ff processing term", object$label, "\n")
+  cat("  .. ff processing term", object$label)
   xfile <- rmf(object$label)
   xfile <- file.path(ff_name, xfile)
   is_f <- sapply(data, is.factor)
+  if(is.null(object$xt$digits))
+    object$xt$digits <- 3
   if(is.null(nthres))
-    nthres <- 1
+    nthres <- 30000
   if(nrow(data) > nthres) {
     if((length(terms) > 1) & !any(is_f) & FALSE) {
       ud <- nrow(unique(data[, terms]))
@@ -995,7 +1024,7 @@ smooth.construct_ff.default <- function(object, data, knots, ff_name, nthres = N
 #          uxn <- length(ux)
 #          if(uxn > 2) {
 #            uxl <- if(uxn < 1000L) uxn - 1L else 1000L
-#            xq <- ffbase::quantile.ff(data[[j]], probs = seq(0, 1, length = uxl), na.rm = TRUE)
+#            
 #            names(xq) <- NULL
 #            if(length(unique(xq)) < 100) {
 #              xq <- sort(rep(ux[], length.out = 1000L))
@@ -1008,30 +1037,42 @@ smooth.construct_ff.default <- function(object, data, knots, ff_name, nthres = N
 #          } else {
 #            nd[[j]] <- sample(rep(xq, length.out = 1000L))
 #          }
-          xmin <- ffbase_min.ff(data[[j]])
-          xmax <- ffbase_max.ff(data[[j]])
-          nd[[j]] <- seq(xmin, xmax, length = 1000L)
+#          xl <- ffbase_min.ff(data[[j]])
+#          xu <- ffbase_max.ff(data[[j]])
+#          nd[[j]] <- sample(data[[j]], size = 1000L, replace = nrow(data) < 1000L)
+#          nd[[j]][1] <- xl
+#          nd[[j]][2] <- xu
+          nd[[j]] <- unique(round(data[[j]][], digits = object$xt$digits))
+          cat("\n  .. .. unique obs. ", j, " = ", length(nd[[j]]),
+            ", digits = ", object$xt$digits, "\n", sep = "")
+
+          #ux <- unique_ff(data[[j]])
+          #ux_ind <- floor(seq(1, length(ux), length = 1000L))
+          #nd[[j]] <- ux[ux_ind]
 
 #          ux <- unique_ff(data[[j]])
-#          ux_ind <- floor(seq(1, length(ux), length = 1000L))
-#          nd[[j]] <- ux[ux_ind]
+#          lux <- length(ux)
+#          uxl <- if(lux < 1000L) lux - 1L else 1000L
+#          nd[[j]] <- rep(ffbase::quantile.ff(data[[j]], probs = seq(0, 1, length = uxl), na.rm = TRUE)[], length.out = 1000L)
         } else {
           nd[[j]] <- sample(rep(unique(data[[j]]), length.out = 1000L))
         }
       }
     }
+    nmax <- max(sapply(nd, length))
+    for(j in 1:length(nd))
+      nd[[j]] <- rep(nd[[j]], length.out = nmax)
     nd <- as.data.frame(nd)
   }
   object <- smoothCon(object, data = if(nrow(data) > nthres) nd else as.data.frame(data),
-    knots = knots, absorb.cons = FALSE)[[1L]] ##nrow(data) <= nthres)[[1L]]
+    knots = knots, absorb.cons = FALSE, scale.penalty = FALSE)[[1L]] ##nrow(data) <= nthres)[[1L]]
   rm(nd)
   nobs <- nrow(data)
   if(file.exists(paste0(xfile, ".rds"))) {
     object[["X"]] <- readRDS(paste0(xfile, ".rds"))
     bit::physical(object[["X"]])$filename <- paste0(xfile, ".ff")
-    if(file.exists(paste0(xfile, "_cmean.rds"))) {
-      object$ff_mean <- readRDS(paste0(xfile, "_cmean.rds"))
-    }
+    object[["S"]] <- readRDS(paste0(xfile, "_S", ".rds"))
+    ##object[["Z"]] <- readRDS(paste0(xfile, "_Z", ".rds"))
   } else {
     object[["X"]] <- ff::ff(0.0,
       length = nrow(data) * ncol(object[["X"]]),
@@ -1057,79 +1098,49 @@ smooth.construct_ff.default <- function(object, data, knots, ff_name, nthres = N
       k <- k + 1
     }
     cat("\n")
-#    object$cdrop <- NULL
-#    for(j in 1:ncol(object[["X"]])) {
-#      vj <- var(object[["X"]][, j], na.rm = TRUE)
-#      if(vj < 1e-15) {
-#        object$cdrop <- c(object$cdrop, j)
-#      }
-#    }
-#    if(!is.null(object$cdrop)) {
-#      object[["X"]] <- object[["X"]][, -object$cdrop]
-#    }
-#    if(!inherits(object, "random.effect"))
-#      object$ff_mean <- rep(0, ncol(object[["X"]]))
-#    for(j in 1:ncol(object[["X"]])) {
-#      if(!inherits(object, "random.effect")) {
-#        object$ff_mean[j] <- mean(object[["X"]][, j], na.rm = TRUE)
-#        object[["X"]][, j] <- object[["X"]][, j] - object$ff_mean[j]
-#      }
-#    }
-    saveRDS(object[["X"]], file = paste0(xfile, ".rds"))
-#    if(!is.null(object$ff_mean)) {
-#      saveRDS(object$ff_mean, file = paste0(xfile, "_cmean.rds"))
-#    }
-  }
-#  if(!is.null(object$cdrop)) {
-#    for(j in 1:length(object$S))
-#      object$S[[j]] <- object$S[[j]][-object$cdrop, -object$cdrop]
-#  }
 
-## f <- num ~ s(x1,k=40) + s(x2,k=40) + s(x3,k=40)
-## b <- bamlss(f, data = as.ffdf(d), optimizer = opt_bbfitp, slice = TRUE, batch_ids = lapply(1:500, function(i) sample(nrow(d), size = 500)), sampler = FALSE, aic = TRUE)
-
-  if(!inherits(object, "nnet0.smooth") & FALSE) {
-    csum <- 0
-    for(ic in bamlss_chunk(object[["X"]])) {
-      csum <- csum + colSums(object[["X"]][ic, ])
-    }
-    QR <- qr(matrix(csum, ncol = 1L))
-    object[["Z"]] <- qr.Q(QR, complete = TRUE)[, -1]
-    tX <- try(ffmatrixmult(object[["X"]], object[["Z"]]), silent = TRUE)
-    if(!inherits(tX, "try-error")) {
-      object[["X"]] <- tX
-      for(j in seq_along(object[["S"]])) {
-        if(!is.function(object[["S"]][[j]])) {
-          object[["S"]][[j]] <- crossprod(object[["Z"]], object[["S"]][[j]]) %*% object[["Z"]]
-        }
+    if(!inherits(object, "nnet0.smooth") & FALSE) {
+      csum <- 0
+      for(ic in bamlss_chunk(object[["X"]])) {
+        csum <- csum + colSums(object[["X"]][ic, ])
       }
-    } else {
-      stop(paste("could not process term", object$label))
+      C <- matrix(csum, nrow = 1)
+      QR <- qr(t(C))
+      object[["Z"]] <- qr.Q(QR, complete = TRUE)[, (nrow(C)+1):ncol(C)]
+      tX <- try(ffmatrixmult(object[["X"]], object[["Z"]]), silent = TRUE)
+      if(!inherits(tX, "try-error")) {
+        object[["X"]] <- tX
+        for(j in seq_along(object[["S"]])) {
+          if(!is.function(object[["S"]][[j]])) {
+            object[["S"]][[j]] <- crossprod(object[["Z"]], object[["S"]][[j]]) %*% object[["Z"]]
+          }
+        }
+      } else {
+        stop(paste("could not process term", object$label))
+      }
     }
+
+    saveRDS(object[["X"]], file = paste0(xfile, ".rds"))
+    saveRDS(object[["S"]], file = paste0(xfile, "_S", ".rds"))
+    ##saveRDS(object[["Z"]], file = paste0(xfile, "_Z", ".rds"))
   }
-  object$orig.class <- class(object)
-  class(object) <- "ff_smooth.smooth.spec"
+
+  ##object$orig.class <- class(object)
+  ##class(object) <- "ff_smooth.smooth.spec"
   return(object)
 }
 
 Predict.matrix.ff_smooth.smooth.spec <- function(object, data)
 {
   class(object) <- object$orig.class
+  data <- as.data.frame(data)
   if(is.null(object$PredictMat)) {
-    X <- Predict.matrix(object, data)
-    if(!is.null(object[["Z"]]))
+    X <- PredictMat(object, data)
+    if(!is.null(object[["Z"]]) & FALSE)
       X <- X %*% object[["Z"]]
   } else {
     X <- object$PredictMat(object, data)
   }
-#  if(!is.null(object$cdrop))
-#    X <- X[, -object$cdrop]
-#  if(!inherits(object, "random.effect")) {
-#    if(!is.null(object$ff_mean)) {
-#      for(j in 1:ncol(X))
-#        X[, j] <- X[, j] - object$ff_mean[j]
-#    }
-#  }
   return(X)
 }
 
@@ -2077,6 +2088,8 @@ bamlss <- function(formula, family = "gaussian", data = NULL, start = NULL, knot
     results <- family$results
 
   ## Switch for light variant.
+  if(inherits(data, "ffdf"))
+    light <- TRUE
   if(light) {
     results <- FALSE
     samplestats <- FALSE
@@ -2564,8 +2577,14 @@ bamlss.model.frame <- function(formula, data, family = gaussian_bamlss(),
       }
       return(data_ff)
     }
-    if(inherits(data, "ffdf"))
+    if(inherits(data, "ffdf")) {
+      nthres <- list(...)$nthres
+      if(is.null(nthres))
+        nthres <- 30000
+      if(nrow(data) < nthres)
+        data <- as.data.frame(data)
       return(data)
+    }
   } else data <- NULL
 
   if(inherits(formula, "bamlss.frame") | inherits(formula, "bamlss")) {
@@ -3515,6 +3534,7 @@ formula_hcheck <- function(formula)
 
 formula_insert <- function(from, to, formula)
 {
+  formula0 <- formula
   nf <- names(formula)
   hm <- sapply(to, max)
   o <- order(hm, decreasing = TRUE)
@@ -3526,7 +3546,15 @@ formula_insert <- function(from, to, formula)
     }
   }
   formula <- formula[take <- !(1:length(formula) %in% from)]
-  names(formula) <- nf[take]
+  if(any(take)) {
+    names(formula) <- nf[take]
+  } else {
+    formula <- formula0
+    if(length(formula) > 1) {
+      for(j in 2:length(formula))
+        formula[[j]] <- update(formula[[j]], NULL ~ .)
+    }
+  }
   formula
 }
 
@@ -3879,6 +3907,7 @@ compute_s.effect <- function(x, get.X, fit.fun, psamples,
 
   cnames <- colnames(smf)
   smf <- as.data.frame(smf)
+
   for(l in 1:nt) {
     if(is.matrix(data[[tterms[l]]])) {
       if(ncol(data[[tterms[l]]]) < 2)
@@ -3927,6 +3956,9 @@ compute_s.effect <- function(x, get.X, fit.fun, psamples,
 
   ## Assign class and attributes.
   if(!any_f)
+    smf <- unique(smf)
+
+  if(any_f & (length(x$terms) < 2))
     smf <- unique(smf)
 
   class(smf) <- c(class(x), "data.frame")
@@ -8792,7 +8824,7 @@ plot.bamlss.effect.default <- function(x, ...) {
         } else {
           if(is.null(args$ylab))
             args$ylab <- attr(x, "specs")$label
-            args$xlab <- attr(x, "specs")$term
+          args$xlab <- attr(x, "specs")$term
           do.call("plotblock", delete.args("plotblock", args,
             c("xlim", "ylim", "pch", "main", "xlab", "ylab", "lwd", "axes", "add", "scheme")))
         }

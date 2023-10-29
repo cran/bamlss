@@ -54,7 +54,7 @@ Nemec J, Chimani B, Gruber C, Auer I (2011).
 Umlauf N, Mayr G, Messner J, Zeileis A (2012).
   Why does it always rain on me? A spatio-temporal analysis of precipitation in Austria.
   \emph{Austrian Journal of Statistics}, \bold{41}(1), 81--92.
-  \url{http://www.stat.tugraz.at/AJS/ausg121/121Zeileis.pdf}
+  \doi{10.17713/ajs.v41i1.190}
 }
 
 \examples{

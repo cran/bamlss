@@ -36,13 +36,15 @@ n <- 300
 x <- runif(n, -2, 3)
 y <- sin(x) + rnorm(n, sd = 0.1)
 
+d <- data.frame("y" = y, "x" = x)
+
 ## Increasing: constr = 1.
 ## Decreasing: constr = 2.
 b <- bamlss(y ~ s2(x,bs="ms",xt=list(constr=1)),
-  data = d, sampler = FALSE, optimizer = opt_bfit)
+  data = d, optimizer = opt_bfit, sampler = sam_MVNORM)
 
 ## Predict and plot.
-p <- predict(b, model = "mu")
+p <- predict(b, model = "mu", FUN = c95)
 plot(y ~ x)
 plot2d(p ~ x, add = TRUE, col.lines = 4, lwd = 2)
 }}

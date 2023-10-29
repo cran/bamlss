@@ -130,6 +130,7 @@ export(
   "GEV_bamlss",
   "mix_bamlss",
   "DGP_bamlss",
+  "ZANBI_bamlss",
 
   ## extractor functions
   "DIC",
@@ -207,8 +208,9 @@ export(
   "n",
   "n.weights",
   "predictn",
-  "dl.bamlss",
-  "predict.dl.bamlss",
+  "ddnn",
+  "predict.ddnn",
+  "cv_ddnn",
   "make_weights",
 
   ## linear effects
@@ -313,15 +315,16 @@ S3method("samples", "bamlss")
 S3method("samples", "bamlss.frame")
 S3method("model.frame", "bamlss")
 S3method("model.frame", "bamlss.frame")
-S3method("predict", "dl.bamlss")
+S3method("predict", "ddnn")
 S3method("predict", "bboost")
-S3method("fitted", "dl.bamlss")
-S3method("residuals", "dl.bamlss")
+S3method("fitted", "ddnn")
+S3method("residuals", "ddnn")
 S3method("formula", "bamlss.formula.character")
 S3method("formula", "bamlss.formula")
 S3method("formula", "stabsel")
 S3method("as.character", "bamlss.formula")
 S3method("as.character", "bamlss.terms")
+S3method("prodist", "bamlss")
 
 S3method("smooth.construct", "Re.smooth.spec")
 S3method("smooth.construct", "Re2.smooth.spec")
@@ -338,22 +341,22 @@ S3method("smooth.construct", "str.smooth.spec")
 ## For topmodels.
 import("distributions3")
 export(BAMLSS)
-S3method(cdf,BAMLSS)
-S3method(family,BAMLSS)
-S3method(format,BAMLSS)
-S3method(is_continuous,BAMLSS)
-S3method(is_discrete,BAMLSS)
-S3method(kurtosis,BAMLSS)
-S3method(log_pdf,BAMLSS)
-S3method(mean,BAMLSS)
-S3method(pdf,BAMLSS)
-S3method(print,BAMLSS)
-S3method(quantile,BAMLSS)
-S3method(random,BAMLSS)
-S3method(scoringRules::crps,BAMLSS)
-S3method(skewness,BAMLSS)
-S3method(support,BAMLSS)
-S3method(variance,BAMLSS)
+S3method(cdf, BAMLSS)
+S3method(family, BAMLSS)
+S3method(format, BAMLSS)
+S3method(is_continuous, BAMLSS)
+S3method(is_discrete, BAMLSS)
+S3method(kurtosis, BAMLSS)
+S3method(log_pdf, BAMLSS)
+S3method(mean, BAMLSS)
+S3method(pdf, BAMLSS)
+S3method(print, BAMLSS)
+S3method(quantile, BAMLSS)
+S3method(random, BAMLSS)
+S3method(scoringRules::crps, BAMLSS)
+S3method(skewness, BAMLSS)
+S3method(support, BAMLSS)
+S3method(variance, BAMLSS)
 
 useDynLib(bamlss, .registration = TRUE)
 

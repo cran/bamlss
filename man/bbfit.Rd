@@ -169,18 +169,20 @@ b2 <- bamlss(f, data = file.path(tf, "d.raw"),
 
 ## Initialize intercepts.
 set.seed(0)
-b0 <- bamlss(num ~ 1, data = d, sampler = FALSE, optimizer = opt_bbfitp,
-  batch_ids = batch_ids, slice = TRUE)
+
+batch_ids <- lapply(1:400, function(i) { sample(1:nrow(d), size = 1000) })
+
+b0 <- bamlss(y ~ 1, data = d, sampler = FALSE, optimizer = opt_bbfitp,
+  batch_ids = batch_ids)
 
 ## Compute starting values, remove the first
 ## 10 iterates and compute the mean of the
 ## remaining iterates.
-start <- coef(b0, FUN = mean, burnin = 10)
+start <- coef(b0, FUN = mean, burnin = 200)
 
 ## Start boosting, only update if change in
 ## "out-of-sample" log-likelihood is 0.1%, i.e.,
 ## eps_loglik = 0.001.
-set.seed(3)
 b3 <- bamlss(f, data = d, sampler = FALSE, optimizer = opt_bbfit,
     batch_ids = batch_ids, nu = 0.1, aic = TRUE, eps_loglik = 0.001,
     select = TRUE, always = FALSE, start = start)

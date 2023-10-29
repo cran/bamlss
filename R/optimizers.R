@@ -3812,9 +3812,13 @@ print.boost_summary <- function(x, summary = TRUE, plot = TRUE,
           dthres <- 0.02
         for(i in 1:(length(plab) - 1)) {
           dp <- abs(plab[i] - plab[i + 1]) / rplab
-          if(dp <= dthres) {
-            labs[i + 1] <- paste(c(labs[i], labs[i + 1]), collapse = ",")
-            labs[i] <- ""
+          if(length(dp)) {
+            if(!is.na(dp)) {
+              if(dp <= dthres) {
+                labs[i + 1] <- paste(c(labs[i], labs[i + 1]), collapse = ",")
+                labs[i] <- ""
+              }
+            }
           }
         }
         labs <- labs[order(o)]
@@ -4537,10 +4541,10 @@ lasso_stop <- function(x)
 
 
 ## Deep learning bamlss.
-dl.bamlss <- function(object,
-  optimizer = "adam", epochs = 30, batch_size = NULL,
-  nlayers = 2, units = 100, activation = "sigmoid", l1 = NULL, l2 = NULL,
-  verbose = TRUE, ...)
+ddnn <- function(object,
+  optimizer = "adam", learning_rate = 0.01, epochs = 100, batch_size = NULL,
+  nlayers = 2, units = 100, activation = "relu", l1 = NULL, l2 = NULL,
+  validation_split = 0.2, early_stopping = TRUE, patience = 50, verbose = TRUE, ...)
 {
   stopifnot(requireNamespace("keras"))
   stopifnot(requireNamespace("tensorflow"))
@@ -4630,6 +4634,11 @@ dl.bamlss <- function(object,
 
   model <- keras::keras_model(inputs, final_output)
 
+  if(is.character(optimizer)) {
+    if(optimizer == "adam")
+      optimizer <- keras::optimizer_adam(learning_rate = learning_rate)
+  }
+
   model <- keras::compile(model,
     loss = nll, 
     optimizer = optimizer
@@ -4653,13 +4662,22 @@ dl.bamlss <- function(object,
       Y <- cbind(Y, 1)
   }
 
+  callbacks <- list()
+  if(early_stopping) {
+    callbacks <- list(
+      keras::callback_early_stopping(patience = patience)
+    )
+  }
+
   ptm <- proc.time()
 
   history <- keras::fit(model,
     x = X, 
     y = Y, 
     epochs = epochs, batch_size = batch_size,
-    verbose = as.integer(verbose)
+    verbose = as.integer(verbose),
+    validation_split = validation_split,
+    callbacks = callbacks
   )
 
   elapsed <- c(proc.time() - ptm)[3]
@@ -4678,19 +4696,44 @@ dl.bamlss <- function(object,
   object$elapsed <- elapsed
   object$history <- history
 
-  class(object) <- c("dl.bamlss", "bamlss.frame")
+  class(object) <- c("ddnn", "bamlss.frame")
 
   return(object)
 }
 
 
-## Extractor functions.
-fitted.dl.bamlss <- function(object, ...) { object$fitted.values }
-family.dl.bamlss <- function(object, ...) { object$family }
-residuals.dl.bamlss <- function(object, ...) { residuals.bamlss(object, ...) }
-plot.dl.bamlss <- function(x, ...) { plot(x$history, ...) }
+## Optimize epochs using CV.
+cv_ddnn <- function(formula, data, folds = 10, min_epochs = 300, max_epochs = 400, interval = c(-Inf, Inf), ...)
+{
+  i <- sample(1:folds, size = nrow(data), replace = TRUE)
+  epochs <- NULL
+  for(j in 1:folds) {
+    cat(".. start fold", j, "\n")
+    dtrain <- subset(data, i != j)
+    dtest <- subset(data, i == j)
+    crps <- NULL
+    epochs_v <- min_epochs:max_epochs
+    for(e in epochs_v) {
+      cat(e, "/", sep = "")
+      b <- ddnn(formula, data = dtrain, epochs = e, verbose = FALSE, ...)
+      crps <- c(crps, CRPS(b, newdata = dtest, interval = interval))
+    }
+    epochs <- c(epochs, epochs_v[which.min(crps)])
+    cat("\n.. fold =", j, "CRPS =", fmt(min(crps), digits = 5, width = 8), "epoch =", epochs_v[which.min(crps)], "\n")
+  }
+  epochs <- floor(mean(epochs))
+  cat(".. fitting final model using epochs =", epochs, "\n")
+  ddnn(formula, data = dtrain, epochs = epochs, verbose = FALSE, ...)
+}
 
-logLik.dl.bamlss <- function(object, ...)
+
+## Extractor functions.
+fitted.ddnn <- function(object, ...) { object$fitted.values }
+family.ddnn <- function(object, ...) { object$family }
+residuals.ddnn <- function(object, ...) { residuals.bamlss(object, ...) }
+plot.ddnn <- function(x, ...) { plot(x$history, ...) }
+
+logLik.ddnn <- function(object, ...)
 {
   nd <- list(...)$newdata
   rn <- response_name(object)
@@ -4709,7 +4752,7 @@ logLik.dl.bamlss <- function(object, ...)
 
 
 ## Predict function.
-predict.dl.bamlss <- function(object, newdata, model = NULL,
+predict.ddnn <- function(object, newdata, model = NULL,
   type = c("link", "parameter"), drop = TRUE, ...)
 {
   ## If data have been scaled (scale.d = TRUE)
@@ -4735,7 +4778,7 @@ predict.dl.bamlss <- function(object, newdata, model = NULL,
 
   type <- match.arg(type)
 
-  nx <- names(object$formula)
+  nx <- object$family$names
   X <- list()
   for(i in seq_along(nx)) {
     tfi <- drop.terms.bamlss(object$x[[i]]$terms,
@@ -5972,6 +6015,11 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
   tau2f <- rep(1, length(nx))
   names(tau2f) <- nx
 
+  batch_type <- list(...)$batch_type
+  if(is.null(batch_type))
+    batch_type <- "next"
+  batch_type <- c("next", "same", "random")[pmatch(tolower(batch_type), c("next", "same", "random"))]
+
   iter <- 1L
 
   ptm <- proc.time()
@@ -6003,10 +6051,18 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
       if(!srandom) {
         if(length(batch[[bid]]) > 2) {
           take <- batch[[bid]]
-          take2 <- if(bid < 2) {
-            batch[[bid + 1L]]
-          } else {
-            batch[[bid - 1L]]
+          if(batch_type == "next") {
+            take2 <- if(bid < 2) {
+              batch[[bid + 1L]]
+            } else {
+              batch[[bid - 1L]]
+            }
+          }
+          if(batch_type == "same") {
+            take2 <- take
+          }
+          if(batch_type == "random") {
+            take2 <- batch[[sample(bind[bind != bid], size = 1)]]
           }
         } else {
           take <- batch[[bid]][1L]:batch[[bid]][2L]
@@ -6090,11 +6146,10 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
 
           XWX <- crossprod(Xn * hess, Xn)
           I <- diag(1, ncol(XWX))
-          I[1, 1] <- 1e-10
 
           if(!ionly[[i]]) {
             if(ncol(I) > 1)
-              I[1, 1] <- 0
+              I[1, 1] <- 0.00001
           }
 
           etas[[i]] <- etas[[i]] - drop(Xt %*% b0)
@@ -6123,7 +6178,7 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
             return(ll)
           }
           if(ionly[[i]]) {
-            tau2fe <- 1e+10
+            tau2fe <- 1e+5
           } else {
             tau2fe <- try(tau2.optim(objfun2, tau2f[i], optim = TRUE), silent = TRUE)
           }
@@ -6248,9 +6303,10 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
                   iedf <- sum_diag(XWX %*% P)
                   ll <- -2 * family$loglik(yt, family$map2par(etas)) + K * iedf
                 } else {
-                  names(b) <- paste0("b", 1:length(b))
-                  names(tau2) <- paste0("tau2", 1:length(tau2))
-                  ll <- -1 * (family$loglik(yt, family$map2par(etas)) + x[[i]]$smooth.construct[[j]]$prior(c(b, tau2)))
+                  #names(b) <- paste0("b", 1:length(b))
+                  #names(tau2) <- paste0("tau2", 1:length(tau2))
+                  #ll <- -1 * (family$loglik(yt, family$map2par(etas)) + x[[i]]$smooth.construct[[j]]$prior(c(b, tau2)))
+                  ll <- -1 * family$loglik(yt, family$map2par(etas))
                 }
               } else {
                 ll <- mean((zs - etas[[i]])^2, na.rm = TRUE)
@@ -6268,7 +6324,7 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
             } else {
               theta <- c(b0, "tau2" = tau2[[i]][[j]])
               ii <- grep("tau2", names(theta))
-              logP <- function(g, ...) {
+              logP <- function(g, x, ll, ...) {
                 -1 * objfun3(get.par(g, "tau2"))
               }
               sok <- TRUE
@@ -6495,6 +6551,7 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
   rval$runtime <- elapsed
   rval$edf <- edf
   rval$nbatch <- nbatch
+  rval$sbatch <- length(take)
   rval$parpaths <- parm
   rval$epochs <- epochs
   rval$n.iter <- iter
@@ -6504,6 +6561,7 @@ opt_bbfit <- bbfit <- function(x, y, family, shuffle = TRUE, start = NULL, offse
 
   rval
 }
+
 
 contribplot <- function(x, ...) {
   if(is.null(ll <- x$model.stats$optimizer$llcontrib))
