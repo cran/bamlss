@@ -130,7 +130,7 @@ bamlss(formula, family = "gaussian", data = NULL,
       vector of optimum parameters. The names of the parameters should be such that they can be
       uniquely mapped to the corresponding model matrices in \code{x}. See function
       \code{\link{parameters}} for more details on parameter names. The default optimizer function
-      is \code{\link{bfit}}. The optimizer can return more information than only the optimum
+      is \code{\link{opt_bfit}}. The optimizer can return more information than only the optimum
       parameters. It is possible to return a list, the convention here is that an element named
       \code{"parameters"} then holds the named vector of estimated parameters. Possible other return
       values could be fitted values, the Hessian matrix, information criteria or information
@@ -175,7 +175,7 @@ bamlss(formula, family = "gaussian", data = NULL,
   Note that function \code{transform()}, \code{optimizer()}, \code{sampler()}, \code{samplestats()}
   and \code{results()} can be provided from the \code{\link{bamlss.family}} object, e.g.,
   if a \code{\link{bamlss.family}} object has an element named \code{"optimizer"}, which
-  represents a valid optimizer function such as \code{\link{bfit}}, exactly this optimizer
+  represents a valid optimizer function such as \code{\link{opt_bfit}}, exactly this optimizer
   function will be used as a default when using the family.
 }
 

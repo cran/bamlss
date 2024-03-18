@@ -34,3 +34,22 @@ bibentry(bibtype = "Article",
          doi = "10.1080/10618600.2017.1407325",
          header = "For the model framework please cite:",
 )
+
+bibentry(
+	bibtype     = "Article",
+	author      = c(
+		person("Thomas", "Muschinski"),
+		person(c("Georg", "J."), "Mayr"),
+		person("Thorsten", "Simon"),
+		person("Nikolaus", "Umlauf"),
+		person("Achim", "Zeileis")
+	),
+	title       = "Cholesky-Based Multivariate {G}aussian Regression",
+	journal     = "Econometrics and Statistics",
+	year        = "2024",
+  volume      = "29",
+  pages       = "261--281",
+	doi         = "10.1016/j.ecosta.2022.03.001",
+	header = "To cite mvnchol in publications use:"
+)
+

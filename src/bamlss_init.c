@@ -66,6 +66,16 @@ SEXP logNN_score_mu(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP logNN_score_sigma(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP logNN_score_lambda(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 
+/* mvnchol */
+SEXP log_dmvncholC(SEXP, SEXP, SEXP, SEXP);
+SEXP log_dmvnmodcholC(SEXP, SEXP, SEXP, SEXP);
+SEXP mu_score_mvncholC(SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP mu_score_mvnmodcholC(SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP lamdiag_score_mvncholC(SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP innov_score_mvnmodcholC(SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP lambda_score_mvncholC(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP phi_score_mvnmodcholC(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+
 static R_CallMethodDef callMethods[] = {
   {"dZANBI", (DL_FUNC) &dZANBI, 4},
   {"llZANBI", (DL_FUNC) &dZANBI, 4},
@@ -124,6 +134,14 @@ static R_CallMethodDef callMethods[] = {
   {"rho_score_mvnormAR1", (DL_FUNC) &rho_score_mvnormAR1, 7},
   {"ztnbinom_score_mu", (DL_FUNC) &ztnbinom_score_theta, 3},
   {"ztnbinom_score_theta", (DL_FUNC) &ztnbinom_score_theta, 3},
+  {"log_dmvncholC", (DL_FUNC) &log_dmvncholC, 4},
+  {"log_dmvnmodcholC", (DL_FUNC) &log_dmvnmodcholC, 4},
+  {"mu_score_mvncholC", (DL_FUNC) &mu_score_mvncholC, 5},
+  {"mu_score_mvnmodcholC", (DL_FUNC) &mu_score_mvnmodcholC, 5},
+  {"lamdiag_score_mvncholC", (DL_FUNC) &lamdiag_score_mvncholC, 5},
+  {"innov_score_mvnmodcholC", (DL_FUNC) &innov_score_mvnmodcholC, 5},
+  {"lambda_score_mvncholC", (DL_FUNC) &lambda_score_mvncholC, 6},
+  {"phi_score_mvnmodcholC", (DL_FUNC) &phi_score_mvnmodcholC, 6},
   {NULL, NULL, 0}
 };
 

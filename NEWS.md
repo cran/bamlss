@@ -1,3 +1,9 @@
+# bamlss 1.2-3
+
+* Added the modified Cholesky family.
+
+* Some touch ups for gamlss.dist family objects.
+
 # bamlss 1.2-2
 
 * More support for deep distributional networks.

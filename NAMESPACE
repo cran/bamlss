@@ -44,7 +44,7 @@ importFrom("stats", "acf", "as.formula", "coef", "complete.cases",
   "weights", "kmeans", "setNames")
 importFrom("utils", "download.file", "flush.console", "getS3method",
   "head", "read.csv2", "read.table", "tail", "unzip",
-  "write.table", "combn", "capture.output")
+  "write.table", "combn", "capture.output", "getFromNamespace")
 
 import("Matrix")
 
@@ -245,7 +245,14 @@ export(
   "smooth_check",
   "engines",
   "gamlss_distributions",
-  "CRPS"
+  "CRPS",
+
+  ## mvnchol
+  "dist_mvnchol",
+  "make_formula",
+  "mvn_chol",
+  "mvn_modchol",
+  "mvnchol_bamlss"
 )
 
 S3method("plot", "bamlss")

@@ -16,7 +16,7 @@ head(Golf)
 ## -----------------------------------------------------------------------------
 f <- price ~ age + kilometer + tia + abs + sunroof
 
-## ---- message=FALSE, results="hide"-------------------------------------------
+## ----message=FALSE, results="hide"--------------------------------------------
 library("bamlss")
 
 set.seed(111)
@@ -26,10 +26,10 @@ b1 <- bamlss(f, family = "gaussian", data = Golf)
 ## -----------------------------------------------------------------------------
 summary(b1)
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  plot(b1, which = "samples")
 
-## ---- fig.width = 9, fig.height = 5, fig.align = "center", echo = FALSE, dev = "png", results = 'hide', message=FALSE----
+## ----fig.width = 9, fig.height = 5, fig.align = "center", echo = FALSE, dev = "png", results = 'hide', message=FALSE----
 bsp <- b1
 bsp$samples <- bsp$samples[, c("mu.p.(Intercept)", "sigma.p.(Intercept)")]
 plot(bsp, which = "samples")
@@ -37,7 +37,7 @@ plot(bsp, which = "samples")
 ## -----------------------------------------------------------------------------
 confint(b1, prob = c(0.025, 0.975))
 
-## ---- message=FALSE, results="hide"-------------------------------------------
+## ----message=FALSE, results="hide"--------------------------------------------
 set.seed(111)
 
 f <- log(price) ~ age + kilometer + tia + abs + sunroof
@@ -51,7 +51,7 @@ p2 <- predict(b2, model = "mu")
 mean((Golf$price - p1)^2)
 mean((Golf$price - exp(p2))^2)
 
-## ---- message=FALSE, results="hide"-------------------------------------------
+## ----message=FALSE, results="hide"--------------------------------------------
 set.seed(222)
 
 f <- log(price) ~ poly(age, 3) + poly(kilometer, 3) + poly(tia, 3) + abs + sunroof
@@ -78,14 +78,14 @@ nd$pkilometer <- predict(b3, newdata = nd, model = "mu", term = "kilometer",
 nd$ptia <- predict(b3, newdata = nd, model = "mu", term = "tia",
   FUN = c95, intercept = FALSE)
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  par(mfrow = c(1, 3))
 #  ylim <- range(c(nd$page, nd$pkilometer, nd$ptia))
 #  plot2d(page ~ age, data = nd, ylim = ylim)
 #  plot2d(pkilometer ~ kilometer, data = nd, ylim = ylim)
 #  plot2d(ptia ~ tia, data = nd, ylim = ylim)
 
-## ---- fig.width = 8, fig.height = 2.4, fig.align = "center", dev = "png", results='hide', message=FALSE, echo=FALSE, out.width="100%"----
+## ----fig.width = 8, fig.height = 2.4, fig.align = "center", dev = "png", results='hide', message=FALSE, echo=FALSE, out.width="100%"----
 par(mfrow = c(1, 3), mar = c(4.1, 4.1, 0.1, 1.1))
 ylim <- range(c(nd$page, nd$pkilometer, nd$ptia))
 plot2d(page ~ age, data = nd, ylim = ylim)
@@ -105,48 +105,48 @@ head(mcycle)
 ## -----------------------------------------------------------------------------
 f <- list(accel ~ s(times, k = 20), sigma ~ s(times, k = 20))
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  set.seed(123)
 #  
 #  b <- bamlss(f, data = mcycle, family = "gaussian")
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  plot(b, model = c("mu", "sigma"))
 
-## ---- fig.width = 7, fig.height = 3, fig.align = "center", echo = FALSE, dev = "png", results = 'hide', message=FALSE, out.width="80%"----
+## ----fig.width = 7, fig.height = 3, fig.align = "center", echo = FALSE, dev = "png", results = 'hide', message=FALSE, out.width="80%"----
 par(mar = c(4.1, 4.1, 1.1, 1.1), mfrow = c(1, 2))
 plot(b, pages = 1, spar = FALSE, scheme = 2, grid = 100)
 
 ## -----------------------------------------------------------------------------
 summary(b)
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  plot(b, which = "samples")
 
-## ---- fig.width = 9, fig.height = 5, fig.align = "center", echo = FALSE, dev = "png", results = 'hide', message=FALSE----
+## ----fig.width = 9, fig.height = 5, fig.align = "center", echo = FALSE, dev = "png", results = 'hide', message=FALSE----
 bsp <- b
 bsp$samples <- bsp$samples[, c("mu.p.(Intercept)", "sigma.p.(Intercept)")]
 plot(bsp, which = "samples")
 
-## ---- eval = FALSE------------------------------------------------------------
+## ----eval = FALSE-------------------------------------------------------------
 #  plot(b, which = c("hist-resid", "qq-resid"))
 
-## ---- fig.width = 7.5, fig.height = 4, fig.align = "center", echo = FALSE, dev = "png", results = 'hide', message=FALSE, out.width="80%"----
+## ----fig.width = 7.5, fig.height = 4, fig.align = "center", echo = FALSE, dev = "png", results = 'hide', message=FALSE, out.width="80%"----
 par(mfrow = c(1, 2))
 plot(b, which = c("hist-resid", "qq-resid"), spar = FALSE)
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  nd <- data.frame("times" = seq(2.4, 57.6, length = 100))
 #  nd$ptimes <- predict(b, newdata = nd, model = "mu", FUN = c95)
 #  plot2d(ptimes ~ times, data = nd)
 
-## ---- fig.width = 5, fig.height = 4, fig.align = "center", dev = "png", results='hide', message=FALSE, echo=FALSE, out.width="50%"----
+## ----fig.width = 5, fig.height = 4, fig.align = "center", dev = "png", results='hide', message=FALSE, echo=FALSE, out.width="50%"----
 par(mar = c(4.1, 4.1, 1.1, 1.1))
 nd <- data.frame("times" = seq(2.4, 57.6, length = 100))
 nd$ptimes <- predict(b, newdata = nd, model = "mu", FUN = c95)
 plot2d(ptimes ~ times, data = nd)
 
-## ---- fig.width = 5, fig.height = 4, fig.align = "center", dev = "png", out.width="50%"----
+## ----fig.width = 5, fig.height = 4, fig.align = "center", dev = "png", out.width="50%"----
 ## Predict for the two scenarios.
 nd <- data.frame("times" = c(10, 40))
 ptimes <- predict(b, newdata = nd, FUN = identity, type = "parameter")
