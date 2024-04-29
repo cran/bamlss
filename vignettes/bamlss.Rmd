@@ -2,10 +2,7 @@
 title: "A Lego Toolbox for Flexible Bayesian Regression (and Beyond)"
 author: "Nikolaus Umlauf, Nadja Klein, Achim Zeileis, Thorsten Simon"
 output:
-  html_document:
-    toc: true
-    toc_float: true
-    theme: flatly
+  html_vignette
 bibliography: bamlss.bib
 nocite: |
   @bamlss:Umlauf+bamlss:2018, @bamlss:Umlauf+bamlss:2021  

@@ -1,6 +1,6 @@
 Package: bamlss
-Version: 1.2-3
-Date: 2024-03-18
+Version: 1.2-4
+Date: 2024-04-29
 Title: Bayesian Additive Models for Location, Scale, and Shape (and
         Beyond)
 Authors@R: c(person(given = "Nikolaus", family = "Umlauf", role = c("aut", "cre"), email = "Nikolaus.Umlauf@uibk.ac.at",
@@ -34,7 +34,7 @@ RoxygenNote: 7.1.1
 URL: http://www.bamlss.org/
 VignetteBuilder: knitr
 NeedsCompilation: yes
-Packaged: 2024-03-18 08:56:53 UTC; nik
+Packaged: 2024-04-29 12:24:12 UTC; nik
 Author: Nikolaus Umlauf [aut, cre] (<https://orcid.org/0000-0003-2160-9803>),
   Nadja Klein [aut] (<https://orcid.org/0000-0002-5072-5347>),
   Achim Zeileis [aut] (<https://orcid.org/0000-0003-0918-3766>),
@@ -44,4 +44,4 @@ Author: Nikolaus Umlauf [aut, cre] (<https://orcid.org/0000-0003-2160-9803>),
   Alexander Volkmann [ctb] (<https://orcid.org/0000-0001-5028-8098>)
 Maintainer: Nikolaus Umlauf <Nikolaus.Umlauf@uibk.ac.at>
 Repository: CRAN
-Date/Publication: 2024-03-18 10:00:02 UTC
+Date/Publication: 2024-04-29 13:40:06 UTC
