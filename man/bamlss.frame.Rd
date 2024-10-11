@@ -26,7 +26,7 @@ bamlss.frame(formula, data = NULL, family = "gaussian",
   \item{formula}{A formula or extended formula, i.e., the \code{formula} can be a
     \code{\link{list}} of formulas where each list entry specifies the details of one parameter
     of the modeled response distribution, see \code{\link{bamlss.formula}}. For incorporating
-    smooth terms, all model term constructors implemented in \code{\link{mgcv}} such as
+    smooth terms, all model term constructors implemented in \pkg{mgcv} such as
     \code{\link[mgcv]{s}}, \code{\link[mgcv]{te}} and \code{\link[mgcv]{ti}} can be used, amongst others.}
   \item{data}{A \code{\link{data.frame}} or \code{\link{list}} containing the model
     response variable(s) and covariates specified in the \code{formula}.
@@ -67,7 +67,7 @@ bamlss.frame(formula, data = NULL, family = "gaussian",
   \code{\link{bamlss.formula}} as well as the \code{\link{bamlss.family}} into a model frame
   like object, the \code{\link{bamlss.frame}}. This object holds all necessary model matrices
   and information that is needed for model fitting engines. Per default,
-  all package \code{\link{mgcv}} smooth term constructor functions like
+  all package \pkg{mgcv} smooth term constructor functions like
   \code{\link[mgcv]{s}}, \code{\link[mgcv]{te}}, \code{\link[mgcv]{t2}} and
   \code{\link[mgcv]{ti}} can be used (see also function \code{\link[mgcv]{smooth.construct}}),
   however, even special user defined constructors can be included, see the examples below.

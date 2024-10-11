@@ -11,7 +11,7 @@
   with structured additive predictors based on Markov chain Monte Carlo simulation.
   The design of this package substantially focuses on maximum flexibility and easy
   integration of new code and/or standalone systems. The package makes heavy use of
-  \code{\link{mgcv}} infrastructures to build up all necessary model matrices and
+  \pkg{mgcv} infrastructures to build up all necessary model matrices and
   information from which it is relatively easy for the user to construct estimation
   algorithms or interfaces to existing software packages. The package can also be
   seen as an harmonized framework for regression modeling since it does not restrict

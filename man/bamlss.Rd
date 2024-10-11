@@ -11,9 +11,9 @@
   extended \code{\link{bamlss.formula}}, as well as the \code{\link{bamlss.family}}
   into a \code{\link{bamlss.frame}}. The \code{\link{bamlss.frame}} then holds all model
   matrices and information that is needed for setting up estimation engines.
-  The model matrices are based on \code{\link{mgcv}} infrastructures, i.e.,
+  The model matrices are based on \pkg{mgcv} infrastructures, i.e.,
   smooth terms are constructed using \code{\link[mgcv]{smooth.construct}} and
-  \code{\link[mgcv]{smoothCon}}. Therefore, all \code{\link{mgcv}} model term constructors like
+  \code{\link[mgcv]{smoothCon}}. Therefore, all \pkg{mgcv} model term constructors like
   \code{\link[mgcv]{s}}, \code{\link[mgcv]{te}}, \code{\link[mgcv]{t2}} and \code{\link[mgcv]{ti}}
   can be used. Identifiability conditions are imposed using function \code{\link[mgcv]{gam.side}}.
 
@@ -40,7 +40,7 @@ bamlss(formula, family = "gaussian", data = NULL,
   \item{formula}{A formula or extended formula, i.e., the \code{formula} can be a
     \code{\link{list}} of formulas where each list entry specifies the details of one parameter
     of the modeled response distribution, see \code{\link{bamlss.formula}}. For incorporating
-    smooth terms, all model term constructors implemented in \code{\link{mgcv}} such as
+    smooth terms, all model term constructors implemented in \pkg{mgcv} such as
     \code{\link[mgcv]{s}}, \code{\link[mgcv]{te}} and \code{\link[mgcv]{ti}} can be used, amongst others.}
   \item{family}{A \code{\link{bamlss.family}} object, specifying the details of the modeled
     distribution such as the parameter names, the density function, link functions, etc.
@@ -108,7 +108,7 @@ bamlss(formula, family = "gaussian", data = NULL,
       \code{\link{bamlss.formula}} as well as the \code{\link{bamlss.family}} into a model frame
       like object, the \code{\link{bamlss.frame}}. This object holds all necessary model matrices
       and information that is needed for subsequent model fitting engines. Per default,
-      all package \code{\link{mgcv}} smooth term constructor functions like
+      all package \pkg{mgcv} smooth term constructor functions like
       \code{\link[mgcv]{s}}, \code{\link[mgcv]{te}}, \code{\link[mgcv]{t2}} and
       \code{\link[mgcv]{ti}} can be used (see also function \code{\link[mgcv]{smooth.construct}}),
       however, even special user defined constructors can be included, see the manual of

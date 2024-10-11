@@ -1,3 +1,11 @@
+# bamlss 1.2-5
+
+* Improved family parsing and code touch ups.
+
+# bamlss 1.2-4
+
+* Fixed opt_boost()
+
 # bamlss 1.2-3
 
 * Added the modified Cholesky family.

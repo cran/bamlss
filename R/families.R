@@ -179,7 +179,7 @@ beta_bamlss <- function(...)
     "links" =  parse.links(links, c(mu = "logit", sigma2 = "logit"), ...),
     "valid.response" = function(x) {
       if(ok <- !all(x > 0 & x < 1)) stop("response values not in (0, 1)!", call. = FALSE)
-      ok
+      !ok
     },
     "bayesx" = list(
       "mu" = c("beta", "mu"),

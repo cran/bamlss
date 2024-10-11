@@ -192,113 +192,113 @@ SEXP eval_dmvnorm_log(SEXP fun, SEXP x, SEXP mu, SEXP sigma, SEXP rho)
 
 
 /* logPost evaluation */
-double lp_eval(SEXP fun, SEXP g, SEXP x,
-  SEXP family, SEXP response, SEXP eta,
-  SEXP id, SEXP rho)
-{
-  SEXP R_fcall, t, rval;
+/*double lp_eval(SEXP fun, SEXP g, SEXP x,*/
+/*  SEXP family, SEXP response, SEXP eta,*/
+/*  SEXP id, SEXP rho)*/
+/*{*/
+/*  SEXP R_fcall, t, rval;*/
 
-  PROTECT(t = R_fcall = allocList(7));
-  SET_TYPEOF(R_fcall, LANGSXP);
+/*  PROTECT(t = R_fcall = allocList(7));*/
+/*  SET_TYPEOF(R_fcall, LANGSXP);*/
 
-  SETCAR(R_fcall, fun);
-  t = CDR(t); SETCAR(t, g);
-  t = CDR(t); SETCAR(t, x);
-  t = CDR(t); SETCAR(t, family);
-  t = CDR(t); SETCAR(t, response);
-  t = CDR(t); SETCAR(t, eta);
-  t = CDR(t); SETCAR(t, id);
+/*  SETCAR(R_fcall, fun);*/
+/*  t = CDR(t); SETCAR(t, g);*/
+/*  t = CDR(t); SETCAR(t, x);*/
+/*  t = CDR(t); SETCAR(t, family);*/
+/*  t = CDR(t); SETCAR(t, response);*/
+/*  t = CDR(t); SETCAR(t, eta);*/
+/*  t = CDR(t); SETCAR(t, id);*/
 
-  PROTECT(rval = eval(R_fcall, rho));
+/*  PROTECT(rval = eval(R_fcall, rho));*/
 
-  UNPROTECT(2);
-  return REAL(rval)[0];
-}
+/*  UNPROTECT(2);*/
+/*  return REAL(rval)[0];*/
+/*}*/
 
 
 /* Univariate slice sampling */
-SEXP uni_slice(SEXP g, SEXP x, SEXP family, SEXP response, SEXP eta, SEXP id, SEXP j,
-  SEXP W, SEXP M, SEXP LOWER, SEXP UPPER, SEXP logPost, SEXP rho)
-{
-  int nProtected = 0;
-  int jj = INTEGER(j)[0] - 1;
+/*SEXP uni_slice(SEXP g, SEXP x, SEXP family, SEXP response, SEXP eta, SEXP id, SEXP j,*/
+/*  SEXP W, SEXP M, SEXP LOWER, SEXP UPPER, SEXP logPost, SEXP rho)*/
+/*{*/
+/*  int nProtected = 0;*/
+/*  int jj = INTEGER(j)[0] - 1;*/
 
-  int m = INTEGER(M)[0] + 1;
-  double w = REAL(W)[0];
-  double lower = REAL(LOWER)[0];
-  double upper = REAL(UPPER)[0];
+/*  int m = INTEGER(M)[0] + 1;*/
+/*  double w = REAL(W)[0];*/
+/*  double lower = REAL(LOWER)[0];*/
+/*  double upper = REAL(UPPER)[0];*/
 
-  SEXP gL, gR;
-  PROTECT(gL = duplicate(g));
-  ++nProtected;
-  PROTECT(gR = duplicate(g));
-  ++nProtected;
+/*  SEXP gL, gR;*/
+/*  PROTECT(gL = duplicate(g));*/
+/*  ++nProtected;*/
+/*  PROTECT(gR = duplicate(g));*/
+/*  ++nProtected;*/
 
-  double *gLptr = REAL(gL);
-  double *gRptr = REAL(gR);
-  double *gptr = REAL(g);
+/*  double *gLptr = REAL(gL);*/
+/*  double *gRptr = REAL(gR);*/
+/*  double *gptr = REAL(g);*/
 
-  double x0 = gptr[jj];
-  double gx0 = lp_eval(logPost, g, x, family, response, eta, id, rho);
+/*  double x0 = gptr[jj];*/
+/*  double gx0 = lp_eval(logPost, g, x, family, response, eta, id, rho);*/
 
-  GetRNGstate();
-  double logy = gx0 - rexp(1); 
-  double u = runif(0.0, w);
-  PutRNGstate();
+/*  GetRNGstate();*/
+/*  double logy = gx0 - rexp(1); */
+/*  double u = runif(0.0, w);*/
+/*  PutRNGstate();*/
 
-  gLptr[jj] = x0 - u;
-  gRptr[jj] = x0 + (w - u);
+/*  gLptr[jj] = x0 - u;*/
+/*  gRptr[jj] = x0 + (w - u);*/
 
-  if(m > 1) {
-    GetRNGstate();
-    int J = floor(runif(0.0, m));
-    PutRNGstate();
-    int K = (m - 1) - J;
-    while(J > 0) {
-      if(gLptr[jj] <= lower)
-        break;
-      if(lp_eval(logPost, gL, x, family, response, eta, id, rho) <= logy)
-        break;
-      gLptr[jj] = gLptr[jj] - w;
-      J = J - 1;
-    }
-    while(K > 0) {
-      if(gRptr[jj] >= upper)
-        break;
-      if(lp_eval(logPost, gR, x, family, response, eta, id, rho) <= logy)
-        break;
-      gRptr[jj] = gRptr[jj] + w;
-      K = K - 1;
-    }
-  }
+/*  if(m > 1) {*/
+/*    GetRNGstate();*/
+/*    int J = floor(runif(0.0, m));*/
+/*    PutRNGstate();*/
+/*    int K = (m - 1) - J;*/
+/*    while(J > 0) {*/
+/*      if(gLptr[jj] <= lower)*/
+/*        break;*/
+/*      if(lp_eval(logPost, gL, x, family, response, eta, id, rho) <= logy)*/
+/*        break;*/
+/*      gLptr[jj] = gLptr[jj] - w;*/
+/*      J = J - 1;*/
+/*    }*/
+/*    while(K > 0) {*/
+/*      if(gRptr[jj] >= upper)*/
+/*        break;*/
+/*      if(lp_eval(logPost, gR, x, family, response, eta, id, rho) <= logy)*/
+/*        break;*/
+/*      gRptr[jj] = gRptr[jj] + w;*/
+/*      K = K - 1;*/
+/*    }*/
+/*  }*/
 
-  if(gLptr[jj] < lower) {
-    gLptr[jj] = lower;
-  }
-  if(gRptr[jj] > upper) {
-    gRptr[jj] = upper;
-  }
+/*  if(gLptr[jj] < lower) {*/
+/*    gLptr[jj] = lower;*/
+/*  }*/
+/*  if(gRptr[jj] > upper) {*/
+/*    gRptr[jj] = upper;*/
+/*  }*/
 
-  int run = 1;
-  
-  while(run > 0) {
-    gptr[jj] = runif(gLptr[jj], gRptr[jj]);
+/*  int run = 1;*/
+/*  */
+/*  while(run > 0) {*/
+/*    gptr[jj] = runif(gLptr[jj], gRptr[jj]);*/
 
-    double gx1 = lp_eval(logPost, g, x, family, response, eta, id, rho);
+/*    double gx1 = lp_eval(logPost, g, x, family, response, eta, id, rho);*/
 
-    if(gx1 >= logy)
-      run = 0;
+/*    if(gx1 >= logy)*/
+/*      run = 0;*/
 
-    if(gptr[jj] > x0) {
-      gRptr[jj] = gptr[jj];
-    } else {
-      gLptr[jj] = gptr[jj];
-    }
-  }
+/*    if(gptr[jj] > x0) {*/
+/*      gRptr[jj] = gptr[jj];*/
+/*    } else {*/
+/*      gLptr[jj] = gptr[jj];*/
+/*    }*/
+/*  }*/
 
-  UNPROTECT(nProtected);
-  return g;
-}
+/*  UNPROTECT(nProtected);*/
+/*  return g;*/
+/*}*/
 
 
 /* Compute the centroid of a polygon. */

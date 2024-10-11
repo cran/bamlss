@@ -961,6 +961,16 @@ GMCMC_iwls <- function(family, theta, id, eta, y, data, weights = NULL, offset =
 
   ## Sample new parameters.
   g <- try(drop(rmvnorm(n = 1, mean = M, sigma = P, method = "chol")), silent = TRUE)
+
+  ## Coefficient centering.
+  if(inherits(data, "random.effect")) {
+    A <- matrix(1, nrow = 1, ncol = ncol(P))
+    V <- P %*% t(A)
+    W <- A %*% V
+    U <- solve(W, t(V))
+    g <- g - drop(t(U) %*% A %*% g)
+  }
+
   if(inherits(g, "try-error")) {
     return(list("parameters" = theta, "alpha" = -Inf, "extra" = c("edf" = NA)))
   }
@@ -973,7 +983,9 @@ GMCMC_iwls <- function(family, theta, id, eta, y, data, weights = NULL, offset =
 
   ## Compute log priors.
   p2 <- data$prior(c("b" = g, get.par(theta, "tau2")))
+
   qbetaprop <- try(dmvnorm(g, mean = M, sigma = P, log = TRUE), silent = TRUE)
+
   if(inherits(qbetaprop, "try-error")) {
     return(list("parameters" = theta, "alpha" = -Inf, "extra" = c("edf" = NA)))
   }

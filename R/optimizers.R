@@ -3292,6 +3292,9 @@ boost_transform <- function(x, y, df = NULL, family,
       eps0 <- do.call("cbind", eta)
       eps0 <- mean(abs((eps0 - do.call("cbind", eta0)) / eps0), na.rm = TRUE)
 
+      if(is.na(eps0) || !is.finite(Inf))
+        break
+
       k2 <- k2 + 1
     }
     
